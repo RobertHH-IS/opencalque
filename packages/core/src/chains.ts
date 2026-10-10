@@ -3,7 +3,7 @@ import { newId } from './document'
 import type { NodeInput, Op } from './ops'
 import type { Registry } from './registry'
 import type { Document, NodeOf } from './schema'
-import { wallOpenings } from './walls'
+import { wallArc, wallOpenings } from './walls'
 
 /** How far the first line of dimensions stands from the face of its wall, and the next one from it, in mm. */
 const STAND_OFF = 500
@@ -17,7 +17,8 @@ const BETWEEN = 450
  *
  * The dimensions of a wall are put in a group named after it, so they are moved or deleted as
  * one. They are ordinary dimensions, measured when made: after the wall changes, delete the
- * group and make it again. `look` is given to each of them (text size, ends, unit…).
+ * group and make it again. `look` is given to each of them (text size, ends, unit…). A curved
+ * wall gets none: these dimensions measure along a straight line.
  */
 export function dimensionChainOps(doc: Document, walls: NodeOf<'wall'>[], registry: Registry, look: Record<string, unknown> = {}, groupName = 'Dimensions'): Op[] {
   const all = Object.values(doc.nodes).filter((node): node is NodeOf<'wall'> => node.type === 'wall' && walls.some((wall) => wall.parent === node.parent))
@@ -26,7 +27,7 @@ export function dimensionChainOps(doc: Document, walls: NodeOf<'wall'>[], regist
 
   return walls.flatMap((wall): Op[] => {
     const length = dist(wall.a, wall.b)
-    if (length < 1e-6) return []
+    if (length < 1e-6 || wallArc(wall)) return []
     const d = norm(sub(wall.b, wall.a))
     const n = perp(d)
     // Outwards: away from the middle of the plan, judged from the middle of the wall.

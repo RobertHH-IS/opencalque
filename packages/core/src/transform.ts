@@ -65,7 +65,8 @@ export function transformOps(doc: Document, nodes: Node[], t: Similarity, regist
       case 'room':
         return { ...map(node), ...(node.size === undefined && s === 1 ? {} : { size: tidy((node.size ?? 250) * s) }) }
       case 'wall':
-        return { a: map(node.a), b: map(node.b), thickness: tidy(node.thickness * s) }
+        // The side a curved wall bows to is a matter of handedness, which a mirror reverses.
+        return { a: map(node.a), b: map(node.b), thickness: tidy(node.thickness * s), ...(node.bulge ? { bulge: tidy(node.bulge * s * (flip ? -1 : 1)) } : {}) }
       case 'dimension':
         return {
           a: map(node.a),

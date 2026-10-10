@@ -62,7 +62,7 @@ export function itemsInside(scene: SceneItem[], rect: Bounds): SceneItem[] {
 export function snapPointsOf(item: SceneItem): Vec2[] {
   const own = kindOf(item.node).snapPoints?.(item.node)
   if (own) return own
-  return item.prims.flatMap((p) => (p.kind === 'path' ? p.points : []))
+  return item.prims.flatMap((p) => (p.kind === 'path' && !p.texture ? p.points : []))
 }
 
 export interface PaintStep {

@@ -1,4 +1,4 @@
-import { childrenOf, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, cornerJoin, cornerJoinOps, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern } from '@opencalque/core'
+import { childrenOf, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, cornerJoin, cornerJoinOps, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
 import { executeById } from '../commands'
 import { useEffect, useRef, useState, useLayoutEffect } from 'react'
 import { Pipette, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, FlipHorizontal2, FlipVertical2, RotateCcw, RotateCw, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Undo2 } from 'lucide-react'
@@ -109,7 +109,7 @@ const LINE_ENDS: FieldSpec[] = [
 
 const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
   line: [...AB, ...LINE_ENDS, ...STYLE],
-  wall: [...AB, len('thickness', msg('Thickness')), { ...len('height', msg('Height')), optional: true }, ...STYLE],
+  wall: [...AB, len('bulge', msg('Curve'), 0), len('thickness', msg('Thickness')), { ...len('height', msg('Height')), optional: true }, ...STYLE],
   dimension: DIMENSION,
   annotation: ANNOTATION,
   rect: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), ...STYLE],
@@ -407,7 +407,7 @@ function Sections({ node, nodes = [node], fields, update, pick }: { node: Node; 
           {title === GEOMETRY && nodes.length === 1 && 'a' in node && (
             <label className="field">
               <span>{t('Length')}</span>
-              <output>{formatLength(lengthOf(node))}</output>
+              <output>{formatLength(node.type === 'wall' ? wallLength(node) : lengthOf(node))}</output>
             </label>
           )}
         </Section>
@@ -610,6 +610,13 @@ function WallTypeChoice({ walls }: { walls: Extract<Node, { type: 'wall' }>[] })
   )
 }
 
+/** How to curve a wall, and for one that is curved, the circle it follows. */
+function WallCurve({ wall }: { wall: Extract<Node, { type: 'wall' }> }) {
+  const arc = wallArc(wall)
+  if (!arc) return <p className="hint">{t('To curve the wall, drag the handle in its middle sideways, or type under Curve how far its middle should bow.')}</p>
+  return <p className="hint">{t('Curved: radius {radius}, {length} round the curve. Set Curve to 0 to straighten it.', { radius: formatLength(arc.radius), length: formatLength(wallLength(wall)) })}</p>
+}
+
 /** What a room measures, read from the walls around it as they are now. */
 function RoomFacts({ node }: { node: Extract<Node, { type: 'room' }> }) {
   const doc = useStore((s) => s.doc)
@@ -785,6 +792,7 @@ function Selection({ nodes }: { nodes: Node[] }) {
           </IconButton>
         </div>
         {nodes.every((n) => n.type === 'wall') && <WallTypeChoice walls={nodes as Extract<Node, { type: 'wall' }>[]} />}
+        {single && node.type === 'wall' && <WallCurve wall={node} />}
         {single && node.type === 'paper' && <PaperSheet node={node} update={update} />}
         {single && node.type === 'room' && <RoomFacts node={node} />}
         {single && node.type === 'image' && (

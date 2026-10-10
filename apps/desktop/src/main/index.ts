@@ -74,15 +74,24 @@ async function read(path: string) {
   return { name: basename(path), content: await readFile(path, 'utf8'), token: path }
 }
 
+/**
+ * How the system's buttons sit over the menu bar on Windows. The strip behind them is see-through,
+ * so it is whatever the app shows there: the menu bar, or the veil of an open window. The height
+ * is that of `.menubar` in the web app.
+ *
+ * The highlight under the minimise and maximise buttons is not set here: Windows draws it dark or
+ * light according to `nativeTheme`, so that must always say what the app is showing (see
+ * 'app:theme'), or a light bar gets a white highlight that cannot be seen.
+ */
+const titleBarButtons = (dark: boolean) => ({ color: '#00000000', symbolColor: dark ? '#e6e6e6' : '#1e1e1e', height: 36 })
+
 function createWindow(): void {
   // On Windows and macOS the window has no title bar of its own: the app's menu bar is the top of
   // the window, with the system's buttons drawn over its end. Linux keeps its usual frame.
   const merged = process.platform === 'win32' || process.platform === 'darwin'
   const win = new BrowserWindow({
     titleBarStyle: merged ? 'hidden' : 'default',
-    // The height is that of `.menubar` in the web app. The strip behind the system's buttons is
-    // see-through, so it is whatever the app shows there: the menu bar, or the veil of an open window.
-    titleBarOverlay: merged ? { color: '#00000000', symbolColor: '#1e1e1e', height: 36 } : false,
+    titleBarOverlay: merged ? titleBarButtons(false) : false,
     width: 1440,
     height: 900,
     minWidth: 900,
@@ -173,10 +182,11 @@ app.whenReady().then(() => {
   })
 
   // The web app chooses light or dark; the system's buttons over the menu bar and its dialogs follow.
-  ipcMain.on('app:theme', (event, dark: boolean) => {
-    nativeTheme.themeSource = dark ? 'dark' : 'light'
+  // When the app follows the system, so does the window, which keeps the page told of its changes.
+  ipcMain.on('app:theme', (event, dark: boolean, followsSystem?: boolean) => {
+    nativeTheme.themeSource = followsSystem ? 'system' : dark ? 'dark' : 'light'
     const win = BrowserWindow.fromWebContents(event.sender)
-    if (win && process.platform === 'win32') win.setTitleBarOverlay({ color: '#00000000', symbolColor: dark ? '#e6e6e6' : '#1e1e1e', height: 36 })
+    if (win && process.platform === 'win32') win.setTitleBarOverlay(titleBarButtons(dark))
     win?.setBackgroundColor(dark ? '#1e1e1e' : '#ffffff')
   })
 

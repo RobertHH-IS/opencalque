@@ -1,4 +1,4 @@
-import { paintOrder, sceneBounds, type PaintStep, type SceneItem, type Vec2 } from '@opencalque/core'
+import { paintOrder, sceneBounds, type MoveGuides, type PaintStep, type SceneItem, type Snap, type Vec2 } from '@opencalque/core'
 
 // Pictures decode asynchronously. Until one is ready it is simply not drawn, and the canvas is
 // told to repaint when it arrives.
@@ -23,6 +23,8 @@ import type { View } from '../store'
 import { formatLength, formatNumber } from '../units'
 
 const ACCENT = '#0d99ff'
+/** The colour of what the pointer snaps to and of the guides shown while something is moved. */
+const SNAP = '#e5008a'
 /** The colour of what belongs to a modifier rather than to the object. */
 const MODIFIER = '#f08c00'
 const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif'
@@ -106,8 +108,12 @@ export function darkInk(color: string, line = false): string {
 
 export interface Overlay {
   marquee?: { a: Vec2; b: Vec2 }
-  /** A point the cursor snapped to. */
-  marker?: Vec2 | null
+  /** What the cursor snapped to, marked by a sign that tells its kind, with a word beside it for those that need one. */
+  marker?: (Snap & { label?: string }) | null
+  /** From what the pointer is on to where the line being drawn ends, when that end is only level with it. */
+  link?: [Vec2, Vec2]
+  /** While something is moved: where it lines up with other things, and the gaps it keeps equal. */
+  smart?: MoveGuides
   /** The measure tool's reading, in world coordinates. It is not part of the drawing. */
   measure?: { a: Vec2; b: Vec2 }
   /** Sizes written next to the shape being drawn or selected. */
@@ -564,10 +570,100 @@ export function drawScene(
     ctx.restore()
   }
   ctx.textBaseline = 'alphabetic'
+  if (overlay.smart) {
+    ctx.strokeStyle = SNAP
+    ctx.fillStyle = SNAP
+    ctx.lineWidth = 1
+    ctx.setLineDash([])
+    for (const [from, to] of overlay.smart.lines) {
+      const a = toScreen(from)
+      const b = toScreen(to)
+      ctx.beginPath()
+      ctx.moveTo(Math.round(a.x) + 0.5, Math.round(a.y) + 0.5)
+      ctx.lineTo(Math.round(b.x) + 0.5, Math.round(b.y) + 0.5)
+      ctx.stroke()
+    }
+    ctx.font = `600 10px ${FONT}`
+    ctx.textAlign = 'center'
+    for (const [from, to] of overlay.smart.gaps) {
+      const a = toScreen(from)
+      const b = toScreen(to)
+      // A gap is a line across the empty space with a stop at each end, and its size written on it.
+      const level = Math.abs(b.y - a.y) < Math.abs(b.x - a.x)
+      const [tx, ty] = level ? [0, 4] : [4, 0]
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y)
+      ctx.lineTo(b.x, b.y)
+      for (const p of [a, b]) {
+        ctx.moveTo(p.x - tx, p.y - ty)
+        ctx.lineTo(p.x + tx, p.y + ty)
+      }
+      ctx.stroke()
+      ctx.fillText(formatLength(Math.hypot(to.x - from.x, to.y - from.y)), (a.x + b.x) / 2 + (level ? 0 : 20), (a.y + b.y) / 2 + (level ? -6 : 3))
+    }
+    ctx.textAlign = 'left'
+  }
+  if (overlay.link) {
+    const a = toScreen(overlay.link[0])
+    const b = toScreen(overlay.link[1])
+    ctx.strokeStyle = SNAP
+    ctx.fillStyle = SNAP
+    ctx.lineWidth = 1
+    ctx.setLineDash([2, 4])
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
+    ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.arc(b.x, b.y, 3, 0, Math.PI * 2)
+    ctx.fill()
+  }
   if (overlay.marker) {
-    const p = toScreen(overlay.marker)
-    ctx.strokeStyle = '#e5008a'
+    const p = toScreen(overlay.marker.p)
+    ctx.strokeStyle = SNAP
     ctx.lineWidth = 1.5
-    ctx.strokeRect(p.x - 5, p.y - 5, 10, 10)
+    ctx.setLineDash([])
+    ctx.beginPath()
+    // Each kind of snap has its sign, as in drafting programs: a square on a point, a triangle on
+    // a middle, a cross where lines cross, a square corner for a perpendicular, a diamond on a line.
+    switch (overlay.marker.kind) {
+      case 'middle':
+        ctx.moveTo(p.x, p.y - 6)
+        ctx.lineTo(p.x + 6, p.y + 5)
+        ctx.lineTo(p.x - 6, p.y + 5)
+        ctx.closePath()
+        break
+      case 'crossing':
+        ctx.moveTo(p.x - 5, p.y - 5)
+        ctx.lineTo(p.x + 5, p.y + 5)
+        ctx.moveTo(p.x + 5, p.y - 5)
+        ctx.lineTo(p.x - 5, p.y + 5)
+        break
+      case 'perpendicular':
+        ctx.moveTo(p.x - 6, p.y - 6)
+        ctx.lineTo(p.x - 6, p.y + 6)
+        ctx.lineTo(p.x + 6, p.y + 6)
+        ctx.moveTo(p.x - 6, p.y)
+        ctx.lineTo(p.x, p.y)
+        ctx.lineTo(p.x, p.y + 6)
+        break
+      case 'edge':
+        ctx.moveTo(p.x, p.y - 6)
+        ctx.lineTo(p.x + 6, p.y)
+        ctx.lineTo(p.x, p.y + 6)
+        ctx.lineTo(p.x - 6, p.y)
+        ctx.closePath()
+        break
+      default:
+        ctx.rect(p.x - 5, p.y - 5, 10, 10)
+    }
+    ctx.stroke()
+    if (overlay.marker.label) {
+      ctx.font = `600 10px ${FONT}`
+      ctx.textAlign = 'left'
+      ctx.fillStyle = SNAP
+      ctx.fillText(overlay.marker.label, p.x + 11, p.y + 17)
+    }
   }
 }

@@ -34,8 +34,17 @@ import {
   moveCornerOps,
   splitWallOps,
   wallEndsAt,
- scale,
- add,
+  scale,
+  add,
+  alignMove,
+  moveGuides,
+  snapTo,
+  wallLength,
+  wallMiddle,
+  wallPoints,
+  type Alignable,
+  type Snap,
+  type SnapKind,
 } from '@opencalque/core'
 import { finishTextEdit, zoomToFit, withPaperContents, pickStyle } from '../actions'
 import { onCommand } from '../commands'
@@ -50,8 +59,10 @@ import { drawing } from './drawing'
 type Gesture =
   | { kind: 'idle' }
   /** Button down on an object: becomes a move once the pointer travels far enough. */
-  | { kind: 'press'; at: Vec2; start: Vec2; nodes: Node[] }
-  | { kind: 'move'; start: Vec2; nodes: Node[] }
+  /** With `beside`, the press was on no object but inside the box around the selection: released without moving, it lets the selection go. */
+  | { kind: 'press'; at: Vec2; start: Vec2; nodes: Node[]; beside?: boolean }
+  /** `moving` and `others` are what is moved and what it can line up with, as they stood when the move began. */
+  | { kind: 'move'; start: Vec2; nodes: Node[]; moving: Alignable | null; others: Alignable[] }
   | { kind: 'handle'; node: Node; index: number }
   /** A wall corner being dragged: every wall end at `from` follows, or with `only` just that wall's. */
   | { kind: 'corner'; from: Vec2; only?: string }
@@ -90,6 +101,15 @@ const BOXES: Tool[] = ['rect', 'ellipse', 'paper']
 /** How close, in screen pixels, the pointer must come to a standard format's corner for a paper to take that format. */
 const FORMAT_REACH = 14
 const CHAINED: Tool[] = ['line', 'wall', 'divider']
+/** How close, in screen pixels, the pointer must come to something for a point to snap to it, and for a moved object to line up with another. */
+const SNAP_REACH = 10
+const ALIGN_REACH = 6
+/** An object with more points than this lines up by its box alone: matching them all would find a fit almost anywhere. */
+const ALIGN_POINTS = 12
+
+/** What a snap is called beside its mark. A point of an object needs no name. */
+const snapName = (kind: SnapKind): string | undefined =>
+  kind === 'middle' ? t('Middle') : kind === 'crossing' ? t('Crossing') : kind === 'perpendicular' ? t('Perpendicular') : kind === 'edge' ? t('On the line') : undefined
 /**
  * A press only counts as dragging out a shape when the pointer travelled this far (px) and the
  * button was held this long (ms). Anything less is a click whose hand slipped, and must not leave
@@ -309,6 +329,8 @@ export function CanvasView() {
     const node = tool === 'select' && selection.length === 1 ? doc.nodes[selection[0]] : undefined
     if ((node?.type === 'rect' && !node.rotation) || node?.type === 'paper') return boxLabels(node)
     if (node?.type === 'ellipse') return boxLabels({ x: node.cx - node.rx, y: node.cy - node.ry, width: node.rx * 2, height: node.ry * 2 })
+    // A curved wall is as long as its curve, which is written at the top of it.
+    if (node?.type === 'wall' && node.bulge) return [{ at: wallMiddle(node), dx: 0, dy: -18, text: formatLength(wallLength(node)) }]
     if (node?.type === 'line' || node?.type === 'wall') return sizes('line', node.a, node.b).labels
     return []
   }, [doc, selection, tool])
@@ -366,6 +388,29 @@ export function CanvasView() {
     return null
   }
 
+  /**
+   * What a move of `nodes` can be lined up by: the box around them with their points, and the
+   * same for each other thing in view, taken once, as the move begins.
+   */
+  const alignables = (nodes: Node[]): { moving: Alignable | null; others: Alignable[] } => {
+    const { view, viewport } = get()
+    const ids = new Set(nodes.map((n) => n.id))
+    const points = (items: SceneItem[]) => {
+      const all = items.flatMap(snapPointsOf)
+      return all.length > ALIGN_POINTS ? [] : all
+    }
+    const mine = sceneRef.current.filter((item) => ids.has(item.id))
+    const bounds = sceneBounds(mine)
+    const seen = { minX: -view.x / view.zoom, minY: -view.y / view.zoom, maxX: (viewport.width - view.x) / view.zoom, maxY: (viewport.height - view.y) / view.zoom }
+    const others = sceneRef.current.flatMap((item): Alignable[] => {
+      const box = item.bounds
+      // A picture to trace over is not something to line up with, and nor is what is out of sight.
+      if (!box || ids.has(item.id) || item.node.type === 'image' || box.maxX < seen.minX || box.minX > seen.maxX || box.maxY < seen.minY || box.minY > seen.maxY) return []
+      return [{ bounds: box, points: points([item]) }]
+    })
+    return { moving: bounds && { bounds, points: points(mine) }, others }
+  }
+
   /** The box around the selection, when it is one that carries grips: a single object with handles of its own has none. */
   const gripBox = () => {
     const s = get()
@@ -393,6 +438,7 @@ export function CanvasView() {
 
   const reset = () => {
     cancel()
+    if (get().axisLock) useStore.setState({ axisLock: null })
     gesture.current = { kind: 'idle' }
     setOverlay({})
     syncStep()
@@ -433,10 +479,11 @@ export function CanvasView() {
   }, [scene, view, viewport, selection, handles, selectionLabels, titles, frames, corner, overlay, showGrid, palette, pictures, editingId, tool])
 
   /**
-   * Where a point lands after snapping: on a nearby point of existing geometry, else on the grid.
+   * Where a point lands after snapping: on what is drawn nearby (a point, the middle of a line, a
+   * crossing, the foot of a perpendicular from `from`, or the line itself), else on the grid.
    * Shift constrains to 45° steps from `from`; Alt turns snapping off.
    */
-  const snap = (world: Vec2, e: { altKey: boolean; shiftKey: boolean }, exclude: string[], from?: Vec2) => {
+  const snap = (world: Vec2, e: { altKey: boolean; shiftKey: boolean }, exclude: string[], from?: Vec2): { p: Vec2; marker: Snap | null } => {
     const { zoom } = get().view
     const { snapToGrid, snapToObjects } = usePrefs.getState()
     if (e.altKey) return { p: world, marker: null }
@@ -447,21 +494,14 @@ export function CanvasView() {
       const length = Math.round(len(d) / step) * step
       return { p: { x: round(from.x + Math.cos(angle) * length), y: round(from.y + Math.sin(angle) * length) }, marker: null }
     }
-    let best: Vec2 | null = null
-    let reach = 10 / zoom
-    for (const item of snapToObjects ? sceneRef.current : []) {
-      if (exclude.includes(item.id)) continue
-      for (const q of snapPointsOf(item)) {
-        const d = dist(q, world)
-        if (d < reach) {
-          best = q
-          reach = d
-        }
-      }
+    const gridded = { x: Math.round(world.x / step) * step, y: Math.round(world.y / step) * step }
+    const hit = snapToObjects ? snapTo(sceneRef.current, world, SNAP_REACH / zoom, { exclude, from, gridded: snapToGrid ? gridded : undefined }) : null
+    if (hit) {
+      // A point of an object is taken exactly as it is; a place worked out on a line is tidied.
+      const p = hit.kind === 'point' ? hit.p : { x: round(hit.p.x), y: round(hit.p.y) }
+      return { p, marker: { p, kind: hit.kind } }
     }
-    if (best) return { p: best, marker: best }
-    if (!snapToGrid) return { p: world, marker: null }
-    return { p: { x: Math.round(world.x / step) * step, y: Math.round(world.y / step) * step }, marker: null }
+    return { p: snapToGrid ? gridded : world, marker: null }
   }
 
   /**
@@ -469,7 +509,7 @@ export function CanvasView() {
    * chooses how far along. That distance goes by grid steps, except near a wall the line crosses,
    * where it stops on that wall's middle line. `forward` keeps it on the side the angle points to.
    */
-  const alongLine = (world: Vec2, from: Vec2, angle: number, exclude: string[], forward = false) => {
+  const alongLine = (world: Vec2, from: Vec2, angle: number, exclude: string[], forward = false): { p: Vec2; marker: Snap | null } => {
     const { zoom } = get().view
     const step = gridStep(zoom)
     const dir = { x: Math.cos(angle), y: Math.sin(angle) }
@@ -477,23 +517,55 @@ export function CanvasView() {
     let length = Math.round(pointed / step) * step
     if (forward) length = Math.max(step, length)
     let crossing = false
-    let reach = 10 / zoom
+    let reach = SNAP_REACH / zoom
     for (const item of sceneRef.current) {
       const wall = item.node
       if (wall.type !== 'wall' || exclude.includes(item.id)) continue
-      const e = sub(wall.b, wall.a)
-      const denom = dir.x * e.y - dir.y * e.x
-      if (Math.abs(denom) < 1e-9) continue
-      const between = sub(wall.a, from)
-      const t = (between.x * e.y - between.y * e.x) / denom
-      const u = (between.x * dir.y - between.y * dir.x) / denom
-      if (u < 0 || u > 1 || (forward && t <= 0) || Math.abs(t - pointed) >= reach) continue
-      reach = Math.abs(t - pointed)
-      length = t
-      crossing = true
+      // A curved wall is crossed somewhere along its curve.
+      const line = wallPoints(wall)
+      for (let i = 0; i + 1 < line.length; i++) {
+        const e = sub(line[i + 1], line[i])
+        const denom = dir.x * e.y - dir.y * e.x
+        if (Math.abs(denom) < 1e-9) continue
+        const between = sub(line[i], from)
+        const t = (between.x * e.y - between.y * e.x) / denom
+        const u = (between.x * dir.y - between.y * dir.x) / denom
+        if (u < 0 || u > 1 || (forward && t <= 0) || Math.abs(t - pointed) >= reach) continue
+        reach = Math.abs(t - pointed)
+        length = t
+        crossing = true
+      }
     }
     const p = { x: round(from.x + dir.x * length), y: round(from.y + dir.y * length) }
-    return { p, marker: crossing ? p : null }
+    return { p, marker: crossing ? { p, kind: 'crossing' } : null }
+  }
+
+  /**
+   * Where the end of a line being drawn from `from` goes. Usually that is `snap`. With the
+   * direction held level or upright by an arrow key, the end stays on that line through `from`
+   * and the pointer only says how far: by pointing at something elsewhere, in which case the end
+   * comes level with it (`link` joins the two, to show what it was taken from), or else by grid
+   * steps, stopping on a wall the line crosses.
+   */
+  const lineEnd = (world: Vec2, e: { altKey: boolean; shiftKey: boolean }, exclude: string[], from: Vec2): { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } => {
+    const lock = get().axisLock
+    if (!lock) return snap(world, e, exclude, from)
+    const onLine = (q: Vec2): Vec2 => (lock === 'x' ? { x: q.x, y: from.y } : { x: from.x, y: q.y })
+    if (e.altKey) return { p: onLine(world), marker: null }
+    // A place merely somewhere along a line is not something pointed at; a point, a middle or a crossing is.
+    const pointed = snap(world, { altKey: false, shiftKey: false }, exclude).marker
+    if (pointed && pointed.kind !== 'edge') {
+      const p = onLine(pointed.p)
+      return { p, marker: pointed, ...(dist(p, pointed.p) > 1e-6 ? { link: [pointed.p, p] as [Vec2, Vec2] } : {}) }
+    }
+    return alongLine(world, from, lock === 'x' ? 0 : Math.PI / 2, exclude)
+  }
+
+  /** Where the second point of the two-point shape being drawn goes, for the pointer where it is. */
+  const aim = (g: Extract<Gesture, { kind: 'draw' }>, world: Vec2, e: { altKey: boolean; shiftKey: boolean }): { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } => {
+    const { tool } = get()
+    if (CHAINED.includes(tool)) return lineEnd(world, e, [g.id], g.start)
+    return snap(world, e, [g.id], tool === 'dimension' ? g.start : undefined)
   }
 
   const local = (e: { clientX: number; clientY: number }): Vec2 => {
@@ -514,7 +586,7 @@ export function CanvasView() {
       return
     }
     p = constrain(tool, g.start, p, lastWorld.current.altKey)
-    useStore.setState({ drawLocks: {}, drawLive: null })
+    useStore.setState({ drawLocks: {}, axisLock: null, drawLive: null })
     if (tool === 'dimension') {
       // Not done yet: the next click places the dimension line.
       preview([{ op: 'add_node', node: shape(tool, g.id, g.start, p) }])
@@ -549,7 +621,7 @@ export function CanvasView() {
   const polyPoint = (g: Extract<Gesture, { kind: 'poly' }>, world: Vec2, e: { altKey: boolean; shiftKey: boolean }): Vec2 => {
     const last = g.points[g.points.length - 1]
     if (g.points.length >= 3 && dist(world, g.points[0]) * get().view.zoom < 10) return g.points[0]
-    return constrain('polyline', last, snap(world, e, [g.id], last).p)
+    return constrain('polyline', last, lineEnd(world, e, [g.id], last).p)
   }
 
   /** Ends the polyline being drawn, keeping it when it has at least one segment. */
@@ -558,7 +630,7 @@ export function CanvasView() {
     else cancel()
     gesture.current = { kind: 'idle' }
     setOverlay({})
-    useStore.setState({ drawLocks: {}, drawLive: null })
+    useStore.setState({ drawLocks: {}, axisLock: null, drawLive: null })
     syncStep()
   }
 
@@ -567,11 +639,11 @@ export function CanvasView() {
     drawing.commit = () => {
       const g = gesture.current
       const { world, ...keys } = lastWorld.current
-      if (g.kind === 'draw') finishShape(g, snap(world, keys, [g.id], g.start).p, true)
+      if (g.kind === 'draw') finishShape(g, aim(g, world, keys).p, true)
       else if (g.kind === 'poly') {
         g.points.push(polyPoint(g, world, keys))
         g.since = performance.now()
-        useStore.setState({ drawLocks: {} })
+        useStore.setState({ drawLocks: {}, axisLock: null })
         preview([{ op: 'add_node', node: polyline(g.id, g.points, false) }])
       }
       syncStep()
@@ -651,6 +723,14 @@ export function CanvasView() {
       // On the drawing there is no "in between", so Shift and Ctrl (or Cmd) both add to or take from the selection.
       const adding = e.shiftKey || e.ctrlKey || e.metaKey
       if (!hit) {
+        // The box around a selection is the selection: a press in an empty part of it, between the
+        // things selected, takes hold of them all, as a right-click there is about them all. Only
+        // a click that does not become a drag lets them go.
+        const box = adding ? null : gripBox()
+        if (box && boundsContainPoint(box, world, 6 / s.view.zoom)) {
+          gesture.current = { kind: 'press', at, start: world, nodes: withPaperContents(s.selection).map((id) => s.doc.nodes[id]), beside: true }
+          return
+        }
         if (!adding) select([])
         gesture.current = { kind: 'marquee', start: world, keep: adding ? s.selection : [] }
         return
@@ -704,12 +784,12 @@ export function CanvasView() {
       if (g.points.length >= 3 && p === g.points[0]) return finishPoly(g, true)
       g.points.push(p)
       g.since = performance.now()
-      useStore.setState({ drawLocks: {} })
+      useStore.setState({ drawLocks: {}, axisLock: null })
     } else if (g.kind === 'offset') {
       commit()
       gesture.current = { kind: 'idle' }
     } else if (g.kind === 'draw') {
-      finishShape(g, snap(world, e, [g.id], CHAINED.includes(s.tool) || s.tool === 'dimension' ? g.start : undefined).p, true)
+      finishShape(g, aim(g, world, e).p, true)
     } else {
       const start = snap(world, e, []).p
       if (s.tool === 'paper') {
@@ -746,7 +826,9 @@ export function CanvasView() {
     }
     const g = gesture.current
     lastWorld.current = { world, altKey: e.altKey, shiftKey: e.shiftKey }
-    let marker: Vec2 | null = null
+    let marker: Snap | null = null
+    let smart: Overlay['smart']
+    let link: Overlay['link']
     let labels: SizeLabel[] | undefined
     let angle: AngleMark | undefined
     let axis: Overlay['axis']
@@ -759,11 +841,11 @@ export function CanvasView() {
     let previewed = true
     switch (g.kind) {
       case 'press':
-        if (dist(at, g.at) > 3) gesture.current = { kind: 'move', start: g.start, nodes: g.nodes }
+        if (dist(at, g.at) > 3) gesture.current = { kind: 'move', start: g.start, nodes: g.nodes, ...alignables(g.nodes) }
         break
       case 'move': {
         const step = e.altKey ? 0.001 : gridStep(s.view.zoom)
-        const d = { x: Math.round((world.x - g.start.x) / step) * step, y: Math.round((world.y - g.start.y) / step) * step }
+        let d = { x: Math.round((world.x - g.start.x) / step) * step, y: Math.round((world.y - g.start.y) / step) * step }
         // A single door or window slides along walls instead of moving freely.
         const only = g.nodes.length === 1 ? g.nodes[0] : null
         const span = only && !e.altKey ? openingSpan(only, registry) : null
@@ -775,6 +857,13 @@ export function CanvasView() {
             break
           }
         }
+        // What is moved lines up with what is around it, and keeps equal gaps with its neighbours;
+        // along an axis where nothing is near enough for that, it goes by the grid.
+        if (g.moving && !e.altKey && usePrefs.getState().snapToObjects) {
+          const fit = alignMove(g.moving, g.others, sub(world, g.start), ALIGN_REACH / s.view.zoom)
+          d = { x: fit.x ? round(fit.d.x) : d.x, y: fit.y ? round(fit.d.y) : d.y }
+          smart = moveGuides(g.moving, g.others, d)
+        }
         const before = s.base ?? s.doc
         // Walls joined to the ones being moved stretch to stay joined, and openings follow their wall. Alt moves only what was picked.
         previewed = preview([...g.nodes.flatMap((n) => moveOps(before, n, d)), ...(e.altKey ? [] : wallFollowOps(before, g.nodes, d, registry))])
@@ -785,7 +874,8 @@ export function CanvasView() {
         // and that line is shown running across the view.
         const ends = 'a' in g.node && 'b' in g.node && g.index < 2 ? { moved: g.index === 0 ? g.node.a : g.node.b, fixed: g.index === 0 ? g.node.b : g.node.a } : null
         const line = e.shiftKey && ends && dist(ends.moved, ends.fixed) > 1e-6 ? Math.atan2(ends.moved.y - ends.fixed.y, ends.moved.x - ends.fixed.x) : null
-        const target = line !== null && ends ? alongLine(world, ends.fixed, line, [g.node.id], true) : snap(world, e, [g.node.id])
+        // The end that stays put is where a perpendicular onto another line would be dropped from.
+        const target = line !== null && ends ? alongLine(world, ends.fixed, line, [g.node.id], true) : snap(world, { altKey: e.altKey, shiftKey: false }, [g.node.id], ends?.fixed)
         if (line !== null && ends) guide = { at: ends.fixed, angle: line }
         marker = target.marker
         // The other walls that end at a wall's corner come along with it, unless Alt is held.
@@ -845,8 +935,11 @@ export function CanvasView() {
       }
       case 'draw': {
         const constrained = CHAINED.includes(s.tool) || s.tool === 'dimension'
-        const target = snap(world, e, [g.id], constrained ? g.start : undefined)
+        const target = aim(g, world, e)
         marker = target.marker
+        link = target.link
+        // The line it is held to is shown across the view, as when Shift holds a wall end on its line.
+        if (s.axisLock && CHAINED.includes(s.tool)) guide = { at: g.start, angle: s.axisLock === 'x' ? 0 : Math.PI / 2 }
         const end = constrain(s.tool, g.start, target.p, e.altKey)
         // The formats on offer follow the pointer itself, so one stays lit while the paper is held on it.
         if (s.tool === 'paper' && s.drawLocks.a === undefined && s.drawLocks.b === undefined && !e.altKey) ghosts = paperFormats(g.start, target.p)
@@ -860,6 +953,12 @@ export function CanvasView() {
       case 'poly': {
         const last = g.points[g.points.length - 1]
         const end = polyPoint(g, world, e)
+        if (s.axisLock) {
+          const target = lineEnd(world, e, [g.id], last)
+          marker = target.marker
+          link = target.link
+          guide = { at: last, angle: s.axisLock === 'x' ? 0 : Math.PI / 2 }
+        }
         previewed = preview([{ op: 'add_node', node: polyline(g.id, [...g.points, end], false) }])
         status = t('Length {value}', { value: formatLength(dist(last, end)) })
         axis = axisOf(last, end)
@@ -942,7 +1041,7 @@ export function CanvasView() {
       const next = [...new Set([...g.keep, ...inside])]
       if (next.length !== s.selection.length || next.some((id, i) => id !== s.selection[i])) select(next)
     }
-    setOverlay((o) => ({ marker, labels, angle, axis, guide, ghosts, marquee: g.kind === 'marquee' ? { a: g.start, b: world } : undefined, measure: measure ?? o.measure, angleReading: angleReading ?? o.angleReading }))
+    setOverlay((o) => ({ marker: marker && { ...marker, label: snapName(marker.kind) }, smart, link, labels, angle, axis, guide, ghosts, marquee: g.kind === 'marquee' ? { a: g.start, b: world } : undefined, measure: measure ?? o.measure, angleReading: angleReading ?? o.angleReading }))
     // A failed preview has put its reason in the status bar; keep it there.
     if (previewed) useStore.setState({ status, drawLive: live })
   }
@@ -960,6 +1059,7 @@ export function CanvasView() {
     const g = gesture.current
     switch (g.kind) {
       case 'press':
+        if (g.beside) select([])
         gesture.current = { kind: 'idle' }
         break
       case 'move':
@@ -984,7 +1084,7 @@ export function CanvasView() {
       case 'draw':
         // Dragging from the first point to the second sets both at once; a plain click waits for the next click.
         if (g.press && dist(at, g.press) > DRAG_DISTANCE && performance.now() - g.press.time > DRAG_TIME) {
-          finishShape(g, snap(world, e, [g.id], CHAINED.includes(s.tool) || s.tool === 'dimension' ? g.start : undefined).p, true)
+          finishShape(g, aim(g, world, e).p, true)
         } else g.press = null
     }
   }

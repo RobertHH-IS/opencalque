@@ -76,6 +76,12 @@ interface State {
    * `a` is the length and `b` the angle in degrees, counter-clockwise from the right.
    */
   drawLocks: { a?: number; b?: number }
+  /**
+   * The direction the line being drawn is held to, with the arrow keys: 'x' keeps it level, 'y'
+   * upright. The pointer then only says how far it goes, and may say so by pointing at something
+   * elsewhere. Let go when the line is finished.
+   */
+  axisLock: 'x' | 'y' | null
   /** The same two sizes as they currently are while drawing, to show in the quick bar. */
   drawLive: { a: number; b: number } | null
   /**
@@ -146,6 +152,7 @@ function initial(doc: Document, file: StoredFile | null): State {
     measureTool: 'measure',
     annotationTemplate: {},
     drawLocks: {},
+    axisLock: null,
     drawLive: null,
     drawStep: 0,
     drawColor: null,
@@ -290,7 +297,7 @@ export function setTool(tool: Tool, placing: Placing | null = null): void {
   const roomTool = ROOM_TOOLS.includes(tool) ? tool : get().roomTool
   const textTool = TEXT_TOOLS.includes(tool) ? tool : get().textTool
   const measureTool = MEASURE_TOOLS.includes(tool) ? tool : get().measureTool
-  set({ tool, placing, shapeTool, roomTool, textTool, measureTool, corner: null, placingRotation: 0, calibration: null, drawLocks: {}, drawLive: null, drawStep: 0, status: '' })
+  set({ tool, placing, shapeTool, roomTool, textTool, measureTool, corner: null, placingRotation: 0, calibration: null, drawLocks: {}, axisLock: null, drawLive: null, drawStep: 0, status: '' })
 }
 
 export function select(ids: string[]): void {

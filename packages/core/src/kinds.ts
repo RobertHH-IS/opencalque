@@ -9,7 +9,7 @@ import type { Registry } from './registry'
 import type { Asset, Document, Node, NodeOf, NodeType } from './schema'
 import { DEFAULT_PAPER_SCALE, paperFormat } from './papers'
 import { roomAt } from './rooms'
-import { hostWall, wallPolygons, wallSeams } from './walls'
+import { bulgeThrough, hostWall, wallMiddle, wallParallel, wallPoints, wallPolygons, wallSeams } from './walls'
 
 export const DEFAULT_INK = '#1f1f1f'
 export const WALL_FILL = '#ffffff'
@@ -40,6 +40,12 @@ export interface NodeKind<N> {
   moveHandle?(node: N, index: number, p: Vec2): Record<string, unknown>
   /** Points other geometry snaps to. Defaults to the vertices of the node's paths. */
   snapPoints?(node: N): Vec2[]
+  /**
+   * The lines other geometry snaps onto: their middles, where they cross, the foot of a
+   * perpendicular, the nearest point. Given the paths the node draws, which are what is used when
+   * a kind does not say.
+   */
+  snapLines?(node: N, drawn: Vec2[][]): Vec2[][]
 }
 
 const moveXY = (node: { x: number; y: number }, d: Vec2) => ({ x: node.x + d.x, y: node.y + d.y })
@@ -436,6 +442,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     move: moveXY,
     // The floor is not something to snap to; the walls around it are.
     snapPoints: () => [],
+    snapLines: () => [],
   },
   divider: {
     primitives: (node) => [{ kind: 'path', points: [node.a, node.b], stroke: DIVIDER_INK, dash: [8, 6], own: true }],
@@ -491,6 +498,8 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       return { bend: Math.round(((2 * (off.x * across.x + off.y * across.y)) / length) * 1000) / 1000 }
     },
     snapPoints: (node) => [node.a, node.b],
+    // A leader points at things; it is not one of them.
+    snapLines: () => [],
   },
   wall: {
     primitives: (node, ctx) => {
@@ -504,9 +513,13 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       ]
     },
     move: moveAB,
-    handles: handlesAB,
-    moveHandle: moveHandleAB,
-    snapPoints: (node) => [node.a, node.b, mid(node.a, node.b)],
+    // Its two ends, and the middle of its line, which is pulled sideways to curve it.
+    handles: (node) => [node.a, node.b, wallMiddle(node)],
+    moveHandle: (node, index, p) => (index < 2 ? moveHandleAB(node, index, p) : { bulge: bulgeThrough(node, p) ?? null }),
+    // The middle of a straight wall is found as the middle of its line; the top of a curve has to be given.
+    snapPoints: (node) => (node.bulge ? [node.a, node.b, wallMiddle(node)] : [node.a, node.b]),
+    // Its faces as drawn, and its middle line, which is where another wall comes to meet it.
+    snapLines: (node, drawn) => [...drawn, wallPoints(node)],
   },
   dimension: {
     primitives: dimensionPrimitives,
@@ -519,6 +532,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       return { offset: Math.round((p.x - node.a.x) * n.x + (p.y - node.a.y) * n.y) }
     },
     snapPoints: handlesAB,
+    snapLines: () => [],
   },
   image: {
     primitives: (node, ctx) => {
@@ -530,6 +544,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     move: moveXY,
     // A scanned plan is not geometry: nothing should snap to its corners.
     snapPoints: () => [],
+    snapLines: () => [],
   },
   instance: {
     primitives: (node, ctx) => {
@@ -563,18 +578,29 @@ export function kindOf(node: Node): NodeKind<any> {
  */
 function wallLayerLines(wall: NodeOf<'wall'>, layers: { thickness: number }[], pieces: Vec2[][]): Primitive[] {
   if (layers.length < 2 || dist(wall.a, wall.b) < 1e-6) return []
-  const d = norm(sub(wall.b, wall.a))
-  const n = perp(d)
   const reach = wall.thickness * 4
   const out: Primitive[] = []
   let across = -wall.thickness / 2
   for (const layer of layers.slice(0, -1)) {
     across += layer.thickness
-    // The left face is the one on the left when going from a to b: against the normal used here.
-    const shift = scale(n, -across)
-    const from = add(sub(wall.a, scale(d, reach)), shift)
-    const to = add(add(wall.b, scale(d, reach)), shift)
-    for (const piece of pieces) for (const points of segmentsInside(from, to, piece)) out.push({ kind: 'path', points, strokeWidth: 0.5 })
+    // The left face is the one on the left when going from a to b, and `across` is counted from it.
+    const line = wallParallel(wall, -across, reach)
+    for (const piece of pieces) {
+      // Along a curved wall the line is many short stretches: those that follow on are drawn as one.
+      let run: Vec2[] = []
+      const flush = () => {
+        if (run.length > 1) out.push({ kind: 'path', points: run, strokeWidth: 0.5 })
+        run = []
+      }
+      for (let i = 0; i + 1 < line.length; i++) {
+        for (const [from, to] of segmentsInside(line[i], line[i + 1], piece)) {
+          if (run.length === 0 || dist(run[run.length - 1], from) > 1e-6) flush()
+          if (run.length === 0) run.push(from)
+          run.push(to)
+        }
+      }
+      flush()
+    }
   }
   return out
 }
@@ -619,7 +645,7 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
         if (p.own) return []
         const shape = p.kind === 'path' && p.closed ? p.points : p.kind === 'ellipse' ? ellipseArc({ ...p, from: 0, to: 360 }).slice(0, -1) : []
         return patternStrokes(shape, pattern).map(
-          (points): Primitive => ({ kind: 'path', points, stroke: paint(pattern.stroke) ?? HATCH_INK, strokeWidth: 0.6, own: true, backdrop: p.backdrop, clip: [...(p.clip ?? []), shape] }),
+          (points): Primitive => ({ kind: 'path', points, stroke: paint(pattern.stroke) ?? HATCH_INK, strokeWidth: 0.6, own: true, texture: true, backdrop: p.backdrop, clip: [...(p.clip ?? []), shape] }),
         )
       })
     : []

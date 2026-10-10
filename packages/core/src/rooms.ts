@@ -1,6 +1,7 @@
 import { leavesOf, rootOf } from './document'
 import { dist, distToSegment, pointInPolygon, type Vec2 } from './geometry'
 import type { Document } from './schema'
+import { wallPoints } from './walls'
 
 /**
  * Rooms are found, not stored. A `room` node is only a point with a name; the space it stands for
@@ -28,6 +29,8 @@ interface Segment {
   b: Vec2
   /** Half the thickness of the wall; 0 for a divider. */
   half: number
+  /** The wall it is a stretch of. A curved wall is many stretches, which are not to be taken for walls meeting one another. */
+  of: string
 }
 
 const cross = (a: Vec2, b: Vec2) => a.x * b.y - a.y * b.x
@@ -65,17 +68,23 @@ function regionsFrom(segments: Segment[]): Region[] {
   const stops: { t: number; corner: number }[][] = segments.map(() => [])
   segments.forEach((segment, i) => {
     for (const [end, t] of [[segment.a, 0], [segment.b, 1]] as const) {
+      // Of everything the end reaches, it lands on what is nearest: the end of another wall, or its side.
       let landed = end
+      let nearest = Infinity
+      // Set when what it lands on is the side of a wall, which then gets a corner there.
+      const side: { j: number; on: number }[] = []
       segments.forEach((other, j) => {
-        if (j === i || distToSegment(end, other.a, other.b) > other.half + TOLERANCE) return
-        if (dist(end, other.a) < other.half + TOLERANCE) landed = other.a
-        else if (dist(end, other.b) < other.half + TOLERANCE) landed = other.b
-        else {
-          const on = along(end, other.a, other.b)
-          landed = at(other.a, other.b, on)
-          stops[j].push({ t: on, corner: cornerAt(landed) })
-        }
+        if (other.of === segment.of || distToSegment(end, other.a, other.b) > other.half + TOLERANCE) return
+        const corner = [other.a, other.b].find((p) => dist(end, p) < other.half + TOLERANCE)
+        const on = along(end, other.a, other.b)
+        const target = corner ?? at(other.a, other.b, on)
+        if (dist(end, target) >= nearest) return
+        nearest = dist(end, target)
+        landed = target
+        side.length = 0
+        if (!corner) side.push({ j, on })
       })
+      for (const { j, on } of side) stops[j].push({ t: on, corner: cornerAt(landed) })
       stops[i].push({ t, corner: cornerAt(landed) })
     }
   })
@@ -182,7 +191,13 @@ export function roomRegions(doc: Document, parentId: string | null): Region[] {
   if (!byRoot) cache.set(doc.nodes, (byRoot = new Map()))
   let regions = byRoot.get(root.id)
   if (!regions) {
-    const segments = leavesOf(doc, root.id).flatMap((n): Segment[] => (n.type === 'wall' ? [{ a: n.a, b: n.b, half: n.thickness / 2 }] : n.type === 'divider' ? [{ a: n.a, b: n.b, half: 0 }] : []))
+    const segments = leavesOf(doc, root.id).flatMap((n): Segment[] => {
+      if (n.type === 'divider') return [{ a: n.a, b: n.b, half: 0, of: n.id }]
+      if (n.type !== 'wall') return []
+      // A curved wall bounds rooms by the stretches its curve is drawn with.
+      const line = wallPoints(n)
+      return line.slice(1).map((b, i) => ({ a: line[i], b, half: n.thickness / 2, of: n.id }))
+    })
     byRoot.set(root.id, (regions = regionsFrom(segments.filter((s) => dist(s.a, s.b) > TOLERANCE))))
   }
   return regions

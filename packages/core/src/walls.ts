@@ -29,6 +29,132 @@ const drawnWith = (doc: Document, parentId: string | null): Node[] => {
 // Grouping is only a way of organising: walls join, and openings cut, across group boundaries.
 const wallsIn = (doc: Document, parentId: string | null): Wall[] => drawnWith(doc, parentId).filter((n): n is Wall => n.type === 'wall')
 
+/** The circle a curved wall follows: its middle line runs from angle `from` through `sweep` radians, signed, about `centre`. */
+export interface WallArc {
+  centre: Vec2
+  radius: number
+  from: number
+  sweep: number
+}
+
+/** How finely a curved wall is drawn and measured: a point along it at least every so many radians (3°). */
+const ARC_STEP = Math.PI / 60
+
+/**
+ * The arc a wall with a `bulge` follows, or null for a straight one. The bulge is how far the
+ * middle of the wall stands off the straight line from a to b, to the right of that direction as
+ * seen on screen; it is taken as no more than half that distance, which is a half circle.
+ */
+export function wallArc(wall: { a: Vec2; b: Vec2; bulge?: number }): WallArc | null {
+  const chord = dist(wall.a, wall.b)
+  const sag = Math.max(-chord / 2, Math.min(chord / 2, wall.bulge ?? 0))
+  if (chord < 1e-6 || Math.abs(sag) < 1e-3) return null
+  const radius = (chord * chord) / (8 * Math.abs(sag)) + Math.abs(sag) / 2
+  const centre = add(mid(wall.a, wall.b), scale(perp(norm(sub(wall.b, wall.a))), sag - Math.sign(sag) * radius))
+  return { centre, radius, from: Math.atan2(wall.a.y - centre.y, wall.a.x - centre.x), sweep: -Math.sign(sag) * 4 * Math.atan((2 * Math.abs(sag)) / chord) }
+}
+
+/**
+ * The line a wall follows from `a` to `b`, straight or curved, so that what is worked out along a
+ * wall (its outline, its openings, where it is cut) is written once for both. Distances along it
+ * are in mm from `a`.
+ */
+interface Course {
+  length: number
+  at(s: number): Vec2
+  /** The direction of travel there, towards `b`. */
+  dir(s: number): Vec2
+  /** The point `across` mm to the right of the line there (to the left when negative). */
+  offset(s: number, across: number): Vec2
+  /** How far along the point of the line nearest to `p` is (before the start and past the end count on), and how far `p` stands off it. */
+  project(p: Vec2): { along: number; off: number }
+  /** Where a drawn line needs a point to follow the curve, ends included; none for a straight wall. */
+  stops: number[]
+}
+
+function courseOf(wall: { a: Vec2; b: Vec2; bulge?: number }): Course {
+  const arc = wallArc(wall)
+  if (!arc) {
+    const length = dist(wall.a, wall.b)
+    const d = norm(sub(wall.b, wall.a))
+    const n = perp(d)
+    const at = (s: number) => add(wall.a, scale(d, s))
+    return {
+      length,
+      at,
+      dir: () => d,
+      offset: (s, across) => add(at(s), scale(n, across)),
+      project: (p) => ({ along: dot(sub(p, wall.a), d), off: Math.abs(cross(d, sub(p, wall.a))) }),
+      stops: [],
+    }
+  }
+  const { centre, radius, from, sweep } = arc
+  const length = radius * Math.abs(sweep)
+  const way = Math.sign(sweep)
+  const angle = (s: number) => from + (sweep * s) / length
+  const round = (s: number, r: number): Vec2 => ({ x: centre.x + r * Math.cos(angle(s)), y: centre.y + r * Math.sin(angle(s)) })
+  const steps = Math.max(4, Math.ceil(Math.abs(sweep) / ARC_STEP))
+  return {
+    length,
+    at: (s) => round(s, radius),
+    dir: (s) => ({ x: -way * Math.sin(angle(s)), y: way * Math.cos(angle(s)) }),
+    // The inner face of a wall thicker than its radius would cross the centre: it stops there.
+    offset: (s, across) => round(s, Math.max(0, radius - way * across)),
+    project: (p) => {
+      // Measured from the middle of the arc, so that both ends are well away from where angles wrap round.
+      let turn = Math.atan2(p.y - centre.y, p.x - centre.x) - (from + sweep / 2)
+      turn = Math.atan2(Math.sin(turn), Math.cos(turn))
+      return { along: length / 2 + (turn / sweep) * length, off: Math.abs(dist(p, centre) - radius) }
+    },
+    stops: Array.from({ length: steps + 1 }, (_, i) => (length * i) / steps),
+  }
+}
+
+/** The length of a wall along its middle line, round the curve when it has one. */
+export function wallLength(wall: { a: Vec2; b: Vec2; bulge?: number }): number {
+  return courseOf(wall).length
+}
+
+/** The middle of a wall's middle line: for a curved wall, the top of its curve. */
+export function wallMiddle(wall: { a: Vec2; b: Vec2; bulge?: number }): Vec2 {
+  const course = courseOf(wall)
+  return course.stops.length > 0 ? course.at(course.length / 2) : mid(wall.a, wall.b)
+}
+
+/** A wall's middle line as points: its two ends, with the points of its curve between them when it has one. */
+export function wallPoints(wall: { a: Vec2; b: Vec2; bulge?: number }): Vec2[] {
+  const course = courseOf(wall)
+  return [wall.a, ...course.stops.slice(1, -1).map((s) => course.at(s)), wall.b]
+}
+
+/**
+ * A line running beside a wall's middle line, `across` mm to its right (left when negative) and
+ * carried `extend` mm straight on past each end.
+ */
+export function wallParallel(wall: { a: Vec2; b: Vec2; bulge?: number }, across: number, extend = 0): Vec2[] {
+  const course = courseOf(wall)
+  const stops = course.stops.length > 0 ? course.stops : [0, course.length]
+  const line = stops.map((s) => course.offset(s, across))
+  return extend > 0 ? [sub(line[0], scale(course.dir(0), extend)), ...line, add(line[line.length - 1], scale(course.dir(course.length), extend))] : line
+}
+
+/** How far a point is from a wall's middle line. */
+export function distToWall(p: Vec2, wall: { a: Vec2; b: Vec2; bulge?: number }): number {
+  if (!wallArc(wall)) return distToSegment(p, wall.a, wall.b)
+  const course = courseOf(wall)
+  const { along, off } = course.project(p)
+  return along >= 0 && along <= course.length ? off : Math.min(dist(p, wall.a), dist(p, wall.b))
+}
+
+/** The bulge that puts the middle of a wall's curve at `p`, as near as a half circle allows; undefined when that leaves it straight. */
+export function bulgeThrough(wall: { a: Vec2; b: Vec2 }, p: Vec2): number | undefined {
+  const chord = dist(wall.a, wall.b)
+  if (chord < 1e-6) return undefined
+  const off = dot(sub(p, mid(wall.a, wall.b)), perp(norm(sub(wall.b, wall.a))))
+  const bulge = tidy(Math.max(-chord / 2, Math.min(chord / 2, off)))
+  return Math.abs(bulge) < 1 ? undefined : bulge
+}
+
 /** One wall leaving a joint: its direction away from the joint, half thickness and length. */
 interface Ray {
   d: Vec2
@@ -97,13 +223,15 @@ function meet(p: Vec2, a: Ray, b: Ray, style: 'miter' | 'round' | 'bevel' = 'mit
 function cap(p: Vec2, wall: Wall, away: Vec2, walls: Wall[], seams?: [Vec2, Vec2][]): Vec2[] {
   const rays: Ray[] = []
   for (const w of walls) {
-    const length = dist(w.a, w.b)
-    if (length < 1e-6) continue
-    for (const [end, other] of [[w.a, w.b], [w.b, w.a]]) {
+    if (dist(w.a, w.b) < 1e-6) continue
+    for (const side of ['a', 'b'] as const) {
+      const end = w[side]
       const self = w.id === wall.id
       if (self ? end !== p : dist(end, p) > JOIN_TOLERANCE) continue
-      const d = self ? away : norm(sub(other, end))
-      rays.push({ d, h: w.thickness / 2, length, angle: Math.atan2(d.y, d.x), self, join: end === w.a ? w.joins?.a : w.joins?.b })
+      // A curved wall leaves the joint the way its curve is heading there.
+      const course = courseOf(w)
+      const d = self ? away : side === 'a' ? course.dir(0) : scale(course.dir(course.length), -1)
+      rays.push({ d, h: w.thickness / 2, length: course.length, angle: Math.atan2(d.y, d.x), self, join: w.joins?.[side] })
     }
   }
   const h = wall.thickness / 2
@@ -142,14 +270,14 @@ export function openingSpan(node: Node, registry: Registry): [Vec2, Vec2] | null
 
 /** The part of a wall's centerline (distances from `a`) covered by a span lying inside the wall. */
 function overlap(wall: Wall, span: [Vec2, Vec2]): [number, number] | null {
-  const length = dist(wall.a, wall.b)
-  if (length < 1e-6) return null
-  const d = norm(sub(wall.b, wall.a))
+  if (dist(wall.a, wall.b) < 1e-6) return null
+  const course = courseOf(wall)
+  const length = course.length
   const ts: number[] = []
   for (const p of span) {
-    const rel = sub(p, wall.a)
-    if (Math.abs(cross(d, rel)) > wall.thickness / 2 + 1e-6) return null
-    ts.push(dot(rel, d))
+    const { along, off } = course.project(p)
+    if (off > wall.thickness / 2 + 1e-6) return null
+    ts.push(along)
   }
   const from = Math.max(0, Math.min(...ts))
   const to = Math.min(length, Math.max(...ts))
@@ -179,13 +307,13 @@ export function hostWall(doc: Document, node: Node, registry: Registry): Wall | 
  * and gaps left for the doors and windows placed on it.
  */
 export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec2[][] {
-  const length = dist(wall.a, wall.b)
-  if (length < 1e-6) return []
-  const d = norm(sub(wall.b, wall.a))
-  const n = scale(perp(d), wall.thickness / 2)
+  if (dist(wall.a, wall.b) < 1e-6) return []
+  const course = courseOf(wall)
+  const length = course.length
+  const h = wall.thickness / 2
   const walls = wallsIn(doc, wall.parent)
-  const capA = cap(wall.a, wall, d, walls)
-  const capB = cap(wall.b, wall, scale(d, -1), walls)
+  const capA = cap(wall.a, wall, course.dir(0), walls)
+  const capB = cap(wall.b, wall, scale(course.dir(length), -1), walls)
 
   const cuts: [number, number][] = []
   for (const node of drawnWith(doc, wall.parent)) {
@@ -195,12 +323,19 @@ export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec
   }
   cuts.sort((x, y) => x[0] - y[0])
 
-  const at = (t: number) => add(wall.a, scale(d, t))
   const polygons: Vec2[][] = []
   const piece = (from: number, to: number) => {
-    const left = from <= 0 ? capA : [sub(at(from), n), add(at(from), n)]
-    const right = to >= length ? capB : [add(at(to), n), sub(at(to), n)]
-    polygons.push([...left, ...right])
+    const left = from <= 0 ? capA : [course.offset(from, -h), course.offset(from, h)]
+    const right = to >= length ? capB : [course.offset(to, h), course.offset(to, -h)]
+    // Between its two ends a curved wall follows its curve, along one face and back along the
+    // other. Each face starts where the end before it left off, which at a mitred corner is some
+    // way along the wall, or behind its end.
+    const face = (side: 1 | -1, start: Vec2, stop: Vec2): Vec2[] => {
+      const lo = from <= 0 ? course.project(start).along : from
+      const hi = to >= length ? course.project(stop).along : to
+      return course.stops.filter((s) => s > lo + 1e-3 && s < hi - 1e-3).map((s) => course.offset(s, side * h))
+    }
+    polygons.push([...left, ...face(1, left[left.length - 1], right[0]), ...right, ...face(-1, left[0], right[right.length - 1]).reverse()])
   }
   let start = 0
   for (const [from, to] of cuts) {
@@ -217,11 +352,11 @@ export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec
  */
 export function wallSeams(wall: Wall, doc: Document): [Vec2, Vec2][] {
   if (!wall.joins || dist(wall.a, wall.b) < 1e-6) return []
-  const d = norm(sub(wall.b, wall.a))
+  const course = courseOf(wall)
   const walls = wallsIn(doc, wall.parent)
   const seams: [Vec2, Vec2][] = []
-  cap(wall.a, wall, d, walls, seams)
-  cap(wall.b, wall, scale(d, -1), walls, seams)
+  cap(wall.a, wall, course.dir(0), walls, seams)
+  cap(wall.b, wall, scale(course.dir(course.length), -1), walls, seams)
   return seams
 }
 
@@ -247,19 +382,23 @@ export function snapOpeningToWall(
   let wall: Wall | null = null
   let nearest = Infinity
   for (const w of wallsIn(doc, containerId)) {
-    const distance = distToSegment(p, w.a, w.b) - w.thickness / 2
+    const distance = distToWall(p, w) - w.thickness / 2
     if (distance <= reach && distance < nearest) {
       wall = w
       nearest = distance
     }
   }
   if (!wall) return null
-  const length = dist(wall.a, wall.b)
-  const d = norm(sub(wall.b, wall.a))
+  const course = courseOf(wall)
+  const length = course.length
   const half = Math.abs(opening.to - opening.from) / 2
-  let t = Math.round((dot(sub(p, wall.a), d) - half) / step) * step + half
+  let t = Math.round((course.project(p).along - half) / step) * step + half
   if (length >= 2 * half) t = Math.max(half, Math.min(length - half, t))
-  const center = add(wall.a, scale(d, t))
+  const d = course.dir(t)
+  // A door is straight: in a curved wall it is a chord of the curve, its two ends on the middle line.
+  const arc = wallArc(wall)
+  const on = course.at(t)
+  const center = arc && half < arc.radius ? add(arc.centre, scale(sub(on, arc.centre), Math.sqrt(arc.radius ** 2 - half ** 2) / arc.radius)) : on
   const along = (Math.atan2(d.y, d.x) * 180) / Math.PI
   const facing =
     keepRotation === undefined
@@ -311,7 +450,8 @@ export function wallFollowOps(doc: Document, moved: Node[], d: Vec2, registry: R
  * of the other walls that met it there. `doc` is the drawing before the drag.
  */
 export function wallEndFollowOps(doc: Document, wall: Node, index: number, p: Vec2): Op[] {
-  if (wall.type !== 'wall') return []
+  // A wall's third handle bends it, which moves neither end.
+  if (wall.type !== 'wall' || index > 1) return []
   const joint = index === 0 ? wall.a : wall.b
   return wallsIn(doc, wall.parent)
     .filter((other) => other.id !== wall.id)
@@ -367,18 +507,22 @@ export function moveCornerOps(doc: Document, parentId: string | null, from: Vec2
  */
 export function splitWallOps(wall: Node, p: Vec2, newWallId: string): { ops: Op[]; at: Vec2 } | null {
   if (wall.type !== 'wall') return null
-  const length = dist(wall.a, wall.b)
-  const d = norm(sub(wall.b, wall.a))
-  const along = dot(sub(p, wall.a), d)
+  const course = courseOf(wall)
+  const length = course.length
+  const along = course.project(p).along
   if (along < JOIN_TOLERANCE * 2 || along > length - JOIN_TOLERANCE * 2) return null
-  const at = { x: tidy(wall.a.x + d.x * along), y: tidy(wall.a.y + d.y * along) }
-  const { id: _, order: __, joins, ...rest } = wall
+  const on = course.at(along)
+  const at = { x: tidy(on.x), y: tidy(on.y) }
+  const { id: _, order: __, joins, bulge: ___, ...rest } = wall
+  // Each half of a curved wall stays on the same circle: it bulges by what its own share of the curve asks.
+  const arc = wallArc(wall)
+  const bulge = (share: number) => (arc ? { bulge: tidy(Math.sign(wall.bulge ?? 0) * arc.radius * (1 - Math.cos((Math.abs(arc.sweep) * share) / 2))) } : {})
   return {
     at,
     ops: [
       // Each half keeps the joint of the end it keeps.
-      { op: 'update_node', id: wall.id, patch: { b: at, joins: joins?.a ? { a: joins.a } : null } },
-      { op: 'add_node', node: { ...rest, id: newWallId, a: at, b: wall.b, ...(joins?.b ? { joins: { b: joins.b } } : {}) } },
+      { op: 'update_node', id: wall.id, patch: { b: at, joins: joins?.a ? { a: joins.a } : null, ...bulge(along / length) } },
+      { op: 'add_node', node: { ...rest, id: newWallId, a: at, b: wall.b, ...(joins?.b ? { joins: { b: joins.b } } : {}), ...bulge(1 - along / length) } },
     ],
   }
 }
@@ -388,19 +532,26 @@ function crossings(doc: Document, parentId: string | null, wall: Wall, from: Vec
   const hits: number[] = []
   for (const other of wallsIn(doc, parentId)) {
     if (other.id === wall.id) continue
-    const e = sub(other.b, other.a)
-    const denom = cross(d, e)
-    if (Math.abs(denom) < 1e-9) continue
-    const between = sub(other.a, from)
-    const t = cross(between, e) / denom
-    const u = cross(between, d) / denom
-    if (u >= -1e-6 && u <= 1 + 1e-6) hits.push(t)
+    // A curved wall is met along its curve, taken stretch by stretch.
+    const line = wallPoints(other)
+    for (let i = 0; i + 1 < line.length; i++) {
+      const e = sub(line[i + 1], line[i])
+      const denom = cross(d, e)
+      if (Math.abs(denom) < 1e-9) continue
+      const between = sub(line[i], from)
+      const t = cross(between, e) / denom
+      const u = cross(between, d) / denom
+      if (u >= -1e-6 && u <= 1 + 1e-6) hits.push(t)
+    }
   }
   return hits.sort((p, q) => p - q)
 }
 
-/** The ends of a wall that no other wall ends at: the ones that can be extended or trimmed. */
-const freeEnds = (doc: Document, wall: Wall): ('a' | 'b')[] => (['a', 'b'] as const).filter((end) => wallEndsAt(doc, wall.parent, wall[end]).length === 1)
+/**
+ * The ends of a wall that no other wall ends at: the ones that can be extended or trimmed. A
+ * curved wall has none: there is no saying where a curve carried on would go.
+ */
+const freeEnds = (doc: Document, wall: Wall): ('a' | 'b')[] => (wallArc(wall) ? [] : (['a', 'b'] as const).filter((end) => wallEndsAt(doc, wall.parent, wall[end]).length === 1))
 
 /**
  * Lengthens walls to the next wall in their way: each free end of each wall given (or only `end`
@@ -409,6 +560,7 @@ const freeEnds = (doc: Document, wall: Wall): ('a' | 'b')[] => (['a', 'b'] as co
  */
 export function extendWallOps(doc: Document, walls: Wall[], end?: 'a' | 'b'): Op[] {
   return walls.flatMap((wall): Op[] => {
+    if (wallArc(wall)) return []
     const patch: Record<string, Vec2> = {}
     for (const side of end ? [end] : freeEnds(doc, wall)) {
       const tip = wall[side]
@@ -432,7 +584,7 @@ export function trimWallOps(doc: Document, walls: Wall[], end?: 'a' | 'b'): Op[]
   return walls.flatMap((wall): Op[] => {
     const d = sub(wall.b, wall.a)
     const length = len(d)
-    if (length < 1e-6) return []
+    if (length < 1e-6 || wallArc(wall)) return []
     // Where other walls cross this one, as a share of its length from a to b, ends left out.
     const cuts = crossings(doc, wall.parent, wall, wall.a, d).filter((t) => t > JOIN_TOLERANCE / length && t < 1 - JOIN_TOLERANCE / length)
     if (cuts.length === 0) return []

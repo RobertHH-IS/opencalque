@@ -41,6 +41,11 @@ export interface PrimStyle {
    * Put there by modifiers such as crop; renderers clip to them rather than anything being cut.
    */
   clip?: Vec2[][]
+  /**
+   * Set on strokes that render a surface (a hatch, the pattern of a fill) rather than outline
+   * something. They are drawn like any other line, but nothing snaps to them.
+   */
+  texture?: boolean
 }
 
 export interface PathPrim extends PrimStyle {

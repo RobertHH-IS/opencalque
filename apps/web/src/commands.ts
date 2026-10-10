@@ -33,6 +33,7 @@ import {
 } from './actions'
 import { apply, editComponent, redo, registry, select, setTool, showPage, toast, undo, useStore, type Tool } from './store'
 import { PANELS, resetLayout, togglePanel, useDock, type PanelId } from './dock'
+import { drawing } from './canvas/drawing'
 import { importFile } from './drop'
 import { importFloorPlan } from './floorplan'
 import { msg, t } from './i18n'
@@ -67,6 +68,13 @@ export interface Command {
 const get = useStore.getState
 const prefs = usePrefs.getState
 const selected = () => get().selection.length > 0
+/** A line, a wall, a divider or a polyline has its first point and is waiting for the next. */
+const drawingLine = () => get().drawStep > 0 && ['line', 'wall', 'divider', 'polyline'].includes(get().tool)
+/** Holds the line being drawn level or upright, or lets it go when it is already held that way. */
+const lockAxis = (axis: 'x' | 'y') => {
+  useStore.setState({ axisLock: get().axisLock === axis ? null : axis })
+  drawing.refresh?.()
+}
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
 const STORAGE_KEY = 'opencalque.shortcuts'
 
@@ -157,6 +165,9 @@ const STATIC: Command[] = [
   { id: 'edit.flipVertical', title: msg('Flip top to bottom'), category: 'Edit', keys: ['Shift+V'], when: selected, run: () => transformSelection({ mirror: 'vertical' }) },
   { id: 'edit.scaleUp', title: msg('Scale up by 10%'), category: 'Edit', when: selected, run: () => transformSelection({ scale: 1.1 }) },
   { id: 'edit.scaleDown', title: msg('Scale down by 10%'), category: 'Edit', when: selected, run: () => transformSelection({ scale: 1 / 1.1 }) },
+  // Listed before the arrow keys' other use: while a line is being drawn there is nothing selected to move.
+  { id: 'draw.lockLevel', title: msg('Keep the line being drawn level'), category: 'Tools', keys: ['ArrowLeft', 'ArrowRight'], keywords: 'axis lock horizontal', when: drawingLine, run: () => lockAxis('x') },
+  { id: 'draw.lockUpright', title: msg('Keep the line being drawn upright'), category: 'Tools', keys: ['ArrowUp', 'ArrowDown'], keywords: 'axis lock vertical', when: drawingLine, run: () => lockAxis('y') },
   { id: 'edit.nudgeLeft', title: msg('Move left by one grid step'), category: 'Edit', keys: ['ArrowLeft'], when: selected, run: () => nudgeSelection(-1, 0) },
   { id: 'edit.nudgeRight', title: msg('Move right by one grid step'), category: 'Edit', keys: ['ArrowRight'], when: selected, run: () => nudgeSelection(1, 0) },
   { id: 'edit.nudgeUp', title: msg('Move up by one grid step'), category: 'Edit', keys: ['ArrowUp'], when: selected, run: () => nudgeSelection(0, -1) },

@@ -169,7 +169,8 @@ function DrawingSettings() {
     <>
       <Toggle label={t('Show the grid')} checked={prefs.showGrid} onChange={(showGrid) => setPrefs({ showGrid })} />
       <Toggle label={t('Snap to the grid')} checked={prefs.snapToGrid} onChange={(snapToGrid) => setPrefs({ snapToGrid })} />
-      <Toggle label={t('Snap to points of existing objects')} checked={prefs.snapToObjects} onChange={(snapToObjects) => setPrefs({ snapToObjects })} />
+      <Toggle label={t('Snap to existing objects, and line up what is moved with them')} checked={prefs.snapToObjects} onChange={(snapToObjects) => setPrefs({ snapToObjects })} />
+      <p className="hint">{t('A point being placed snaps to the points of objects, the middle of a line, where two lines cross, the foot of a perpendicular, or the line itself. An object being moved lines up with the sides and middles of the others, and keeps equal gaps with its neighbours.')}</p>
       <p className="hint">{t('Holding Alt while drawing or moving turns snapping off for that moment.')}</p>
     </>
   )

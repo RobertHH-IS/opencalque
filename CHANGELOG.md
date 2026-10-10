@@ -4,6 +4,21 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 0.6.0 — 2026-10-10
+
+### New
+- Curved walls. Select a wall and drag the handle in its middle sideways, or type a Curve in its properties: the wall follows an arc through its two ends. It joins the walls at its ends, takes doors and windows, bounds rooms (their area follows the curve) and is measured round its curve in the quantities and in every export. Set Curve to 0 to straighten it.
+- Snapping to more than points: the middle of a line, the place where two lines cross, the foot of a perpendicular from where the line being drawn started, and the line itself. A sign and a word beside the pointer say which one it is. The faces of walls and their corners can now be snapped to, so a dimension can be taken from face to face.
+- Smart guides: an object being moved lines up with the sides and the middle of the others, and takes the same gap as its neighbours keep between them. Lines show what it is lined up with, and the equal gaps are marked with their size. Where nothing is near, it goes by the grid as before; Alt turns it off.
+- Hold a direction while drawing: with a wall, a line, a divider or a polyline started, the up or down arrow keeps it upright and the left or right arrow keeps it level (the same key again lets go). The pointer then only says how far it goes: point at any point elsewhere on the drawing and the wall stops exactly level with it, a dotted line showing what it was taken from. Otherwise it goes by grid steps and stops on a wall it crosses.
+
+### Improved
+- The hatching of a fill is no longer something the pointer snaps to.
+- Several objects selected together can be dragged from anywhere inside the box around them, the empty space between them included. A plain click there still lets the selection go.
+
+### Fixed
+- Windows: with the light theme chosen on a computer set to dark, the minimise and maximise buttons at the top right showed no highlight under the pointer, and dialogs came up dark. The window now always follows the theme of the app.
+
 ## 0.5.0 — 2026-10-10
 
 ### New

@@ -1,9 +1,8 @@
-import { dist } from './geometry'
 import type { Registry } from './registry'
 import { roomAt } from './rooms'
 import type { Document, NodeOf } from './schema'
 import { leavesOf } from './document'
-import { wallOpenings } from './walls'
+import { wallLength, wallOpenings } from './walls'
 
 /** One room of the plan: its name and the floor inside its walls, in m². */
 export interface RoomQuantity {
@@ -90,7 +89,8 @@ export function quantities(doc: Document, pageId: string, registry: Registry): Q
   const walls = nodes
     .filter((node): node is NodeOf<'wall'> => node.type === 'wall')
     .map((wall): WallQuantity => {
-      const length = dist(wall.a, wall.b) / 1000
+      // Round the curve, for a curved wall.
+      const length = wallLength(wall) / 1000
       const type = wall.wallType ? doc.wallTypes?.[wall.wallType] : undefined
       const height = wall.height ?? type?.height ?? storey
       const openings = wallOpenings(doc, wall, registry)

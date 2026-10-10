@@ -2,7 +2,7 @@
 
 What the app does today, the ten big features chosen to do next and where each stands, and the longer backlog. For how things are built, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Last updated: 2026-10-08.
+Last updated: 2026-10-10.
 
 ## 1. What exists today
 
@@ -10,6 +10,7 @@ Last updated: 2026-10-08.
 - Lines, rectangles, ellipses and arcs (an ellipse with a start and an end angle), polylines and polygons, straight or curved through their points, text.
 - Exact sizes while drawing: a bar above the tools takes typed lengths, angles, widths and heights, and the shape shows its sizes as you draw.
 - Walls defined by centerline and thickness, joined cleanly at any angle where their ends meet. A run of walls closes with a double-click.
+- **Curved walls**: a wall bent into an arc by dragging the handle in its middle or typing its curve. It joins its neighbours, takes doors and windows, bounds rooms and is measured round its curve.
 - Doors and windows that snap onto a wall, cut the opening, adapt to the wall's thickness and slide along it. Door type, hinge side, angle; window panes, glazing, sill.
 - Stairs: straight, L-shaped, U-shaped, spiral, each with its own parameters. A compass rose for north.
 - Dimensions with configurable line, end markers, extension lines, text, font, unit and decimals; and a separate measure tool that only reads a distance.
@@ -34,7 +35,9 @@ Last updated: 2026-10-08.
 - **Modifiers**: non-destructive changes to how an object is drawn, stacked and applied in order, that can be switched off or removed at any time: crop, hatch, and repeat (copies in rows and columns); extensions can add more.
 - Text can be bold and aligned left, centred or right.
 - Hints and size fields that follow what you are doing: only the next step and the keys usable right now are shown.
-- Snapping to existing points and to the grid, angle constraint, drag handles, exact values in the properties panel.
+- **Snapping** to the points of objects, the middle of a line, the crossing of two lines, the foot of a perpendicular, the line itself (wall faces and their corners included), and to the grid; angle constraint, drag handles, exact values in the properties panel.
+- **Holding a direction while drawing**: an arrow key keeps the wall or line being drawn upright or level, and pointing at a point elsewhere ends it level with that point.
+- **Smart guides**: what is moved lines up with the sides and middles of other objects and keeps equal gaps with its neighbours, with lines and gap sizes shown while moving.
 
 ### Organising a drawing
 - Pages, which can be duplicated with their contents and reordered, and layers with colour, visibility and lock. A **shared layer** shows what is on it on every page.
@@ -82,9 +85,9 @@ Ranked by how much each one moves the app from "promising" to "usable for real w
 | 4 | **Cut, copy, paste** | **Done**, including across drawings. |
 | 5 | **DXF export** | **Done** (lines, circles, text, layers), and DXF import of the same kinds of geometry. Blocks, hatches and dimensions are not imported. |
 | 6 | **Sheets and printing**: paper size, drawing scale, title block, PDF export to scale | **Done**: papers with format, direction, scale and a title block; vector PDF export at true scale, one page per paper. Views of the plan at another scale on a sheet are in the ideas below. |
-| 7 | **More drawing tools**: polyline and polygon tool, arcs and curves, typed lengths while drawing, room areas | **Mostly done**: polyline tool, typed sizes, room areas, arcs (by angles) and curved polylines. A tool to draw an arc directly is not started. |
-| 8 | **Transforming**: rotate and scale handles, align and distribute, mirror, array | **Mostly done**: rotate, mirror, uniform scale and nudge for any selection, from grips on the selection box, the panel, menus and shortcuts. Align, distribute and a repeat (array) modifier are done; non-uniform scaling is not. |
-| 9 | **Walls as a system**: openings that follow their wall, walls trimmed where they meet mid-span, moving a wall drags its neighbours, rooms detected from walls | **Done**, with selectable corners and joint types. Curved walls and wall types are in the ideas below. |
+| 7 | **More drawing tools**: polyline and polygon tool, arcs and curves, typed lengths while drawing, room areas | **Mostly done**: polyline tool, typed sizes, room areas, arcs (by angles) and curved polylines, snapping to middles, crossings, perpendiculars and lines. A tool to draw an arc directly is not started. |
+| 8 | **Transforming**: rotate and scale handles, align and distribute, mirror, array | **Mostly done**: rotate, mirror, uniform scale and nudge for any selection, from grips on the selection box, the panel, menus and shortcuts. Align, distribute, a repeat (array) modifier and smart guides while moving are done; non-uniform scaling is not. |
+| 9 | **Walls as a system**: openings that follow their wall, walls trimmed where they meet mid-span, moving a wall drags its neighbours, rooms detected from walls | **Done**, with selectable corners, joint types, wall types and curved walls. |
 | 10 | **Hosted version**: accounts, cloud storage, sharing by link, realtime collaboration | Not started. The data model is prepared for it (see ARCHITECTURE §10). |
 
 ## Ideas, in the order they seem worth doing
@@ -94,7 +97,7 @@ Agreed with the owner in October 2026. The first was built straight away.
 **Walls and structure**
 - ~~Corners as selectable nodes, joint types~~ (done)
 - ~~Reusable wall types with thickness, fill and layers~~ (done)
-- Curved walls and arcs
+- ~~Curved walls~~ (done: bent from a straight wall; not yet drawn as an arc with the wall tool, extended or trimmed, or given a dimension chain)
 - ~~Automatic dimensions for a run of walls~~ (done, not live); dimensions that follow the wall
 - IFC export (walls, slabs from rooms, openings), now that walls have heights and types
 
@@ -105,9 +108,9 @@ Agreed with the owner in October 2026. The first was built straight away.
 - Levels (storeys), with the one below shown faintly
 
 **Drawing comfort**
-- Smart guides: alignment and equal spacing against other objects while moving
+- ~~Smart guides: alignment and equal spacing against other objects while moving~~ (done); the same guides while drawing and resizing
 - ~~Align, distribute, a repeat ("array") modifier~~ (done); a live mirror modifier
-- Snapping to midpoints, perpendiculars and intersections
+- ~~Snapping to midpoints, perpendiculars and intersections~~ (done, with the nearest point on a line); tangents and the quarter points of circles
 - ~~Eyedropper~~ (done)
 - Trim, extend and fillet for lines
 
@@ -126,16 +129,16 @@ Agreed with the owner in October 2026. The first was built straight away.
 Not ranked within an area.
 
 **Drawing and editing**
-- Hatches and fills by pattern; line types; images that can be cropped and rotated.
-- Multi-line and rich text; leaders and callouts; angular, radius and chained dimensions; dimensions that follow what they measure.
-- Trim, extend, offset, fillet; boolean operations on shapes.
-- Smart guides (alignment with other objects while moving); snapping to midpoints, intersections and perpendiculars.
+- Rich text; angular and radius dimensions; dimensions that follow what they measure.
+- Trim, extend, offset and fillet for plain lines (walls have extend and trim); boolean operations on shapes.
+- Smart guides while drawing and resizing; snapping to tangents and the quarter points of circles.
 - Select similar; select by layer or type; find and replace text.
-- Nudge with arrow keys; lock aspect ratio; numeric move and copy.
+- Lock aspect ratio; non-uniform scaling; numeric move and copy.
 
 **Architecture**
-- Columns, beams, slabs, roofs in plan; curtain walls; wall layers and wall types.
-- Room labels with computed areas; schedules of doors, windows and rooms.
+- Columns, beams, slabs, roofs in plan; curtain walls.
+- Curved walls drawn directly with the wall tool, extended and trimmed, and dimensioned along their curve.
+- Schedules of doors, windows and rooms placed on a sheet (they are exported as CSV today).
 - Sections and elevations linked to the plan.
 - More stairs: winders, landings of any shape, handrails, break line.
 
@@ -147,18 +150,18 @@ Not ranked within an area.
 - Translations of the extensions' own texts beyond what they carry.
 
 **Import and export**
-- DXF and DWG import; IFC export; PDF export; PNG export at a chosen resolution.
-- Import of multi-page PDFs; straighten and crop a scan; trace a scan automatically.
+- DWG import; DXF blocks, hatches and dimensions; IFC export; PNG export at a chosen resolution.
+- Straighten and crop a scan; trace a scan automatically.
 
 **Assistant**
 - Approval before applying changes, with a preview; edit history per request.
-- Conversations kept with the drawing; rendering of formatted replies.
+- Rendering of formatted replies.
 - Tracing an imported plan into walls with a review step; checking a plan against rules (door widths, room sizes).
 
 **Application**
 - ~~Dark theme~~ (done); touch and pen input; high-contrast mode.
-- Autosave and crash recovery; version history; recent files.
-- Installers and automatic updates; file association for `.opencalque`.
+- Crash recovery; version history.
+- Signed installers and automatic updates; file association for `.opencalque`.
 - Performance on drawings with tens of thousands of objects (caching per object, then GPU rendering).
 - Automated interface tests.
-- More languages, right-to-left support, units other than millimetres (imperial).
+- More languages, right-to-left support.

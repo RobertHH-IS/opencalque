@@ -266,6 +266,12 @@ export const NodeSchema = z
         a: Vec2Schema,
         b: Vec2Schema,
         thickness: z.number().positive().describe('In mm. For a wall of a type that defines a thickness it is kept equal to the type\'s, unless "overrides" lists it.'),
+        bulge: z
+          .number()
+          .optional()
+          .describe(
+            'Makes the wall curved: how far, in mm, the middle of its centerline stands off the straight line from a to b, the wall then following the arc of a circle through a, that point and b. Positive bows to the right of the direction a to b as seen on screen, negative to the left. At most half the distance from a to b, which is a half circle. Absent or 0 is a straight wall.',
+          ),
         height: z.number().positive().optional().describe('How high it stands, in mm, when that differs from its page. Used to measure its face; nothing is drawn with it.'),
         wallType: Id.optional().describe('The id of the wall type it is built as, among the document\'s "wallTypes". It takes what the type defines.'),
         overrides: z
@@ -279,7 +285,7 @@ export const NodeSchema = z
             "How each end is finished where it meets exactly one other wall. 'miter' (the default) brings both to a sharp corner, 'round' and 'bevel' round or cut that corner off, and 'through' with 'butt' on the other wall's end lets this wall run past while the other stops against it. Give both ends of a corner the same value, or the through/butt pair.",
           ),
       })
-      .describe('A wall along the centerline a-b. Walls sharing an endpoint are drawn joined.'),
+      .describe('A wall along the centerline a-b, straight or, with "bulge", an arc. Walls sharing an endpoint are drawn joined.'),
     z
       .object({
         ...base,

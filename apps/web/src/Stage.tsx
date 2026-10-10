@@ -151,20 +151,21 @@ function hintsFor(tool: Tool, step: number, opening: boolean): Hint[] {
   const free: Hint = ['Alt', t('ignores the grid and snapping')]
   const angles: Hint = ['Shift', t('keeps to 45° steps')]
   const typed: Hint = ['0-9', t('type an exact length')]
+  const held: Hint = ['↑ ←', t('holds it upright or level')]
   switch (tool) {
     case 'wall':
       if (step === 0) return [['', t('Click where the wall starts')]]
       // A loop needs at least two walls drawn before a third can close it.
-      return [['', t('Click the next corner')], typed, angles, free, ...(step >= 3 ? [['', t('Double-click closes the loop')] as Hint] : []), ['Esc', t('finishes')]]
+      return [['', t('Click the next corner')], typed, angles, held, free, ...(step >= 3 ? [['', t('Double-click closes the loop')] as Hint] : []), ['Esc', t('finishes')]]
     case 'room':
       return [['', t('Click inside a closed region of walls')]]
     case 'divider':
-      return step === 0 ? [['', t('Click where the divider starts, on a wall')]] : [['', t('Click where it ends, on the wall opposite')], angles, free, ['Esc', t('finishes')]]
+      return step === 0 ? [['', t('Click where the divider starts, on a wall')]] : [['', t('Click where it ends, on the wall opposite')], angles, held, free, ['Esc', t('finishes')]]
     case 'line':
-      return step === 0 ? [['', t('Click where the line starts')]] : [['', t('Click where it ends')], typed, angles, free, ['Esc', t('finishes')]]
+      return step === 0 ? [['', t('Click where the line starts')]] : [['', t('Click where it ends')], typed, angles, held, free, ['Esc', t('finishes')]]
     case 'polyline':
       if (step === 0) return [['', t('Click the first point')]]
-      return [['', t('Click the next point')], typed, angles, free, ...(step >= 3 ? [['', t('Click the first point again to close the shape')] as Hint] : []), ['Enter', t('finishes')]]
+      return [['', t('Click the next point')], typed, angles, held, free, ...(step >= 3 ? [['', t('Click the first point again to close the shape')] as Hint] : []), ['Enter', t('finishes')]]
     case 'rect':
     case 'ellipse':
       return step === 0 ? [['', t('Click a corner, or type a width and a height first and click to place it')]] : [['', t('Click the opposite corner')], ['0-9', t('type an exact size')], free]

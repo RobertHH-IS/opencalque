@@ -154,7 +154,7 @@ export const hatchModifier: ModifierKind = {
     ...prims,
     ...prims.flatMap((prim): Primitive[] =>
       prim.kind === 'path' && prim.closed && prim.points.length >= 3
-        ? hatchStrokes(prim.points, params, frame).map((points): Primitive => ({ kind: 'path', points, stroke: HATCH_INK, strokeWidth: 0.6, backdrop: prim.backdrop, clip: [...(prim.clip ?? []), prim.points] }))
+        ? hatchStrokes(prim.points, params, frame).map((points): Primitive => ({ kind: 'path', points, stroke: HATCH_INK, strokeWidth: 0.6, texture: true, backdrop: prim.backdrop, clip: [...(prim.clip ?? []), prim.points] }))
         : [],
     ),
   ],
