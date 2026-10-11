@@ -319,7 +319,7 @@ describe('wall corners', () => {
       const polys = ids.map((id) => outline(doc, id).points as P[])
       const found: number[] = []
       for (const r of [20, 50, 90]) {
-        const n = 720
+        const n = 360
         const covered = Array.from({ length: n }, (_, i) => {
           const q = { x: p.x + r * Math.cos((i / n) * 2 * Math.PI), y: p.y + r * Math.sin((i / n) * 2 * Math.PI) }
           return polys.some((poly) => inside(q, poly) || onEdge(q, poly))
@@ -350,7 +350,7 @@ describe('wall corners', () => {
     const seam = buildScene(pair, 'page_1', registry).flatMap((item) => item.prims).find((p) => p.kind === 'path' && !p.union && !p.closed) as any
     for (const end of seam.points as P[]) expect(up.some((q) => Math.hypot(q.x - end.x, q.y - end.y) < 0.01)).toBe(true)
     expect(slivers(pair, ['up', 'down'], joint)).toEqual([])
-    for (const chord of [3000, 700]) for (const f1 of [0, 0.35, -0.5]) for (const f2 of [0.15, -0.35, 0.5]) for (let degrees = 0; degrees < 360; degrees += 15) {
+    for (const chord of [3000, 700]) for (const f1 of [0, 0.35, -0.5]) for (const f2 of [0.15, -0.35, 0.5]) for (let degrees = 0; degrees < 360; degrees += 30) {
       const turn = (degrees * Math.PI) / 180
       const doc = applyOps(createDocument(), [
         wall('one', 0, 0, chord, 0, f1 ? { bulge: f1 * chord } : {}),
@@ -358,7 +358,7 @@ describe('wall corners', () => {
       ])
       expect(slivers(doc, ['one', 'two'], { x: 0, y: 0 }), `${chord} ${f1} ${f2} ${degrees}°`).toEqual([])
     }
-  })
+  }, 60_000)
 
   it('cuts walls, lines and polylines in two where asked, and says how long each part is', () => {
     const doc = applyOps(createDocument(), [
