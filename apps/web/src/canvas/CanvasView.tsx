@@ -33,6 +33,7 @@ import {
   roomAt,
   moveCornerOps,
   splitWallOps,
+  connectedWalls,
   wallEndsAt,
   scale,
   add,
@@ -45,13 +46,17 @@ import {
   type Alignable,
   type Snap,
   type SnapKind,
+  canSplit,
+  splitOps,
+  splitPlace,
+  wallEdgeLines,
 } from '@opencalque/core'
 import { finishTextEdit, zoomToFit, withPaperContents, pickStyle } from '../actions'
 import { onCommand } from '../commands'
 import { t } from '../i18n'
 import { usePrefs } from '../prefs'
 import { useTheme } from '../theme'
-import { formatLength, formatNumber, unit } from '../units'
+import { formatAngle, formatLength, formatNumber, unit, unitSuffix } from '../units'
 import { apply, cancel, commit, editComponent, preview, registry, select, setTool, useStore, type Tool, type View, selectCorner } from '../store'
 import { DARK_AROUND_CANVAS, DARK_CANVAS, drawScene, gridStep, LIGHT_CANVAS, onPictureReady, type AngleMark, type Overlay, type SizeLabel, boxGrips, angleBetween } from './draw'
 import { drawing } from './drawing'
@@ -85,7 +90,9 @@ type Gesture =
   | { kind: 'measure'; start: Vec2 }
   | { kind: 'angle'; vertex: Vec2; a?: Vec2 }
   /** A polyline with the points clicked so far; `since` is when the last one was added. */
-  | { kind: 'poly'; id: string; points: Vec2[]; since: number }
+  | { kind: 'poly'; id: string; points: Vec2[]; since: number; press?: Vec2 & { time: number } }
+  // The rotate tool: its pivot, then a point of the line the turn starts from.
+  | { kind: 'turn'; nodes: Node[]; pivot: Vec2; from?: Vec2 }
 
 /** The parts of a pointer event the canvas uses. */
 interface PointerAt {
@@ -100,7 +107,7 @@ const TWO_POINT: Tool[] = ['line', 'wall', 'divider', 'dimension', 'annotation',
 const BOXES: Tool[] = ['rect', 'ellipse', 'paper']
 /** How close, in screen pixels, the pointer must come to a standard format's corner for a paper to take that format. */
 const FORMAT_REACH = 14
-const CHAINED: Tool[] = ['line', 'wall', 'divider']
+const CHAINED: Tool[] = ['wall', 'divider']
 /** How close, in screen pixels, the pointer must come to something for a point to snap to it, and for a moved object to line up with another. */
 const SNAP_REACH = 10
 const ALIGN_REACH = 6
@@ -116,6 +123,8 @@ const snapName = (kind: SnapKind): string | undefined =>
  * a stub behind.
  */
 const DRAG_DISTANCE = 12
+/** How close to the point just placed, in screen pixels, a click is taken as that point. */
+const SAME_POINT = 8
 const DRAG_TIME = 200
 
 const get = useStore.getState
@@ -299,6 +308,12 @@ export function CanvasView() {
   const palette = useTheme((s) => (s.darkCanvas ? DARK_CANVAS : s.dark ? DARK_AROUND_CANVAS : LIGHT_CANVAS))
   const editingId = useStore((s) => s.editingText?.id)
   const corner = useStore((s) => s.corner)
+  // The line of a wall pointed at in the properties panel, shown on the drawing so it is known which one it is.
+  const edgeHover = useStore((s) => s.edgeHover)
+  const edgeLines = useMemo(() => {
+    const wall = edgeHover && doc.nodes[edgeHover.wall]
+    return wall?.type === 'wall' ? wallEdgeLines(wall, doc, registry, edgeHover!.edge) : undefined
+  }, [edgeHover, doc])
   // Bumped when an imported picture finishes decoding, to paint it.
   const [pictures, setPictures] = useState(0)
   useEffect(() => {
@@ -316,6 +331,14 @@ export function CanvasView() {
   /** Where the pointer last was, for finishing a shape from the keyboard. */
   const lastWorld = useRef({ world: { x: 0, y: 0 }, altKey: false, shiftKey: false })
   const space = useRef(false)
+  /** When Space went down, and whether the view was dragged with it: let go quickly, unused, it was a tap. */
+  const spaceTap = useRef<{ at: number; used: boolean } | null>(null)
+  /** A run of walls just ended by clicking its last corner again, which the double-click of the system may still close. */
+  const ended = useRef<{ start: Vec2; origin: Vec2; prev?: WallRun; first?: WallRun; time: number } | null>(null)
+  /** Where on the screen the last click of a drawing landed, before snapping moved its point. */
+  const lastClick = useRef<Vec2 | null>(null)
+  /** A line of several segments just ended by clicking its last point again, which the double-click of the system may still close. */
+  const endedLine = useRef<{ id: string; time: number } | null>(null)
   /** Id of the object following the cursor while the place tool is active. */
   const placed = useRef(newId())
 
@@ -432,7 +455,7 @@ export function CanvasView() {
   /** Tells the rest of the interface how far the shape in progress has got. Called after anything that may have changed it. */
   const syncStep = () => {
     const g = gesture.current
-    const step = g.kind === 'draw' ? 1 + g.segments : g.kind === 'poly' ? g.points.length : g.kind === 'offset' ? 2 : g.kind === 'measure' ? 1 : g.kind === 'angle' ? (g.a ? 2 : 1) : 0
+    const step = g.kind === 'draw' ? 1 + g.segments : g.kind === 'poly' ? g.points.length : g.kind === 'offset' ? 2 : g.kind === 'measure' ? 1 : g.kind === 'angle' ? (g.a ? 2 : 1) : g.kind === 'turn' ? (g.from ? 2 : 1) : 0
     if (get().drawStep !== step) useStore.setState({ drawStep: step })
   }
 
@@ -475,8 +498,8 @@ export function CanvasView() {
       canvas.height = viewport.height * dpr
     }
     // The words being typed are shown by their editor instead; the rest of the object stays drawn.
-    drawScene(canvas.getContext('2d')!, { ...viewport, dpr }, view, editingId ? scene.map((item) => (item.id === editingId ? { ...item, prims: item.prims.filter((p) => p.kind !== 'text') } : item)) : scene, selection, handles, { ...overlay, labels: overlay.labels ?? selectionLabels, titles, frames, corner, grips: tool === 'select' }, showGrid, palette)
-  }, [scene, view, viewport, selection, handles, selectionLabels, titles, frames, corner, overlay, showGrid, palette, pictures, editingId, tool])
+    drawScene(canvas.getContext('2d')!, { ...viewport, dpr }, view, editingId ? scene.map((item) => (item.id === editingId ? { ...item, prims: item.prims.filter((p) => p.kind !== 'text') } : item)) : scene, selection, handles, { ...overlay, labels: overlay.labels ?? selectionLabels, titles, frames, corner, grips: tool === 'select', edgeHover: edgeLines }, showGrid, palette)
+  }, [scene, view, viewport, selection, handles, selectionLabels, titles, frames, corner, overlay, showGrid, palette, pictures, editingId, tool, edgeLines])
 
   /**
    * Where a point lands after snapping: on what is drawn nearby (a point, the middle of a line, a
@@ -568,6 +591,20 @@ export function CanvasView() {
     return snap(world, e, [g.id], tool === 'dimension' ? g.start : undefined)
   }
 
+  /**
+   * Where the split tool would cut, for a pointer at `world`: on the wall, line or polyline under
+   * it, at the place another object lines up with, or else at a whole number of grid steps from
+   * its start (Alt: exactly under the pointer).
+   */
+  const splitAim = (world: Vec2, e: { altKey: boolean; shiftKey: boolean }) => {
+    const { view } = get()
+    const hit = sceneRef.current.filter((item) => canSplit(item.node)).find((item) => item === hitTest(sceneRef.current.filter((other) => canSplit(other.node)), world, 6 / view.zoom))
+    if (!hit) return null
+    const snapped = e.altKey ? null : snap(world, e, [hit.id])
+    const place = snapped?.marker ? splitPlace(hit.node, snapped.p) : splitPlace(hit.node, world, e.altKey ? undefined : gridStep(view.zoom))
+    return place && { node: hit.node, place, marker: snapped?.marker ?? null }
+  }
+
   const local = (e: { clientX: number; clientY: number }): Vec2 => {
     const rect = canvasRef.current!.getBoundingClientRect()
     return { x: e.clientX - rect.left, y: e.clientY - rect.top }
@@ -580,9 +617,12 @@ export function CanvasView() {
     if (dist(g.start, p) < 1e-6) {
       // Clicking the last corner again ends the run. As a double-click on a run of walls, it also
       // closes the run back to where it started.
-      const closes = tool === 'wall' && g.segments >= 2 && performance.now() - g.since < 500 && dist(g.start, g.origin) > 1e-6
+      const closable = tool === 'wall' && g.segments >= 2 && dist(g.start, g.origin) > 1e-6
+      const closes = closable && performance.now() - g.since < 500
       reset()
       if (closes) apply(wallOps(newId(), g.start, g.origin, g.prev, g.first))
+      // A slower double-click is still one when the system says so (its own timing, set by the user): see onDoubleClick.
+      ended.current = closable && !closes ? { start: g.start, origin: g.origin, prev: g.prev, first: g.first, time: performance.now() } : null
       return
     }
     p = constrain(tool, g.start, p, lastWorld.current.altKey)
@@ -621,12 +661,57 @@ export function CanvasView() {
   const polyPoint = (g: Extract<Gesture, { kind: 'poly' }>, world: Vec2, e: { altKey: boolean; shiftKey: boolean }): Vec2 => {
     const last = g.points[g.points.length - 1]
     if (g.points.length >= 3 && dist(world, g.points[0]) * get().view.zoom < 10) return g.points[0]
-    return constrain('polyline', last, lineEnd(world, e, [g.id], last).p)
+    return constrain('line', last, lineEnd(world, e, [g.id], last).p)
   }
 
-  /** Ends the polyline being drawn, keeping it when it has at least one segment. */
+  /**
+   * What the rotate tool does for the pointer at `world`. Before the base line is set, the line
+   * from the pivot to the pointer is shown, to be clicked where the turn starts from. Then the
+   * selection turns by the angle from that line to the pointer, read counter-clockwise as when
+   * drawing; a value typed in the quick bar wins over the pointer.
+   */
+  const turnAim = (g: Extract<Gesture, { kind: 'turn' }>, world: Vec2, e: { altKey: boolean; shiftKey: boolean }) => {
+    const s = get()
+    if (!g.from) {
+      const target = snap(world, e, [], g.pivot)
+      return { ops: [] as Op[], marker: target.marker, reading: { vertex: g.pivot, a: target.p }, status: t('Click where the turn starts from') }
+    }
+    const typed = s.drawLocks.b
+    const along = (p: Vec2) => (Math.atan2(p.y - g.pivot.y, p.x - g.pivot.x) * 180) / Math.PI
+    let raw = along(world) - along(g.from)
+    raw = ((((raw + 180) % 360) + 360) % 360) - 180
+    // Whole degrees; Shift keeps to steps of 15, Alt turns freely. Clockwise on screen, as the document keeps it.
+    const step = e.shiftKey ? 15 : e.altKey ? 0.01 : 1
+    const rotation = typed !== undefined ? -typed : Math.round(raw / step) * step
+    const degrees = Math.round((((((-rotation + 180) % 360) + 360) % 360) - 180) * 100) / 100
+    // The base line turned by as much: the arc between the two shows the angle.
+    const radians = (rotation * Math.PI) / 180
+    const d = sub(g.from, g.pivot)
+    const turned = { x: g.pivot.x + d.x * Math.cos(radians) - d.y * Math.sin(radians), y: g.pivot.y + d.x * Math.sin(radians) + d.y * Math.cos(radians) }
+    return {
+      ops: transformOps(s.base ?? s.doc, g.nodes, { pivot: g.pivot, rotation }, registry),
+      live: { a: 0, b: degrees },
+      reading: { vertex: g.pivot, a: g.from, b: turned, label: `${formatAngle(degrees)}°` },
+      status: t('Rotation {degrees}°', { degrees: formatAngle(degrees) }),
+    }
+  }
+
+  /** Turns the selection as shown, and is ready for the next turn. */
+  const finishTurn = (g: Extract<Gesture, { kind: 'turn' }>, world: Vec2, e: { altKey: boolean; shiftKey: boolean }) => {
+    if (preview(turnAim(g, world, e).ops)) commit()
+    else cancel()
+    gesture.current = { kind: 'idle' }
+    setOverlay({})
+    useStore.setState({ drawLocks: {}, drawLive: null })
+  }
+
+  /**
+   * Ends the line being drawn, keeping it when it has at least one segment: one segment is a line,
+   * several a polyline, and closed it is a polygon, which can be filled.
+   */
   const finishPoly = (g: Extract<Gesture, { kind: 'poly' }>, closed: boolean) => {
-    if (g.points.length >= 2 && preview([{ op: 'add_node', node: polyline(g.id, g.points, closed) }])) commit()
+    const node = g.points.length === 2 && !closed ? shape('line', g.id, g.points[0], g.points[1]) : polyline(g.id, g.points, closed && g.points.length >= 3)
+    if (g.points.length >= 2 && preview([{ op: 'add_node', node }])) commit()
     else cancel()
     gesture.current = { kind: 'idle' }
     setOverlay({})
@@ -640,6 +725,7 @@ export function CanvasView() {
       const g = gesture.current
       const { world, ...keys } = lastWorld.current
       if (g.kind === 'draw') finishShape(g, aim(g, world, keys).p, true)
+      else if (g.kind === 'turn' && g.from) finishTurn(g, world, keys)
       else if (g.kind === 'poly') {
         g.points.push(polyPoint(g, world, keys))
         g.since = performance.now()
@@ -661,6 +747,7 @@ export function CanvasView() {
     const world = toWorld(at, s.view)
     e.currentTarget.setPointerCapture(e.pointerId)
     if (e.button === 1 || (e.button === 0 && (s.tool === 'hand' || space.current))) {
+      if (space.current && spaceTap.current) spaceTap.current.used = true
       pan.current = { at: { x: e.clientX, y: e.clientY }, view: s.view }
       return
     }
@@ -672,7 +759,7 @@ export function CanvasView() {
       const box = sceneBounds(sceneRef.current.filter((item) => s.selection.includes(item.id)))
       const onSelection = !under && box !== null && boundsContainPoint(box, world, 6 / s.view.zoom)
       if (!onSelection && (under ? !s.selection.includes(under.id) : s.selection.length > 0)) select(under ? [under.id] : [])
-      useStore.setState({ contextMenu: { x: e.clientX, y: e.clientY } })
+      useStore.setState({ contextMenu: { x: e.clientX, y: e.clientY }, menuPoint: world })
       return
     }
     if (e.button !== 0) return
@@ -751,6 +838,11 @@ export function CanvasView() {
         commit()
         placed.current = newId()
       }
+    } else if (s.tool === 'split') {
+      const aim = splitAim(world, e)
+      const ops = aim && splitOps(aim.node, aim.place, newId())
+      if (ops) apply(ops)
+      setOverlay({})
     } else if (s.tool === 'angle') {
       // The corner, then a point along each side; the third click freezes the reading until the next one.
       const p = snap(world, e, []).p
@@ -763,6 +855,21 @@ export function CanvasView() {
         setOverlay({ angleReading: { vertex: g.vertex, a: g.a, b: p } })
         gesture.current = { kind: 'idle' }
       }
+    } else if (s.tool === 'rotate') {
+      // Three clicks: the pivot, a point of the line the turn starts from, and where that line goes.
+      if (g.kind === 'turn') {
+        if (g.from) return finishTurn(g, world, e)
+        const from = snap(world, e, [], g.pivot).p
+        if (dist(from, g.pivot) > 1e-6) g.from = from
+        return
+      }
+      if (s.selection.length === 0) {
+        // Nothing to turn yet: a click picks it, as with the select tool.
+        const hit = hitTest(sceneRef.current, world, 5 / s.view.zoom)
+        if (hit) select([hit.id])
+        return
+      }
+      gesture.current = { kind: 'turn', nodes: withPaperContents(s.selection).map((id) => s.doc.nodes[id]), pivot: snap(world, e, []).p }
     } else if (s.tool === 'measure' || s.tool === 'calibrate') {
       // First click starts a reading, the second freezes it on screen until the next one.
       // Calibration picks points on a picture, which has nothing to snap to.
@@ -772,15 +879,27 @@ export function CanvasView() {
       setOverlay({ measure: reading })
       gesture.current = g.kind === 'measure' ? { kind: 'idle' } : { kind: 'measure', start: p }
       if (s.tool === 'calibrate') useStore.setState({ calibration: g.kind === 'measure' ? reading : null })
-    } else if (s.tool === 'polyline') {
+    } else if (s.tool === 'line') {
       if (g.kind !== 'poly') {
-        gesture.current = { kind: 'poly', id: newId(), points: [snap(world, e, []).p], since: performance.now() }
+        endedLine.current = null
+        lastClick.current = at
+        gesture.current = { kind: 'poly', id: newId(), points: [snap(world, e, []).p], since: performance.now(), press: { ...at, time: performance.now() } }
         return
       }
       const p = polyPoint(g, world, e)
       const last = g.points[g.points.length - 1]
-      // Clicking the last point again ends the line; coming back to the first one closes it.
-      if (dist(p, last) < 1e-6) return finishPoly(g, false)
+      // Clicking the last point again, give or take the wobble of a double-click, ends the line; as a
+      // double-click it closes the shape, when it has two segments to close. Coming back to the first point closes it too.
+      const typed = s.drawLocks.a !== undefined || s.drawLocks.b !== undefined
+      const near = !typed && (dist(world, last) * s.view.zoom < SAME_POINT || (lastClick.current !== null && dist(at, lastClick.current) < SAME_POINT))
+      lastClick.current = at
+      if (near || dist(p, last) < 1e-6) {
+        const closable = g.points.length >= 3
+        const closes = closable && performance.now() - g.since < 500
+        finishPoly(g, closes)
+        endedLine.current = closable && !closes ? { id: g.id, time: performance.now() } : null
+        return
+      }
       if (g.points.length >= 3 && p === g.points[0]) return finishPoly(g, true)
       g.points.push(p)
       g.since = performance.now()
@@ -789,8 +908,17 @@ export function CanvasView() {
       commit()
       gesture.current = { kind: 'idle' }
     } else if (g.kind === 'draw') {
-      finishShape(g, aim(g, world, e).p, true)
+      // A click back on the point just placed, give or take the wobble of a double-click, is that
+      // point: it ends the run (and, as a double-click, closes it) rather than drawing a tiny wall
+      // to wherever snapping took the pointer. A length typed in the quick bar still goes from there.
+      const typed = s.drawLocks.a !== undefined || s.drawLocks.b !== undefined
+      const near = dist(world, g.start) * s.view.zoom < SAME_POINT || (lastClick.current !== null && dist(at, lastClick.current) < SAME_POINT)
+      const back = CHAINED.includes(s.tool) && !typed && near
+      lastClick.current = at
+      finishShape(g, back ? g.start : aim(g, world, e).p, true)
     } else {
+      ended.current = null
+      lastClick.current = at
       const start = snap(world, e, []).p
       if (s.tool === 'paper') {
         // Sheets are large next to what is usually on screen. Step back, keeping the clicked corner
@@ -836,8 +964,9 @@ export function CanvasView() {
     let ghosts: Overlay['ghosts']
     let live: { a: number; b: number } | null = null
     let measure: Overlay['measure']
+    let cut: Overlay['cut']
     let angleReading: Overlay['angleReading']
-    let status = `${formatNumber(world.x)}, ${formatNumber(world.y)} ${unit()}`
+    let status = `${formatNumber(world.x)}, ${formatNumber(world.y)} ${unitSuffix()}`.trim()
     let previewed = true
     switch (g.kind) {
       case 'press':
@@ -862,8 +991,13 @@ export function CanvasView() {
         if (g.moving && !e.altKey && usePrefs.getState().snapToObjects) {
           const fit = alignMove(g.moving, g.others, sub(world, g.start), ALIGN_REACH / s.view.zoom)
           d = { x: fit.x ? round(fit.d.x) : d.x, y: fit.y ? round(fit.d.y) : d.y }
-          smart = moveGuides(g.moving, g.others, d)
         }
+        // Held level or upright by an arrow key, it only moves that way; lining up still decides how far.
+        if (s.axisLock) {
+          d = s.axisLock === 'x' ? { x: d.x, y: 0 } : { x: 0, y: d.y }
+          guide = { at: g.start, angle: s.axisLock === 'x' ? 0 : Math.PI / 2 }
+        }
+        if (g.moving && !e.altKey && usePrefs.getState().snapToObjects) smart = moveGuides(g.moving, g.others, d)
         const before = s.base ?? s.doc
         // Walls joined to the ones being moved stretch to stay joined, and openings follow their wall. Alt moves only what was picked.
         previewed = preview([...g.nodes.flatMap((n) => moveOps(before, n, d)), ...(e.altKey ? [] : wallFollowOps(before, g.nodes, d, registry))])
@@ -875,8 +1009,17 @@ export function CanvasView() {
         const ends = 'a' in g.node && 'b' in g.node && g.index < 2 ? { moved: g.index === 0 ? g.node.a : g.node.b, fixed: g.index === 0 ? g.node.b : g.node.a } : null
         const line = e.shiftKey && ends && dist(ends.moved, ends.fixed) > 1e-6 ? Math.atan2(ends.moved.y - ends.fixed.y, ends.moved.x - ends.fixed.x) : null
         // The end that stays put is where a perpendicular onto another line would be dropped from.
-        const target = line !== null && ends ? alongLine(world, ends.fixed, line, [g.node.id], true) : snap(world, { altKey: e.altKey, shiftKey: false }, [g.node.id], ends?.fixed)
-        if (line !== null && ends) guide = { at: ends.fixed, angle: line }
+        // Held level or upright by an arrow key, the point stays on that line through where it was,
+        // and may be brought level with something pointed at elsewhere.
+        const was: Vec2 | undefined = s.axisLock ? kindOf(g.node).handles?.(g.node)[g.index] : undefined
+        const target: { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } = was
+          ? lineEnd(world, e, [g.node.id], was)
+          : line !== null && ends
+            ? alongLine(world, ends.fixed, line, [g.node.id], true)
+            : snap(world, { altKey: e.altKey, shiftKey: false }, [g.node.id], ends?.fixed)
+        if (was && s.axisLock) guide = { at: was, angle: s.axisLock === 'x' ? 0 : Math.PI / 2 }
+        else if (line !== null && ends) guide = { at: ends.fixed, angle: line }
+        link = target.link
         marker = target.marker
         // The other walls that end at a wall's corner come along with it, unless Alt is held.
         const joined = e.altKey ? [] : wallEndFollowOps(s.base ?? s.doc, g.node, g.index, target.p)
@@ -892,8 +1035,14 @@ export function CanvasView() {
         const lines = ends.map(({ wall }) => Math.atan2(wall.b.y - wall.a.y, wall.b.x - wall.a.x))
         const off = (angle: number) => Math.abs((world.x - g.from.x) * Math.sin(angle) - (world.y - g.from.y) * Math.cos(angle))
         const line = e.shiftKey ? lines.reduce((best, angle) => (off(angle) < off(best) - 1e-9 ? angle : best)) : null
-        const target = line !== null ? alongLine(world, g.from, line, ends.map((end) => end.wall.id)) : snap(world, e, ends.map((end) => end.wall.id))
-        if (line !== null) guide = { at: g.from, angle: line }
+        const target: { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } = s.axisLock
+          ? lineEnd(world, e, ends.map((end) => end.wall.id), g.from)
+          : line !== null
+            ? alongLine(world, g.from, line, ends.map((end) => end.wall.id))
+            : snap(world, e, ends.map((end) => end.wall.id))
+        if (s.axisLock) guide = { at: g.from, angle: s.axisLock === 'x' ? 0 : Math.PI / 2 }
+        else if (line !== null) guide = { at: g.from, angle: line }
+        link = target.link
         marker = target.marker
         if (dist(target.p, g.from) < 1e-6) {
           cancel()
@@ -933,6 +1082,15 @@ export function CanvasView() {
         status = t('Rotation {degrees}°', { degrees: String(Math.round((((degrees % 360) + 360) % 360) * 100) / 100) })
         break
       }
+      case 'turn': {
+        const aimed = turnAim(g, world, e)
+        previewed = preview(aimed.ops)
+        status = aimed.status
+        angleReading = aimed.reading
+        if ('live' in aimed && aimed.live) live = aimed.live
+        if ('marker' in aimed) marker = aimed.marker ?? null
+        break
+      }
       case 'draw': {
         const constrained = CHAINED.includes(s.tool) || s.tool === 'dimension'
         const target = aim(g, world, e)
@@ -962,7 +1120,7 @@ export function CanvasView() {
         previewed = preview([{ op: 'add_node', node: polyline(g.id, [...g.points, end], false) }])
         status = t('Length {value}', { value: formatLength(dist(last, end)) })
         axis = axisOf(last, end)
-        ;({ live, labels, angle } = sizes('polyline', last, end))
+        ;({ live, labels, angle } = sizes('line', last, end))
         break
       }
       case 'offset': {
@@ -979,7 +1137,7 @@ export function CanvasView() {
         angleReading = g.a ? { vertex: g.vertex, a: g.a, b: target.p } : { vertex: g.vertex, a: target.p }
         if (g.a) {
           const turn = angleBetween(g.vertex, g.a, target.p)
-          status = `${t('Angle {value}', { value: `${formatNumber(turn)}°` })} · ${formatNumber(Math.round((360 - turn) * 10) / 10)}°`
+          status = `${t('Angle {value}', { value: `${formatAngle(turn)}°` })} · ${formatAngle(Math.round((360 - turn) * 10) / 10)}°`
         }
         break
       }
@@ -1030,8 +1188,25 @@ export function CanvasView() {
               ? { ...common, type: 'instance', component: s.placing.component }
               : { ...common, ...onWall, type: 'parametric', kind: s.placing.kind, props: {} }
           previewed = preview([{ op: 'add_node', node }])
-        } else if (TWO_POINT.includes(s.tool) || s.tool === 'measure' || s.tool === 'angle') {
+        } else if (TWO_POINT.includes(s.tool) || s.tool === 'measure' || s.tool === 'angle' || (s.tool === 'rotate' && s.selection.length > 0)) {
           marker = snap(world, e, []).marker
+        } else if (s.tool === 'split') {
+          // A mark across where the cut would be, and the length of each part beside it.
+          const aim = splitAim(world, e)
+          if (aim) {
+            marker = aim.marker
+            const { place, node } = aim
+            const half = (node.type === 'wall' ? node.thickness / 2 : 0) + 8 / s.view.zoom
+            // Each length beside a line with arrows that runs along what it measures, from an end to the cut.
+            const gap = half * s.view.zoom + 6
+            cut = { at: place.at, dir: place.dir, half, parts: place.parts, gap }
+            const side = (at: Vec2, length: number): SizeLabel => {
+              const n = { x: -place.dir.y, y: place.dir.x }
+              const turn = (Math.atan2(place.dir.y, place.dir.x) * 180) / Math.PI
+              return { at, dx: n.x * (gap + 14), dy: n.y * (gap + 14), text: formatLength(length), rotation: Math.abs(turn) > 90 ? turn - 180 * Math.sign(turn) : turn, measure: true }
+            }
+            labels = [side(place.beforeMiddle, place.before), side(place.afterMiddle, place.after)]
+          }
         }
     }
     // A finished measurement stays on screen until the next one starts.
@@ -1041,7 +1216,7 @@ export function CanvasView() {
       const next = [...new Set([...g.keep, ...inside])]
       if (next.length !== s.selection.length || next.some((id, i) => id !== s.selection[i])) select(next)
     }
-    setOverlay((o) => ({ marker: marker && { ...marker, label: snapName(marker.kind) }, smart, link, labels, angle, axis, guide, ghosts, marquee: g.kind === 'marquee' ? { a: g.start, b: world } : undefined, measure: measure ?? o.measure, angleReading: angleReading ?? o.angleReading }))
+    setOverlay((o) => ({ cut, marker: marker && { ...marker, label: snapName(marker.kind) }, smart, link, labels, angle, axis, guide, ghosts, marquee: g.kind === 'marquee' ? { a: g.start, b: world } : undefined, measure: measure ?? o.measure, angleReading: angleReading ?? o.angleReading }))
     // A failed preview has put its reason in the status bar; keep it there.
     if (previewed) useStore.setState({ status, drawLive: live })
   }
@@ -1070,6 +1245,7 @@ export function CanvasView() {
       case 'rotate':
         // The box has changed under the pointer; the next movement works out what is there now.
         setGripCursor(null)
+        if (s.axisLock) useStore.setState({ axisLock: null })
         commit()
         gesture.current = { kind: 'idle' }
         setOverlay({})
@@ -1081,6 +1257,13 @@ export function CanvasView() {
         setOverlay({})
         break
       }
+      case 'poly':
+        // A line can be drawn by dragging from its first point to its second, and is then done.
+        if (g.points.length === 1 && g.press && dist(at, g.press) > DRAG_DISTANCE && performance.now() - g.press.time > DRAG_TIME) {
+          g.points.push(polyPoint(g, world, e))
+          finishPoly(g, false)
+        } else g.press = undefined
+        break
       case 'draw':
         // Dragging from the first point to the second sets both at once; a plain click waits for the next click.
         if (g.press && dist(at, g.press) > DRAG_DISTANCE && performance.now() - g.press.time > DRAG_TIME) {
@@ -1091,15 +1274,31 @@ export function CanvasView() {
 
   const onDoubleClick = (e: React.MouseEvent) => {
     const s = get()
-    if (s.tool !== 'select') return
-    const hit = hitTest(sceneRef.current, toWorld(local(e), s.view), 5 / s.view.zoom)
-    // A double-click on a wall puts a corner there: the wall becomes two, which can then be bent.
-    if (hit?.node.type === 'wall' && !cornerAt(local(e))) {
-      const split = splitWallOps(hit.node, snap(toWorld(local(e), s.view), e, []).p, newId())
-      if (split && apply(split.ops)) selectCorner(split.at)
+    const line = endedLine.current
+    const drawn = line && s.doc.nodes[line.id]
+    if (s.tool === 'line' && line && drawn?.type === 'polyline' && performance.now() - line.time < 1500 && gesture.current.kind === 'idle') {
+      // The line ended by the second click of this double-click: close it into a shape.
+      endedLine.current = null
+      apply([{ op: 'update_node', id: line.id, patch: { closed: true } }])
       return
     }
-    if (hit?.node.type === 'instance') editComponent(hit.node.component)
+    const run = ended.current
+    if (s.tool === 'wall' && run && performance.now() - run.time < 1500 && gesture.current.kind === 'idle') {
+      // The run of walls ended by the second click of this double-click: close it back to where it started.
+      ended.current = null
+      apply(wallOps(newId(), run.start, run.origin, run.prev, run.first))
+      return
+    }
+    if (s.tool !== 'select') return
+    const hit = hitTest(sceneRef.current, toWorld(local(e), s.view), 5 / s.view.zoom)
+    // A double-click goes inside what was clicked (a component, a group, the words of a text), or,
+    // on a wall, takes in the walls joined to it end to end: its run, then, once that is selected,
+    // every wall that holds together with it. Cutting a wall in two is the Split tool's.
+    if (hit?.node.type === 'wall') {
+      const run = connectedWalls(s.doc, hit.node)
+      const whole = run.every((id) => s.selection.includes(id)) && s.selection.length === run.length
+      select(whole ? connectedWalls(s.doc, hit.node, true) : run)
+    } else if (hit?.node.type === 'instance') editComponent(hit.node.component)
     else if (hit?.node.type === 'group') editComponent(hit.id)
     else if (hit?.node.type === 'text' || hit?.node.type === 'annotation') useStore.setState({ editingText: { id: hit.id } })
   }
@@ -1122,7 +1321,8 @@ export function CanvasView() {
   useEffect(() => onCommand((command) => command.interrupts && reset()), [])
 
   // Rebindable shortcuts are handled by the command registry. These three stay with the canvas
-  // because what they do depends on the gesture in progress.
+  // because what they do depends on the gesture in progress. Space held moves the view; a tap on
+  // it puts the drawing down and goes back to selecting, which is what usually follows.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).closest('input, textarea, select')) return
@@ -1130,6 +1330,7 @@ export function CanvasView() {
       const s = get()
       if (e.key === ' ') {
         space.current = true
+        if (!e.repeat) spaceTap.current = { at: performance.now(), used: false }
         e.preventDefault()
       } else if (/^[0-9]$/.test(e.key) && !e.shiftKey && document.querySelector('.quickbar .quick-size')) {
         // Typing a number while drawing goes to the first size field; the digit lands in it.
@@ -1145,7 +1346,18 @@ export function CanvasView() {
       } else if (e.key === 'Enter') reset()
     }
     const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key === ' ') space.current = false
+      if (e.key !== ' ') return
+      space.current = false
+      const tap = spaceTap.current
+      spaceTap.current = null
+      if (!tap || tap.used || performance.now() - tap.at > 300) return
+      if ((e.target as HTMLElement).closest('input, textarea, select')) return
+      // Not in the middle of dragging something: only a drawing being made is put down, as Esc does.
+      const g = gesture.current
+      if (g.kind === 'poly') finishPoly(g, false)
+      else if (['draw', 'offset', 'measure', 'angle', 'turn'].includes(g.kind)) reset()
+      else if (g.kind !== 'idle') return
+      if (get().tool !== 'select') setTool('select')
     }
     window.addEventListener('keydown', onKeyDown)
     window.addEventListener('keyup', onKeyUp)

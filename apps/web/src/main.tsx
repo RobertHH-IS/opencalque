@@ -19,10 +19,11 @@ loadDocument(blankDocument(), null)
 function Root() {
   const language = usePrefs((p) => p.language)
   const unit = usePrefs((p) => p.unit)
+  const fraction = usePrefs((p) => p.fraction)
   // Extensions bring their own translations, so the language is set again when they change.
   useStore((s) => s.extensionsVersion)
   setLanguage(language, registry.translations)
-  return <App key={`${language} ${unit}`} />
+  return <App key={`${language} ${unit} ${fraction}`} />
 }
 
 createRoot(document.getElementById('root')!).render(

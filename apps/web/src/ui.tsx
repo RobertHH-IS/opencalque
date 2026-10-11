@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { BrickWall, Circle, Component, File, Group, Image, MessageSquare, Minus, RulerDimensionLine, Shapes, SeparatorVertical, Spline, Square, SquareDashed, StickyNote, Type, type LucideIcon } from 'lucide-react'
+import { BrickWall, Circle, Hexagon, Component, File, Group, Image, MessageSquare, Minus, RulerDimensionLine, Shapes, SeparatorVertical, Spline, Square, SquareDashed, StickyNote, Type, type LucideIcon } from 'lucide-react'
 import type { Document, Node } from '@opencalque/core'
 import { msg, t } from './i18n'
 import { collapseHistory, registry, useStore } from './store'
@@ -48,9 +48,10 @@ const TYPE_ICONS: Record<Node['type'], LucideIcon> = {
 
 /** The small picture that tells kinds of object apart at a glance. Components and their instances are tinted. */
 export function TypeIcon({ node }: { node: Node }) {
-  const Icon = TYPE_ICONS[node.type]
+  const shut = node.type === 'polyline' && node.closed
+  const Icon = shut ? Hexagon : TYPE_ICONS[node.type]
   return (
-    <i className={`type-icon ${node.type}`} title={t(TYPE_LABELS[node.type])}>
+    <i className={`type-icon ${node.type}`} title={shut ? t('Polygon') : t(TYPE_LABELS[node.type])}>
       <Icon size={13} />
     </i>
   )
@@ -63,6 +64,8 @@ export function labelOf(doc: Document, node: Node): string {
   if (node.type === 'text' || (node.type === 'annotation' && node.text.trim())) return node.text.split('\n')[0]
   if (node.type === 'instance') return labelOf(doc, doc.nodes[node.component] ?? node)
   if (node.type === 'parametric') return t(registry.parametric.get(node.kind)?.label ?? node.kind)
+  // A closed polyline is a polygon: what it is called says which.
+  if (node.type === 'polyline' && node.closed) return t('Polygon')
   return t(TYPE_LABELS[node.type])
 }
 
@@ -233,10 +236,11 @@ export function Section(props: { title: string; action?: ReactNode; children: Re
  * dashes. `value` is the pattern in use (none for a solid line); one that is not among the kinds
  * leaves no picture chosen.
  */
-export function DashPicker(props: { value: unknown; none?: boolean; label?: string; onPick: (pattern: number[] | null) => void }) {
-  const current = props.none ? -1 : dashIndex(props.value)
+export function DashPicker(props: { value: unknown; none?: boolean; label?: string; onPick: (pattern: number[] | null) => void; hidden?: { chosen: boolean; onPick: () => void }; faint?: boolean }) {
+  // With `hidden`, the line can also be no line at all, the last choice; `faint` shows the choice as one that is inherited.
+  const current = props.none || props.hidden?.chosen ? -1 : dashIndex(props.value)
   return (
-    <div className="end-picker dash-picker" role="radiogroup" aria-label={props.label}>
+    <div className={`end-picker dash-picker${props.faint ? ' faint-choice' : ''}`} role="radiogroup" aria-label={props.label}>
       {DASHES.map(([name, pattern], i) => (
         <button key={name} type="button" role="radio" aria-checked={i === current} className={i === current ? 'active' : ''} title={t(name)} aria-label={t(name)} onClick={() => props.onPick(pattern)}>
           <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1.6">
@@ -245,6 +249,14 @@ export function DashPicker(props: { value: unknown; none?: boolean; label?: stri
           </svg>
         </button>
       ))}
+      {props.hidden && (
+        <button type="button" role="radio" aria-checked={props.hidden.chosen} className={props.hidden.chosen ? 'active' : ''} title={t('No line')} aria-label={t('No line')} onClick={props.hidden.onPick}>
+          <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.5">
+            <path d="M2 9h24" strokeDasharray="1 2.5" />
+            <path d="M10 4l8 10" strokeWidth="1.3" />
+          </svg>
+        </button>
+      )}
     </div>
   )
 }

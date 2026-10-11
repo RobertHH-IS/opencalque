@@ -19,13 +19,13 @@ Last updated: 2026-10-10.
 - **Eyedropper**: copy the look of an object to the selection or to the next shapes.
 - **Align and space evenly**, and the common properties of several selected objects edited together.
 - A guide line across the view while a segment is exactly horizontal or vertical, and a hint bar with the keys that matter for the tool in use.
-- Lengths shown and typed in millimetres, centimetres, metres, inches or feet.
+- Lengths shown and typed in millimetres, centimetres, metres, inches, feet, or feet and inches (7' 6 1/2").
 - **Papers**: sheets like frames, drawn at a standard format (A5 to A0, upright or lying, at a drawing scale) or any size, named above their corner, carrying what is drawn on them when moved, copied or duplicated.
 - Walls stay joined: moving a wall or a corner stretches the walls that meet it, and its doors and windows follow.
 - Numbers in the panels change by holding Alt and dragging sideways.
-- **Transforming** any selection: turn, flip, scale and nudge, by dragging the grips of the selection box, from the properties panel, the menus or the keyboard.
+- **Transforming** any selection: turn about a clicked point with the Rotate tool (by a base line, or a typed angle), mirror horizontally or vertically, scale and nudge, by dragging the grips of the selection box, from the menus or the keyboard.
 - **Annotations**: a note with a curved, straight or elbowed leader to what it is about, typed in place, with a choice of symbol at each end.
-- **Corners**: a wall end is a selectable corner shared by the walls that meet there; drag it and they all follow. A corner of two walls can be mitred, rounded, cut off, or have one wall run through. Double-click a wall to put a corner in it.
+- **Corners**: a wall end is a selectable corner shared by the walls that meet there; drag it and they all follow. A corner of two walls can be mitred, rounded, cut off, or have one wall run through. Each line of a wall (its faces, its ends) can have its own look. A wall is cut in two with the Split tool; the two halves show the line between them.
 - **Rooms**: click inside closed walls to name a space; its floor, outline and area follow the walls. **Dividers** split an open space into rooms without a wall.
 - **Floor patterns**: a Hatch modifier (lines, planks, tiles) for rooms and any closed shape.
 - **Shared colours**: named colours that objects and layers link to; change one and everything linked follows.
@@ -36,7 +36,8 @@ Last updated: 2026-10-10.
 - Text can be bold and aligned left, centred or right.
 - Hints and size fields that follow what you are doing: only the next step and the keys usable right now are shown.
 - **Snapping** to the points of objects, the middle of a line, the crossing of two lines, the foot of a perpendicular, the line itself (wall faces and their corners included), and to the grid; angle constraint, drag handles, exact values in the properties panel.
-- **Holding a direction while drawing**: an arrow key keeps the wall or line being drawn upright or level, and pointing at a point elsewhere ends it level with that point.
+- **Holding a direction**: while drawing or dragging, an arrow key keeps the wall, line, object or point upright or level, and pointing at a point elsewhere ends it level with that point.
+- **Splitting** a wall, a line or a polyline with the Split tool, which shows the length on either side of the cut, so a part can be deleted or changed on its own.
 - **Smart guides**: what is moved lines up with the sides and middles of other objects and keeps equal gaps with its neighbours, with lines and gap sizes shown while moving.
 
 ### Organising a drawing
@@ -85,8 +86,8 @@ Ranked by how much each one moves the app from "promising" to "usable for real w
 | 4 | **Cut, copy, paste** | **Done**, including across drawings. |
 | 5 | **DXF export** | **Done** (lines, circles, text, layers), and DXF import of the same kinds of geometry. Blocks, hatches and dimensions are not imported. |
 | 6 | **Sheets and printing**: paper size, drawing scale, title block, PDF export to scale | **Done**: papers with format, direction, scale and a title block; vector PDF export at true scale, one page per paper. Views of the plan at another scale on a sheet are in the ideas below. |
-| 7 | **More drawing tools**: polyline and polygon tool, arcs and curves, typed lengths while drawing, room areas | **Mostly done**: polyline tool, typed sizes, room areas, arcs (by angles) and curved polylines, snapping to middles, crossings, perpendiculars and lines. A tool to draw an arc directly is not started. |
-| 8 | **Transforming**: rotate and scale handles, align and distribute, mirror, array | **Mostly done**: rotate, mirror, uniform scale and nudge for any selection, from grips on the selection box, the panel, menus and shortcuts. Align, distribute, a repeat (array) modifier and smart guides while moving are done; non-uniform scaling is not. |
+| 7 | **More drawing tools**: polyline and polygon tool, arcs and curves, typed lengths while drawing, room areas | **Mostly done**: one line tool for lines, polylines and polygons (a double-click closes the shape), typed sizes, room areas, arcs (by angles) and curved polylines, snapping to middles, crossings, perpendiculars and lines. A tool to draw an arc directly is not started. |
+| 8 | **Transforming**: rotate and scale handles, align and distribute, mirror, array | **Mostly done**: rotate (a tool, about a clicked point), mirror, uniform scale and nudge for any selection, from grips on the selection box, menus and shortcuts. Align, distribute, a repeat (array) modifier and smart guides while moving are done; non-uniform scaling is not. |
 | 9 | **Walls as a system**: openings that follow their wall, walls trimmed where they meet mid-span, moving a wall drags its neighbours, rooms detected from walls | **Done**, with selectable corners, joint types, wall types and curved walls. |
 | 10 | **Hosted version**: accounts, cloud storage, sharing by link, realtime collaboration | Not started. The data model is prepared for it (see ARCHITECTURE §10). |
 

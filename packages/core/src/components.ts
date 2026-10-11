@@ -4,7 +4,7 @@ import { moveOps, nodePrimitives } from './kinds'
 import { applyOps, OpError, type NodeInput, type Op } from './ops'
 import type { Registry } from './registry'
 import { boundsOf } from './scene'
-import type { Document } from './schema'
+import type { Document, Node } from './schema'
 
 /**
  * Turns nodes into a component and leaves an instance in their place. The component's origin
@@ -99,7 +99,11 @@ export function transplantOps(
 
 /**
  * Copies components from another document. Any document can serve as a library. Components the
- * imported ones depend on come along, and re-importing the same component reuses the earlier copy.
+ * imported ones depend on come along, and a component the document already has is reused rather
+ * than copied again: one of its own, or one brought in before from the same place. Each copy keeps
+ * where it first came from (`meta.source`, "drawing#component"), however many documents it went
+ * through on the way, so that a component copied to the clipboard and pasted back into its own
+ * drawing is the same component, its new instances instances of it.
  * Returns the new document and a map from source component id to local component id.
  */
 export function importComponents(
@@ -108,12 +112,15 @@ export function importComponents(
   componentIds: string[] = componentsOf(source).map((c) => c.id),
 ): { doc: Document; imported: Record<string, string> } {
   const imported: Record<string, string> = {}
+  // The components the document has, by where they come from: its own, and copies of others.
+  const known = new Map<string, string>()
   for (const n of Object.values(doc.nodes)) {
-    if (n.type === 'component' && typeof n.meta?.source === 'string') {
-      const [docId, componentId] = n.meta.source.split('#')
-      if (docId === source.id) imported[componentId] = n.id
-    }
+    if (n.type !== 'component') continue
+    known.set(`${doc.id}#${n.id}`, n.id)
+    if (typeof n.meta?.source === 'string' && !known.has(n.meta.source)) known.set(n.meta.source, n.id)
   }
+  /** Where a component of the source first came from. */
+  const origin = (component: Node, id: string) => (typeof component.meta?.source === 'string' ? component.meta.source : `${source.id}#${id}`)
   // Each component is applied as soon as it is described, so that the next one can refer to it.
   let result = doc
 
@@ -121,12 +128,17 @@ export function importComponents(
     if (imported[sourceId]) return
     const component = source.nodes[sourceId]
     if (component?.type !== 'component') throw new OpError(`"${sourceId}" is not a component of the library`)
+    const same = known.get(origin(component, sourceId)) ?? known.get(`${source.id}#${sourceId}`)
+    if (same) {
+      imported[sourceId] = same
+      return
+    }
     const id = newId('component')
     imported[sourceId] = id
     // Nested components first, so the instances copied below have something to point at.
     for (const leaf of leavesOf(source, sourceId)) if (leaf.type === 'instance') copy(leaf.component)
     const { id: _, order: __, parent: ___, ...definition } = component
-    result = applyOps(result, [{ op: 'add_node', node: { ...definition, id, meta: { ...component.meta, source: `${source.id}#${sourceId}` } } }])
+    result = applyOps(result, [{ op: 'add_node', node: { ...definition, id, meta: { ...component.meta, source: origin(component, sourceId) } } }])
     result = applyOps(result, transplantOps(result, source, sourceId, id, { components: imported }).ops)
   }
 

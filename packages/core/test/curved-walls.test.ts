@@ -57,11 +57,14 @@ describe('a curved wall', () => {
     const joined = applyOps(half, [wall('down', 4000, 0, 4000, 3000)])
     const [outline] = outlines(joined, 'down')
     expect(Math.min(...outline.map((p) => p.y))).toBeCloseTo(0, 6)
-    // A wall leaving level to the right meets it at a right angle, mitred to (4100, -100).
+    // A wall leaving level to the right meets it where its top face crosses the curved outer face
+    // of the arc (radius 2100 about (2000, 0)): at y = -100, x = 2000 + √(2100² - 100²), not at the
+    // 4100 its tangent would give. Both walls share that point.
     const cornered = applyOps(half, [wall('level', 4000, 0, 7000, 0)])
-    const corner = outlines(cornered, 'level')[0].find((p) => Math.abs(p.x - 4100) < 1e-6 && Math.abs(p.y + 100) < 1e-6)
-    expect(corner).toBeDefined()
-    expect(outlines(cornered, 'arc')[0].some((p) => Math.abs(p.x - 4100) < 1e-6 && Math.abs(p.y + 100) < 1e-6)).toBe(true)
+    const x = 2000 + Math.sqrt(2100 ** 2 - 100 ** 2)
+    const at = (p: { x: number; y: number }) => Math.abs(p.x - x) < 1e-3 && Math.abs(p.y + 100) < 1e-3
+    expect(outlines(cornered, 'level')[0].some(at)).toBe(true)
+    expect(outlines(cornered, 'arc')[0].some(at)).toBe(true)
   })
 
   it('is bent by pulling its middle, and straightened by putting it back', () => {

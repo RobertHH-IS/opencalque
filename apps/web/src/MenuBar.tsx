@@ -18,7 +18,7 @@ const MENUS: [string, (string | null)[]][] = [
   // What is done to the selection as an object, as against editing in general: arranging, transforming, modifying.
   [
     msg('Object'),
-    ['edit.group', 'edit.ungroup', null, 'edit.bringToFront', 'edit.bringForward', 'edit.sendBackward', 'edit.sendToBack', null, 'edit.rotateRight', 'edit.rotateLeft', 'edit.flipHorizontal', 'edit.flipVertical', null, 'wall.extend', 'wall.trim', 'wall.dimension', null, 'modifier.crop', 'modifier.array', null, 'component.create', 'component.finish'],
+    ['edit.group', 'edit.ungroup', null, 'edit.bringToFront', 'edit.bringForward', 'edit.sendBackward', 'edit.sendToBack', null, 'edit.rotateRight', 'edit.rotateLeft', 'edit.flipHorizontal', 'edit.flipVertical', null, 'shape.close', 'shape.open', 'shape.curve', 'shape.straighten', null, 'wall.split', 'wall.extend', 'wall.trim', 'wall.dimension', null, 'modifier.crop', 'modifier.array', null, 'component.create', 'component.finish'],
   ],
   [msg('View'), ['view.zoomToFit', 'view.zoomIn', 'view.zoomOut', null, 'view.toggleGrid', 'view.toggleSnapGrid', 'view.toggleSnapObjects', null, '@Panels', null, 'view.toggleTheme', 'view.resetLayout']],
   // There is no Insert or Tools menu: the toolbar holds the tools and the component library, and pages
@@ -56,7 +56,8 @@ export function MenuBar() {
       if (!(e.target as HTMLElement).closest('.menu')) setOpen(null)
     }
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(null)
+      // Esc, or a shortcut, which does its work: the menu has had its turn either way.
+      if (e.key !== 'Tab' && !e.key.startsWith('Arrow')) setOpen(null)
     }
     window.addEventListener('pointerdown', onPointerDown, true)
     window.addEventListener('keydown', onKeyDown)

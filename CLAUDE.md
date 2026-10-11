@@ -43,6 +43,7 @@ Agent terminals have `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. Prefix Ele
 - Rotate, mirror and scale nodes with `transformOps` (`packages/core/src/transform.ts`), which knows what each type means; a new node type needs a case there.
 - There is no Assets panel: everything that can be placed is in the component library (`WarehouseDialog.tsx`).
 - Exports (SVG, DXF, PDF) draw from primitives through `paintOrder`; a new kind of primitive or style needs handling in `svg.ts`, `dxf.ts`, `pdf.ts` and `apps/web/src/canvas/draw.ts`.
+- The shape of a wall corner (`joins`) and which lines of a wall are drawn (`edges`) are separate settings. Never draw or hide a wall line as a side effect of a joint: go through `endLineShown` / `endLineOps`.
 - A wall corner is a position, not a node. Use `wallEndsAt`, `moveCornerOps`, `cornerJoin` and `cornerJoinOps` (`packages/core/src/walls.ts`); how a corner is joined lives on each wall end, in `joins`.
 - Every change a user would notice gets a line in `CHANGELOG.md`, under the version being worked on. To release: new `## x.y.z — date` section, same version in the `package.json` files, then push a `vx.y.z` tag; the workflow builds the installers and publishes the GitHub release with that section as its text.
 - The desktop menu bar is the window's title bar. Keep its height in step with `titleBarOverlay` in `apps/desktop/src/main/index.ts`.

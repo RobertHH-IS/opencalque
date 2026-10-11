@@ -6,7 +6,7 @@ import { LANGUAGES, msg, t } from './i18n'
 import { platform } from './platform'
 import { CLAUDE_MODELS, setAiPrefs, setPrefs, usePrefs } from './prefs'
 import { BUILT_IN_EXTENSION, toast, useStore } from './store'
-import { UNITS } from './units'
+import { FRACTIONS, UNITS } from './units'
 import { ExtensionWarehouse } from './WarehouseDialog'
 
 const close = () => useStore.setState({ preferencesOpen: false })
@@ -153,6 +153,18 @@ function GeneralSettings() {
           ))}
         </select>
       </label>
+      {prefs.unit === 'ft-in' && (
+        <label className="pref-field">
+          <span>{t('To the nearest')}</span>
+          <select value={prefs.fraction} onChange={(e) => setPrefs({ fraction: Number(e.target.value) })}>
+            {FRACTIONS.map((under) => (
+              <option key={under} value={under}>
+                1/{under}"
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <p className="hint">{t('Lengths are shown and typed in this unit. A different unit can always be typed after a number, such as 350 cm.')}</p>
       <Toggle label={t('Save automatically')} checked={prefs.autosave} onChange={(autosave) => setPrefs({ autosave })} />
       <p className="hint">{t('A drawing is saved to its file a moment after each change. A new drawing has to be saved once first, to give it a file.')}</p>

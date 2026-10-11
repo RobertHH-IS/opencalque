@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   BrickWall,
-  Check,
   ChevronUp,
   Circle,
   DoorOpen,
@@ -15,9 +14,12 @@ import {
   Pipette,
   Redo2,
   Ruler,
+  Slice,
+  RotateCw,
+  FlipHorizontal2,
+  FlipVertical2,
   Triangle,
   RulerDimensionLine,
-  Spline,
   SeparatorVertical,
   Square,
   SquareDashed,
@@ -41,10 +43,11 @@ const ICONS: Partial<Record<Tool, [title: string, icon: LucideIcon]>> = {
   line: [msg('Line'), Minus],
   rect: [msg('Rectangle'), Square],
   ellipse: [msg('Ellipse'), Circle],
-  polyline: [msg('Polyline'), Spline],
   wall: [msg('Wall'), BrickWall],
   dimension: [msg('Dimension: annotate a distance on the drawing'), RulerDimensionLine],
   measure: [msg('Measure: read a distance without drawing anything'), Ruler],
+  split: [msg('Split: cut a wall, a line or a polyline in two where you click'), Slice],
+  rotate: [msg('Rotate: turn the selection about a point you click'), RotateCw],
   angle: [msg('Angle: read the angle between two directions'), Triangle],
   eyedropper: [msg('Eyedropper: copy the look of an object'), Pipette],
   text: [msg('Text'), Type],
@@ -53,6 +56,12 @@ const ICONS: Partial<Record<Tool, [title: string, icon: LucideIcon]>> = {
   room: [msg('Room: name the space inside closed walls'), SquareDashed],
   divider: [msg('Room divider: separates two rooms where there is no wall'), SeparatorVertical],
 }
+
+/** Flipping the selection on itself, listed with the rotate tool. */
+const FLIPS: GroupAction[] = [
+  { command: 'edit.flipHorizontal', title: msg('Mirror horizontally'), icon: FlipHorizontal2 },
+  { command: 'edit.flipVertical', title: msg('Mirror vertically'), icon: FlipVertical2 },
+]
 
 /** A toolbar button whose tooltip shows the command's current shortcut. */
 function CommandButton(props: { command: string; title: string; onClick: () => void; active?: boolean; disabled?: boolean; children: React.ReactNode }) {
@@ -91,8 +100,8 @@ function ShapeChoice({ id, current, onPick }: { id: Tool; current: boolean; onPi
   const shortcut = useShortcutLabel(`tool.${id}`)
   const [title, Icon] = ICONS[id]!
   return (
-    <button role="menuitem" onClick={onPick}>
-      <span className="menu-check">{current && <Check size={12} />}</span>
+    // The tool in use is in the accent colour, as its button is: no tick in front, which would take room.
+    <button role="menuitem" className={current ? 'current' : undefined} aria-current={current || undefined} onClick={onPick}>
       <Icon size={15} />
       {/* Just the name: the explanation after the colon belongs in the button's tooltip, not in a list. */}
       <span className="menu-title">{t(title).split(/\s*:/)[0]}</span>
@@ -101,8 +110,27 @@ function ShapeChoice({ id, current, onPick }: { id: Tool; current: boolean; onPi
   )
 }
 
-/** One button for several related tools: it shows the one used last, and the arrow beside it lists the others. */
-function ToolGroup({ tools, current: shape, more }: { tools: Tool[]; current: Tool; more: string }) {
+/** Something done at once to the selection, listed with tools: a command, its name and its picture. */
+type GroupAction = { command: string; title: string; icon: LucideIcon }
+
+function ActionChoice({ action, disabled, onPick }: { action: GroupAction; disabled: boolean; onPick: () => void }) {
+  const shortcut = useShortcutLabel(action.command)
+  const Icon = action.icon
+  return (
+    <button role="menuitem" disabled={disabled} onClick={onPick}>
+      <Icon size={15} />
+      <span className="menu-title">{t(action.title)}</span>
+      <kbd>{shortcut}</kbd>
+    </button>
+  )
+}
+
+/**
+ * One button for several related tools: it shows the one used last, and the arrow beside it lists
+ * the others, then any `actions`, which act on the selection at once rather than being tools.
+ */
+function ToolGroup({ tools, current: shape, more, actions = [] }: { tools: Tool[]; current: Tool; more: string; actions?: GroupAction[] }) {
+  const selected = useStore((s) => s.selection.length > 0)
   const [open, setOpen] = useState(false)
   const group = useRef<HTMLDivElement>(null)
 
@@ -111,8 +139,14 @@ function ToolGroup({ tools, current: shape, more }: { tools: Tool[]; current: To
     const onPointerDown = (e: PointerEvent) => {
       if (!group.current?.contains(e.target as HTMLElement)) setOpen(false)
     }
+    // A key pressed while the list is open is a shortcut or Esc: either way the list has had its turn.
+    const onKeyDown = () => setOpen(false)
     window.addEventListener('pointerdown', onPointerDown, true)
-    return () => window.removeEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('keydown', onKeyDown, true)
+    }
   }, [open])
 
   return (
@@ -134,6 +168,18 @@ function ToolGroup({ tools, current: shape, more }: { tools: Tool[]; current: To
               }}
             />
           ))}
+          {actions.length > 0 && <hr />}
+          {actions.map((action) => (
+            <ActionChoice
+              key={action.command}
+              action={action}
+              disabled={!selected}
+              onPick={() => {
+                setOpen(false)
+                executeById(action.command)
+              }}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -147,7 +193,7 @@ type Hint = [key: string, text: string]
  * shown that cannot be used yet. Each hint is a key and what it does; an empty key is a plain
  * instruction, and the first one is always the next thing to do.
  */
-function hintsFor(tool: Tool, step: number, opening: boolean): Hint[] {
+function hintsFor(tool: Tool, step: number, opening: boolean, selected = false): Hint[] {
   const free: Hint = ['Alt', t('ignores the grid and snapping')]
   const angles: Hint = ['Shift', t('keeps to 45° steps')]
   const typed: Hint = ['0-9', t('type an exact length')]
@@ -162,10 +208,9 @@ function hintsFor(tool: Tool, step: number, opening: boolean): Hint[] {
     case 'divider':
       return step === 0 ? [['', t('Click where the divider starts, on a wall')]] : [['', t('Click where it ends, on the wall opposite')], angles, held, free, ['Esc', t('finishes')]]
     case 'line':
-      return step === 0 ? [['', t('Click where the line starts')]] : [['', t('Click where it ends')], typed, angles, held, free, ['Esc', t('finishes')]]
-    case 'polyline':
-      if (step === 0) return [['', t('Click the first point')]]
-      return [['', t('Click the next point')], typed, angles, held, free, ...(step >= 3 ? [['', t('Click the first point again to close the shape')] as Hint] : []), ['Enter', t('finishes')]]
+      // One segment is a line, several a polyline; closed, a shape that can be filled.
+      if (step === 0) return [['', t('Click where the line starts')]]
+      return [['', step === 1 ? t('Click where it ends') : t('Click the next point')], typed, angles, held, free, ...(step >= 3 ? [['', t('Double-click, or click the first point, to close the shape')] as Hint] : []), ['Esc', t('finishes')]]
     case 'rect':
     case 'ellipse':
       return step === 0 ? [['', t('Click a corner, or type a width and a height first and click to place it')]] : [['', t('Click the opposite corner')], ['0-9', t('type an exact size')], free]
@@ -173,6 +218,13 @@ function hintsFor(tool: Tool, step: number, opening: boolean): Hint[] {
       return step === 0 ? [['', t('Click a corner of the sheet')]] : [['', t('Pull towards a format to take it, or click anywhere for a size of your own')], ['Alt', t('any size')]]
     case 'dimension':
       return step === 0 ? [['', t('Click the first point to measure from')]] : step === 1 ? [['', t('Click the second point')], angles, free] : [['', t('Click where the dimension line should sit')], free]
+    case 'rotate':
+      if (!selected) return [['', t('Select what to turn first: click it')]]
+      if (step === 0) return [['', t('Click the point to turn it about')]]
+      if (step === 1) return [['', t('Click where the turn starts from: the line from the pivot to there')], angles, free, ['Esc', t('cancels')]]
+      return [['', t('Click where that line goes: the selection turns with it')], ['0-9', t('type an exact angle')], ['Shift', t('keeps to 15° steps')], ['Alt', t('turns freely')], ['Esc', t('cancels')]]
+    case 'split':
+      return [['', t('Click a wall, a line or a polyline where it should be cut')], ['', t('the lengths either side are shown')], ['Alt', t('ignores the grid')]]
     case 'measure':
       return step === 0 ? [['', t('Click the first point')]] : [['', t('Click the second point')], angles, free]
     case 'angle':
@@ -209,8 +261,8 @@ function Hints() {
         ? [['', t('Click the first of two points whose real distance you know')]]
         : [['', t('Click the second point')], ['Shift', t('keeps it level, upright or at 45°')]]
   }
-  else if (dragging) hints = walls ? [['', t('Joined walls stretch to stay joined')], ['Alt', t('moves it alone, off the grid')]] : [['Shift', t('keeps an end on its own line')], ['Alt', t('ignores the grid and snapping')]]
-  else hints = hintsFor(tool, step, opening)
+  else if (dragging) hints = walls ? [['', t('Joined walls stretch to stay joined')], ['↑ ←', t('holds it upright or level')], ['Alt', t('moves it alone, off the grid')]] : [['Shift', t('keeps an end on its own line')], ['↑ ←', t('holds it upright or level')], ['Alt', t('ignores the grid and snapping')]]
+  else hints = hintsFor(tool, step, opening, selected)
   if (hints.length === 0) return null
   return (
     <div className="hint-bar">
@@ -245,9 +297,11 @@ function Toolbar() {
         <LibraryBig size={18} />
       </CommandButton>
       <hr />
-      <ToolButton id="dimension" />
+      <ToolButton id="split" />
+      {/* Mirroring is not a tool: the selection is flipped on itself, at once, from the same list. */}
+      <ToolGroup tools={['rotate']} current="rotate" more={t('Mirror')} actions={FLIPS} />
       <ToolGroup tools={MEASURE_TOOLS} current={measureTool} more={t('Measure an angle')} />
-      <ToolGroup tools={TEXT_TOOLS} current={textTool} more={t('Annotation')} />
+      <ToolGroup tools={TEXT_TOOLS} current={textTool} more={t('Annotation, dimension')} />
       <ToolButton id="paper" />
       <hr />
       <CommandButton command="edit.undo" title={t('Undo')} onClick={undo} disabled={!canUndo}>

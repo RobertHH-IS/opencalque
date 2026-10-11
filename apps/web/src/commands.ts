@@ -24,6 +24,13 @@ import {
   addModifier,
   exportPdf,
   canFitWalls,
+  canSplitWall,
+  canClosePolylines,
+  canOpenPolylines,
+  canCurvePolylines,
+  canStraightenPolylines,
+  setPolylines,
+  splitWall,
   dimensionWalls,
   fitWalls,
   importDxf,
@@ -68,9 +75,12 @@ export interface Command {
 const get = useStore.getState
 const prefs = usePrefs.getState
 const selected = () => get().selection.length > 0
-/** A line, a wall, a divider or a polyline has its first point and is waiting for the next. */
-const drawingLine = () => get().drawStep > 0 && ['line', 'wall', 'divider', 'polyline'].includes(get().tool)
-/** Holds the line being drawn level or upright, or lets it go when it is already held that way. */
+/** A line, a wall or a divider has its first point and is waiting for the next. */
+const drawingLine = () => get().drawStep > 0 && ['line', 'wall', 'divider'].includes(get().tool)
+/** Something is being dragged with the select tool: moved, or reshaped by one of its points. */
+const dragging = () => get().tool === 'select' && get().base !== null && !get().editingText
+const canHold = () => drawingLine() || dragging()
+/** Holds what is being drawn or dragged level or upright, or lets it go when it is already held that way. */
 const lockAxis = (axis: 'x' | 'y') => {
   useStore.setState({ axisLock: get().axisLock === axis ? null : axis })
   drawing.refresh?.()
@@ -161,18 +171,23 @@ const STATIC: Command[] = [
   { id: 'edit.sendToBack', title: msg('Send to back'), category: 'Edit', keys: ['['], when: selected, run: () => reorderSelection('back') },
   { id: 'edit.rotateRight', title: msg('Rotate 90° clockwise'), category: 'Edit', keys: ['Shift+R'], when: selected, run: () => transformSelection({ rotation: 90 }) },
   { id: 'edit.rotateLeft', title: msg('Rotate 90° counter-clockwise'), category: 'Edit', keys: ['Alt+Shift+R'], when: selected, run: () => transformSelection({ rotation: -90 }) },
-  { id: 'edit.flipHorizontal', title: msg('Flip left to right'), category: 'Edit', keys: ['Shift+H'], when: selected, run: () => transformSelection({ mirror: 'horizontal' }) },
-  { id: 'edit.flipVertical', title: msg('Flip top to bottom'), category: 'Edit', keys: ['Shift+V'], when: selected, run: () => transformSelection({ mirror: 'vertical' }) },
+  { id: 'edit.flipHorizontal', title: msg('Mirror horizontally'), category: 'Edit', keys: ['Shift+H'], when: selected, run: () => transformSelection({ mirror: 'horizontal' }) },
+  { id: 'edit.flipVertical', title: msg('Mirror vertically'), category: 'Edit', keys: ['Shift+V'], when: selected, run: () => transformSelection({ mirror: 'vertical' }) },
   { id: 'edit.scaleUp', title: msg('Scale up by 10%'), category: 'Edit', when: selected, run: () => transformSelection({ scale: 1.1 }) },
   { id: 'edit.scaleDown', title: msg('Scale down by 10%'), category: 'Edit', when: selected, run: () => transformSelection({ scale: 1 / 1.1 }) },
   // Listed before the arrow keys' other use: while a line is being drawn there is nothing selected to move.
-  { id: 'draw.lockLevel', title: msg('Keep the line being drawn level'), category: 'Tools', keys: ['ArrowLeft', 'ArrowRight'], keywords: 'axis lock horizontal', when: drawingLine, run: () => lockAxis('x') },
-  { id: 'draw.lockUpright', title: msg('Keep the line being drawn upright'), category: 'Tools', keys: ['ArrowUp', 'ArrowDown'], keywords: 'axis lock vertical', when: drawingLine, run: () => lockAxis('y') },
+  { id: 'draw.lockLevel', title: msg('Keep what is being drawn or dragged level'), category: 'Tools', keys: ['ArrowLeft', 'ArrowRight'], keywords: 'axis lock horizontal', when: canHold, run: () => lockAxis('x') },
+  { id: 'draw.lockUpright', title: msg('Keep what is being drawn or dragged upright'), category: 'Tools', keys: ['ArrowUp', 'ArrowDown'], keywords: 'axis lock vertical', when: canHold, run: () => lockAxis('y') },
   { id: 'edit.nudgeLeft', title: msg('Move left by one grid step'), category: 'Edit', keys: ['ArrowLeft'], when: selected, run: () => nudgeSelection(-1, 0) },
   { id: 'edit.nudgeRight', title: msg('Move right by one grid step'), category: 'Edit', keys: ['ArrowRight'], when: selected, run: () => nudgeSelection(1, 0) },
   { id: 'edit.nudgeUp', title: msg('Move up by one grid step'), category: 'Edit', keys: ['ArrowUp'], when: selected, run: () => nudgeSelection(0, -1) },
   { id: 'edit.nudgeDown', title: msg('Move down by one grid step'), category: 'Edit', keys: ['ArrowDown'], when: selected, run: () => nudgeSelection(0, 1) },
+  { id: 'wall.split', title: msg('Split the wall in two'), category: 'Edit', keywords: 'split cut divide corner', when: canSplitWall, run: splitWall },
   { id: 'wall.extend', title: msg('Extend walls to the next wall'), category: 'Edit', keywords: 'extend lengthen', when: canFitWalls, run: () => fitWalls('extend') },
+  { id: 'shape.close', title: msg('Close the shape'), category: 'Edit', keywords: 'polygon polyline join', when: canClosePolylines, run: () => setPolylines({ closed: true }) },
+  { id: 'shape.open', title: msg('Open the shape'), category: 'Edit', keywords: 'polygon polyline', when: canOpenPolylines, run: () => setPolylines({ closed: null }) },
+  { id: 'shape.curve', title: msg('Curve the line through its points'), category: 'Edit', keywords: 'smooth spline round polyline', when: canCurvePolylines, run: () => setPolylines({ smooth: true }) },
+  { id: 'shape.straighten', title: msg('Straighten the line between its points'), category: 'Edit', keywords: 'straight sharp polyline', when: canStraightenPolylines, run: () => setPolylines({ smooth: null }) },
   { id: 'wall.dimension', title: msg('Dimension the selected walls'), category: 'Edit', keywords: 'chain dimensions openings', when: canFitWalls, run: dimensionWalls },
   { id: 'wall.trim', title: msg('Trim walls that stick out'), category: 'Edit', keywords: 'trim cut shorten', when: canFitWalls, run: () => fitWalls('trim') },
   { id: 'modifier.crop', title: msg('Crop'), category: 'Edit', when: selected, run: () => addModifier('crop') },
@@ -239,11 +254,12 @@ const STATIC: Command[] = [
   },
   tool('rect', msg('Rectangle'), 'R'),
   tool('ellipse', msg('Ellipse'), 'O'),
-  tool('polyline', msg('Polyline'), 'P'),
   tool('wall', msg('Wall'), 'W'),
   tool('dimension', msg('Dimension'), 'D'),
   tool('measure', msg('Measure'), 'M'),
   tool('angle', msg('Measure an angle'), 'Shift+M'),
+  tool('split', msg('Split'), 'K'),
+  tool('rotate', msg('Rotate'), 'E'),
   tool('eyedropper', msg('Eyedropper: copy the look of an object'), 'I'),
   tool('text', msg('Text'), 'T'),
   tool('annotation', msg('Annotation'), 'Shift+T'),

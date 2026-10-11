@@ -1,16 +1,16 @@
-import { childrenOf, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, cornerJoin, cornerJoinOps, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
+import { childrenOf, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
 import { executeById } from '../commands'
-import { useEffect, useRef, useState, useLayoutEffect } from 'react'
-import { Pipette, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, FlipHorizontal2, FlipVertical2, RotateCcw, RotateCw, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Undo2 } from 'lucide-react'
-import { reorderSelection, transformSelection, addModifier, alignSelection, distributeSelection } from '../actions'
+import { useEffect, useRef, useState, useLayoutEffect, type ReactNode } from 'react'
+import { Pipette, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Undo2, SquareSplitHorizontal } from 'lucide-react'
+import { reorderSelection, addModifier, alignSelection, distributeSelection } from '../actions'
 import { showPanel } from '../dock'
 import { applyCalibration } from '../floorplan'
 import { language, msg, t } from '../i18n'
 import { apply, editComponent, registry, setTool, toast, useStore, selectCorner } from '../store'
-import { ColorChoice } from '../ColorChoice'
+import { ColorChoice, PatternRows } from '../ColorChoice'
 import { DashPicker, Field, IconButton, labelOf, Section } from '../ui'
 import { dashIndex, DASHES, penOf, PENS, pixelsOf } from '../strokes'
-import { formatLength, parseLength, parseNumber, unit } from '../units'
+import { formatLength, parseLength, unit } from '../units'
 
 interface Option {
   value: string
@@ -22,7 +22,7 @@ interface FieldSpec {
   path: string
   label: string
   /** 'dash' is a checkbox standing for a dash pattern. */
-  type: 'number' | 'string' | 'boolean' | 'color' | 'dash' | 'weight'
+  type: 'number' | 'string' | 'boolean' | 'color' | 'dash' | 'weight' | 'pattern'
   /** Heading the field appears under. Defaults to "Geometry". */
   section?: string
   /** Shown when the property is unset. */
@@ -37,6 +37,8 @@ interface FieldSpec {
   optional?: boolean
   /** For a color: what an unset value means, e.g. "from layer". */
   unset?: string
+  /** Shown only for objects this is true of: a polygon has no ends, a line no fill. */
+  when?: (node: Node) => boolean
   /** For a fill: the pattern it takes from elsewhere (its wall type) when it has none of its own. */
   pattern?: Pattern
   /** The options are the symbols of a line's end, shown as pictures to pick from: of its first end or of its last. */
@@ -60,7 +62,17 @@ const stroke = (section: string): FieldSpec[] => [
   { path: 'style.strokeWidth', label: msg('Weight'), type: 'weight', section, fallback: 1 },
   { path: 'style.dash', label: msg('Line'), type: 'dash', section },
 ]
-const STYLE: FieldSpec[] = [...stroke(msg('Style')), { path: 'style.fill', label: msg('Fill'), type: 'color', section: msg('Style'), fallback: '#ffffff', unset: msg('default') }]
+/** The look of a shape in two parts, each said by its name: its outline, and what covers its inside. */
+const STROKE = msg('Stroke')
+const FILL = msg('Fill')
+/** What covers the inside of a shape: a colour, and a pattern over it. */
+const fill = (when?: FieldSpec['when']): FieldSpec[] => [
+  { path: 'style.fill', label: msg('Color'), type: 'color', section: FILL, fallback: '#ffffff', unset: msg('default'), when },
+  { path: 'style.pattern', label: msg('Pattern'), type: 'pattern', section: FILL, when },
+]
+const STYLE: FieldSpec[] = [...stroke(STROKE), ...fill()]
+/** Where the look of a selection is changed, and so where it can be taken from another object. */
+const LOOK_SECTIONS = [STROKE, 'Style']
 
 const DIMENSION: FieldSpec[] = [
   ...AB,
@@ -79,7 +91,7 @@ const DIMENSION: FieldSpec[] = [
   { path: 'textColor', label: msg('Color'), type: 'color', section: msg('Text'), fallback: '#1f1f1f', unset: msg('from line') },
   { path: 'textPosition', label: msg('Position'), type: 'string', section: msg('Text'), fallback: 'above', options: options(['above', msg('Above line')], ['center', msg('On line')], ['below', msg('Below line')]) },
   { path: 'textRotation', label: msg('Rotation'), type: 'string', section: msg('Text'), fallback: 'aligned', options: options(['aligned', msg('Along line')], ['horizontal', msg('Horizontal')]) },
-  { path: 'unit', label: msg('Unit'), type: 'string', section: msg('Text'), fallback: 'mm', options: options(['mm', 'mm'], ['cm', 'cm'], ['m', 'm'], ['in', 'in'], ['ft', 'ft']) },
+  { path: 'unit', label: msg('Unit'), type: 'string', section: msg('Text'), fallback: 'mm', options: options(['mm', 'mm'], ['cm', 'cm'], ['m', 'm'], ['in', 'in'], ['ft', 'ft'], ['ft-in', msg('ft and in')]) },
   { ...num('decimals', msg('Decimals'), undefined, msg('Text')), optional: true },
   { path: 'showUnit', label: msg('Show unit'), type: 'boolean', section: msg('Text'), fallback: false },
 ]
@@ -108,7 +120,7 @@ const LINE_ENDS: FieldSpec[] = [
 ]
 
 const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
-  line: [...AB, ...LINE_ENDS, ...STYLE],
+  line: [...AB, ...LINE_ENDS, ...stroke(STROKE)],
   wall: [...AB, len('bulge', msg('Curve'), 0), len('thickness', msg('Thickness')), { ...len('height', msg('Height')), optional: true }, ...STYLE],
   dimension: DIMENSION,
   annotation: ANNOTATION,
@@ -145,7 +157,13 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
     { path: 'align', label: msg('Alignment'), type: 'string', options: options(['', msg('Left')], ['center', msg('Centred')], ['right', msg('Right')]) },
     { path: 'style.stroke', label: msg('Color'), type: 'color', section: msg('Style'), fallback: '#1f1f1f', unset: msg('from layer') },
   ],
-  polyline: [{ path: 'closed', label: msg('Closed'), type: 'boolean', fallback: false }, { path: 'smooth', label: msg('Curved'), type: 'boolean', fallback: false }, ...LINE_ENDS, ...STYLE],
+  // Open, a polyline has ends and nothing inside it; closed, a polygon, the other way round. Closing,
+  // opening, curving and straightening it are commands (Object menu, right-click), not properties.
+  polyline: [
+    ...LINE_ENDS.map((field) => ({ ...field, when: (node: Node) => !(node.type === 'polyline' && node.closed) })),
+    ...stroke(STROKE),
+    ...fill((node) => node.type === 'polyline' && !!node.closed),
+  ],
   image: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), num('opacity', msg('Opacity'), 1)],
   instance: [...PLACEMENT, ...STYLE],
   parametric: PLACEMENT,
@@ -234,6 +252,19 @@ function FieldRow({ node, nodes, field, update }: { node: Node; nodes: Node[]; f
       </div>
     )
   }
+  if (field.type === 'pattern') {
+    // A pattern taken from elsewhere (a wall's type) is shown faint; "none" over it is said outright, as a pattern of kind None.
+    const inherited = field.pattern !== undefined
+    return (
+      <PatternRows
+        label={t(field.label)}
+        value={mixed ? undefined : ((stored as Pattern | undefined) ?? field.pattern)}
+        mixed={mixed}
+        faint={inherited && stored === undefined}
+        onChange={(next) => commit(next ?? (inherited ? { kind: 'None' } : undefined))}
+      />
+    )
+  }
   if (field.ends) {
     // Not a label: a label would hand every click to the first button in it.
     return (
@@ -243,8 +274,11 @@ function FieldRow({ node, nodes, field, update }: { node: Node; nodes: Node[]; f
       </div>
     )
   }
+  // A colour's row is not a label: a label hands every click on it to the button inside, which
+  // would open the colour window again just as a click there closed it.
+  const Row = field.type === 'color' ? 'div' : 'label'
   return (
-    <label className="field">
+    <Row className="field">
       <span>{t(field.label)}</span>
       {field.type === 'boolean' && (
         <input
@@ -284,11 +318,9 @@ function FieldRow({ node, nodes, field, update }: { node: Node; nodes: Node[]; f
           fallback={(value as string | undefined) ?? '#ffffff'}
           unset={mixed ? msg('Mixed') : field.unset}
           commit={commit}
-          // A fill may be patterned; the pattern is kept beside its colour, in the style.
-          pattern={field.path === 'style.fill' ? { value: (read(node, 'style.pattern') as Pattern | undefined) ?? field.pattern, inherited: field.pattern !== undefined, commit: (next) => update((n) => patchFor(n, 'style.pattern', next)) } : undefined}
         />
       )}
-    </label>
+    </Row>
   )
 }
 
@@ -301,6 +333,8 @@ function typeValue(type: WallType, path: string): unknown {
       return type.height
     case 'style.fill':
       return type.fill
+    case 'style.pattern':
+      return type.pattern
     case 'style.stroke':
       return type.stroke
     case 'style.strokeWidth':
@@ -322,15 +356,13 @@ function TypedRow(props: { node: Node; nodes: Node[]; field: FieldSpec; update: 
   const types = useStore((s) => s.doc.wallTypes)
   const type = nodes.length === 1 && node.type === 'wall' && node.wallType ? types?.[node.wallType] : undefined
   const fromType = type ? typeValue(type, field.path) : undefined
-  // A type that gives only a pattern still gives the fill something to show.
-  if (node.type === 'wall' && fromType === undefined && field.path === 'style.fill' && type?.pattern) return <FieldRow {...props} field={{ ...field, pattern: type.pattern }} />
   if (node.type !== 'wall' || fromType === undefined) return <FieldRow {...props} />
   const own = field.path === 'thickness' ? (node.overrides ?? []).includes('thickness') : read(node, field.path) !== undefined
   // Giving it back: the thickness by taking it off the list of exceptions, the others by having none of their own.
   const giveBack = () => update((n) => (field.path === 'thickness' ? { overrides: null } : patchFor(n, field.path, undefined)))
   return (
     <div className={`typed-row${own ? ' own' : ''}`}>
-      <FieldRow {...props} field={{ ...(own ? field : { ...field, fallback: fromType as FieldSpec['fallback'], unset: msg('from its type') }), ...(field.path === 'style.fill' && type?.pattern ? { pattern: type.pattern } : {}) }} />
+      <FieldRow {...props} field={field.type === 'pattern' ? { ...field, pattern: fromType as Pattern } : own ? field : { ...field, fallback: fromType as FieldSpec['fallback'], unset: msg('from its type') }} />
       {own ? (
         <IconButton title={t('Differs from its wall type. Click to take the type’s value again')} onClick={giveBack}>
           <Undo2 size={12} />
@@ -383,7 +415,13 @@ function EndPicker(props: { side: 'start' | 'end'; options: Option[]; value: str
 
 /** Fields grouped under their section headings, in the order the sections first appear. */
 function Sections({ node, nodes = [node], fields, update, pick }: { node: Node; nodes?: Node[]; fields: FieldSpec[]; update: Update; pick?: boolean }) {
-  const titles = [...new Set(fields.map((f) => f.section ?? GEOMETRY))]
+  // A field that does not apply to every object selected is left out.
+  const shown = fields.filter((f) => !f.when || nodes.every(f.when))
+  const titles = [...new Set(shown.map((f) => f.section ?? GEOMETRY))]
+  // A single wall can have its lines styled one by one; the view follows what the wall says, and the button opens it.
+  const wall = nodes.length === 1 && node.type === 'wall' ? node : null
+  const [byEdge, setByEdge] = useState(false)
+  const split = !!wall && (byEdge || !!wall.edges)
   return (
     <>
       {titles.map((title) => (
@@ -392,18 +430,33 @@ function Sections({ node, nodes = [node], fields, update, pick }: { node: Node; 
           title={t(title)}
           // Where the look of the selection is changed is where it can be taken from another object.
           action={
-            pick && title === 'Style' ? (
-              <IconButton title={t('Copy the look of another object: click it on the drawing')} onClick={() => setTool('eyedropper')}>
-                <Pipette size={13} />
-              </IconButton>
+            pick && LOOK_SECTIONS.includes(title) && title === titles.find((other) => LOOK_SECTIONS.includes(other)) ? (
+              <span className="section-actions">
+                {wall && (
+                  <IconButton
+                    title={split ? t('One look for the whole wall: its lines lose the looks of their own') : t('A look for each line of the wall: its faces and its ends')}
+                    active={split}
+                    onClick={() => {
+                      if (split && wall.edges) apply([{ op: 'update_node', id: wall.id, patch: { edges: null } }])
+                      setByEdge(!split)
+                    }}
+                  >
+                    <SquareSplitHorizontal size={13} />
+                  </IconButton>
+                )}
+                <IconButton title={t('Copy the look of another object: click it on the drawing')} onClick={() => setTool('eyedropper')}>
+                  <Pipette size={13} />
+                </IconButton>
+              </span>
             ) : undefined
           }
         >
-          {fields
+          {shown
             .filter((f) => (f.section ?? GEOMETRY) === title)
             .map((field) => (
               <TypedRow key={field.path} node={node} nodes={nodes} field={field} update={update} />
             ))}
+          {title === STROKE && wall && split && <WallEdges wall={wall} />}
           {title === GEOMETRY && nodes.length === 1 && 'a' in node && (
             <label className="field">
               <span>{t('Length')}</span>
@@ -526,48 +579,6 @@ function ModifierStack({ node }: { node: Node }) {
         )
       })}
       {list.length > 1 && <p className="hint">{t('Applied from the top down: each works on the result of the one above it.')}</p>}
-    </Section>
-  )
-}
-
-/** A field that does something with the number typed into it, then empties: "turn by 30", "scale to 150 %". */
-function ActionField({ label, placeholder, run }: { label: string; placeholder: string; run: (value: number) => void }) {
-  const [text, setText] = useState('')
-  const go = () => {
-    const value = parseNumber(text)
-    setText('')
-    if (Number.isFinite(value)) run(value)
-  }
-  return (
-    <label className="field">
-      <span>{label}</span>
-      <input value={text} placeholder={placeholder} onChange={(e) => setText(e.target.value)} onBlur={go} onKeyDown={(e) => e.key === 'Enter' && go()} />
-    </label>
-  )
-}
-
-/** Turning, mirroring and resizing whatever is selected, as one thing. */
-function TransformSection() {
-  return (
-    <Section title={t('Transform')}>
-      <div className="field">
-        <span>{t('Turn, flip')}</span>
-        <IconButton title={t('Rotate 90° clockwise')} onClick={() => transformSelection({ rotation: 90 })}>
-          <RotateCw size={14} />
-        </IconButton>
-        <IconButton title={t('Rotate 90° counter-clockwise')} onClick={() => transformSelection({ rotation: -90 })}>
-          <RotateCcw size={14} />
-        </IconButton>
-        <IconButton title={t('Flip left to right')} onClick={() => transformSelection({ mirror: 'horizontal' })}>
-          <FlipHorizontal2 size={14} />
-        </IconButton>
-        <IconButton title={t('Flip top to bottom')} onClick={() => transformSelection({ mirror: 'vertical' })}>
-          <FlipVertical2 size={14} />
-        </IconButton>
-      </div>
-      <ActionField label={t('Rotate by')} placeholder={t('degrees, then Enter')} run={(degrees) => transformSelection({ rotation: degrees })} />
-      <ActionField label={t('Scale to')} placeholder={t('percent, then Enter')} run={(percent) => transformSelection({ scale: percent / 100 })} />
-      <p className="hint">{t('On the drawing, drag a corner of the box around the selection to scale it and the round handle to turn it. The arrow keys move it by one grid step.')}</p>
     </Section>
   )
 }
@@ -792,6 +803,7 @@ function Selection({ nodes }: { nodes: Node[] }) {
           </IconButton>
         </div>
         {nodes.every((n) => n.type === 'wall') && <WallTypeChoice walls={nodes as Extract<Node, { type: 'wall' }>[]} />}
+        {single && node.type === 'wall' && <WallEnds wall={node} />}
         {single && node.type === 'wall' && <WallCurve wall={node} />}
         {single && node.type === 'paper' && <PaperSheet node={node} update={update} />}
         {single && node.type === 'room' && <RoomFacts node={node} />}
@@ -869,7 +881,6 @@ function Selection({ nodes }: { nodes: Node[] }) {
       )}
       <Sections node={node} nodes={nodes} fields={single ? fieldsOf(node) : commonFields(nodes)} update={update} pick />
       {single && <ModifierStack node={node} />}
-      <TransformSection />
     </>
   )
 }
@@ -922,7 +933,202 @@ function AnnotationTool() {
 }
 
 /** The kinds of joint a corner of two walls can have. */
-const JOINS = options(['miter', msg('Mitred (sharp corner)')], ['round', msg('Rounded')], ['bevel', msg('Cut off')], ['butt', msg('One wall runs through')])
+/**
+ * The ways two walls can be joined, each with its name and a small picture of the corner. In the
+ * pictures the tinted wall is "this wall" where the joint is chosen for one wall: the one that
+ * passes, or the one that stops.
+ */
+type JointChoice = 'auto' | 'miter' | 'round' | 'bevel' | 'through' | 'butt'
+const JOINT_PICTURES: Record<JointChoice, { name: string; own?: string; lines: string }> = {
+  // Automatic has no picture of its own: it shows what it comes to at the corner's angle (see `JointPicker`).
+  auto: { name: msg('Automatic: a sharp corner, cut off when the angle is too sharp'), lines: 'M5 16V4h18M11 16v-6h12' },
+  miter: { name: msg('Sharp corner, at any angle'), lines: 'M5 16V4h18M11 16v-6h12' },
+  round: { name: msg('Rounded'), lines: 'M5 16V10a6 6 0 0 1 6-6h12M11 16v-6h12' },
+  bevel: { name: msg('Cut off, at any angle'), lines: 'M5 16V8.5L9.5 4H23M11 16v-6h12' },
+  through: { name: msg('This wall runs past the other'), own: 'M5 4h18v6H5z', lines: 'M5 4h18M5 10h18M5 4v6M5 16v-6M11 16v-6' },
+  butt: { name: msg('This wall stops against the other'), own: 'M11 4h12v6H11z', lines: 'M5 16V4h6v12M11 4h12M11 10h12' },
+}
+
+/** A row of small pictures of joints to pick one from, like the ends of a line. */
+function JointPicker(props: { choices: JointChoice[]; value: JointChoice | undefined; names?: Partial<Record<JointChoice, string>>; cuts?: boolean; onPick: (value: JointChoice) => void }) {
+  return (
+    <div className="end-picker joint-picker" role="radiogroup">
+      {props.choices.map((choice) => {
+        const name = t(props.names?.[choice] ?? JOINT_PICTURES[choice].name)
+        return (
+          <button key={choice} type="button" role="radio" aria-checked={choice === props.value} className={choice === props.value ? 'active' : ''} title={name} aria-label={name} onClick={() => props.onPick(choice)}>
+            <svg width="28" height="20" viewBox="0 0 28 20" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" strokeLinecap="round">
+              {JOINT_PICTURES[choice].own && <path d={JOINT_PICTURES[choice].own} fill="currentColor" fillOpacity="0.22" stroke="none" />}
+              {/* Automatic is drawn as what it gives here and now, sharp or cut off, with an "A" to say it chose. */}
+              <path d={choice === 'auto' && props.cuts ? JOINT_PICTURES.bevel.lines : JOINT_PICTURES[choice].lines} />
+              {choice === 'auto' && (
+                <text x="20.5" y="19" fontSize="8" fontWeight="700" fill="currentColor" stroke="none" textAnchor="middle">
+                  A
+                </text>
+              )}
+            </svg>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * How a wall is finished at each of its ends, said from the wall's own side: mitred, rounded, cut
+ * off, simply meeting the other wall, running past it or stopping against it. An end is a corner
+ * shared with another wall, so choosing here sets both walls, and they cannot disagree: when this
+ * wall runs past, the other stops. An end that meets no wall, or more than one, has no choice to make.
+ */
+function WallEnds({ wall }: { wall: Extract<Node, { type: 'wall' }> }) {
+  const doc = useStore((s) => s.doc)
+  const scope = useStore((s) => s.scope)
+  const rows = (['a', 'b'] as const).map((end) => {
+    const ends = wallEndsAt(doc, scope, wall[end])
+    const mine = ends.findIndex((other) => other.wall.id === wall.id && other.end === end)
+    if (ends.length !== 2 || mine < 0) return { end, note: ends.length < 2 ? t('free end') : t('{n} walls meet here, mitred', { n: ends.length }) }
+    const joint = cornerJoin(ends)
+    // A butt joint is one of two things for this wall: it is the one that passes, or the one that stops.
+    const value: JointChoice = joint === 'butt' ? (wall.joins?.[end] === 'through' || (wall.joins?.[end] !== 'butt' && ends[1 - mine].wall.joins?.[ends[1 - mine].end] === 'butt') ? 'through' : 'butt') : joint
+    const pick = (choice: JointChoice) => apply(choice === 'through' ? cornerJoinOps(ends, 'butt', mine) : choice === 'butt' ? cornerJoinOps(ends, 'butt', 1 - mine) : cornerJoinOps(ends, choice))
+    return { end, value, pick, cuts: autoJoinCuts(ends) }
+  })
+  return (
+    <>
+      {rows.map((row) => (
+        <div key={row.end} className="field">
+          <span>{row.end === 'a' ? t('At its start') : t('At its end')}</span>
+          {row.pick ? <JointPicker choices={['auto', 'miter', 'bevel', 'round', 'through', 'butt']} value={row.value} cuts={row.cuts} onPick={row.pick} /> : <em className="faint">{row.note}</em>}
+        </div>
+      ))}
+    </>
+  )
+}
+
+/**
+ * The lines of a wall one by one, once its look is split: its two faces, as it runs from its
+ * start to its end, and the lines across its two ends. Each can be hidden, and given a colour, a
+ * weight and a kind of line of its own; what it leaves unset is the wall's. The line at an end
+ * is shared with a wall joined there, so whether it is drawn is set for both.
+ */
+function WallEdges({ wall }: { wall: Extract<Node, { type: 'wall' }> }) {
+  const doc = useStore((s) => s.doc)
+  const rows: { id: 'left' | 'right' | 'a' | 'b'; name: string; shown: boolean }[] = [
+    { id: 'left', name: msg('Left face'), shown: wall.edges?.left?.show !== false },
+    { id: 'right', name: msg('Right face'), shown: wall.edges?.right?.show !== false },
+    { id: 'a', name: msg('At its start'), shown: endLineShown(doc, wall, 'a') },
+    { id: 'b', name: msg('At its end'), shown: endLineShown(doc, wall, 'b') },
+  ]
+  // What a line takes when it says nothing: the wall's own look, else its type's, else the layer's colour.
+  const type = wall.wallType ? doc.wallTypes?.[wall.wallType] : undefined
+  const layer = wall.layer ? doc.layers[wall.layer] : undefined
+  const inherited = {
+    stroke: (resolveColor(doc, wall.style?.stroke ?? type?.stroke ?? layer?.color) as string | undefined) ?? '#1f1f1f',
+    strokeWidth: wall.style?.strokeWidth ?? type?.strokeWidth ?? 1,
+    dash: wall.style?.dash ?? type?.dash,
+  }
+  const set = (id: 'left' | 'right' | 'a' | 'b', change: Partial<WallEdge>) => {
+    // Read afresh: a choice may change the drawing twice in a row (show the line, then give it a kind).
+    const now = useStore.getState().doc
+    const fresh = now.nodes[wall.id]
+    if (fresh?.type !== 'wall') return
+    // The line at an end joined to one other wall is one line for both: its look is given to both ends.
+    const ends = id === 'a' || id === 'b' ? wallEndsAt(now, fresh.parent, fresh[id]) : []
+    const owners = ends.length === 2 ? ends : [{ wall: fresh, end: id }]
+    apply(
+      owners.map(({ wall: owner, end }): Op => {
+        const edge: Record<string, unknown> = { ...owner.edges?.[end], ...change }
+        for (const key of Object.keys(edge)) if (edge[key] === undefined) delete edge[key]
+        return { op: 'update_node', id: owner.id, patch: { edges: withEdge(owner.edges, end, edge as WallEdge) } }
+      }),
+    )
+  }
+  const show = (id: 'left' | 'right' | 'a' | 'b', shown: boolean) => (id === 'a' || id === 'b' ? apply(endLineOps(useStore.getState().doc, wall, id, shown)) : set(id, { show: shown ? undefined : false }))
+  const point = (edge: 'left' | 'right' | 'a' | 'b' | null) => useStore.setState({ edgeHover: edge ? { wall: wall.id, edge } : null })
+  // Once the panel goes (another selection, nothing selected), no line stays lit.
+  useEffect(() => () => useStore.setState({ edgeHover: null }), [])
+  /** A property row of a line: its value, and whether it is the line's own or taken from the wall. */
+  const row = (label: string, own: boolean, reset: () => void, control: ReactNode) => (
+    <div className={`typed-row${own ? ' own' : ''}`}>
+      <div className="field">
+        <span>{t(label)}</span>
+        {control}
+      </div>
+      {own ? (
+        <IconButton title={t('Its own. Click to take the wall’s again')} onClick={reset}>
+          <Undo2 size={12} />
+        </IconButton>
+      ) : (
+        <i className="typed-mark" title={t('Inherited from the wall')}>
+          <Link2 size={11} />
+        </i>
+      )}
+    </div>
+  )
+  return (
+    <div className="wall-edges" onPointerLeave={() => point(null)}>
+      {rows.map((line) => {
+        const edge = wall.edges?.[line.id]
+        return (
+          <div key={line.id} className={`wall-edge${line.shown ? '' : ' off'}`} onPointerEnter={() => point(line.id)}>
+            <div className="wall-edge-head">
+              <strong>{t(line.name)}</strong>
+              {!line.shown && <em className="faint">{t('no line')}</em>}
+            </div>
+            {row(
+              'Line',
+              // Not drawn because of how the joint is made is not the wall's own choice.
+              edge?.dash !== undefined || edge?.show !== undefined,
+              () => {
+                if (line.id === 'left' || line.id === 'right') return set(line.id, { dash: undefined, show: undefined })
+                // An end goes back to what its joint usually does, for both walls there.
+                const ends = wallEndsAt(doc, wall.parent, wall[line.id])
+                apply(
+                  (ends.length === 2 ? ends : [{ wall, end: line.id }]).map(({ wall: owner, end }): Op => {
+                    const { show: _, dash: __, ...look } = owner.edges?.[end] ?? {}
+                    return { op: 'update_node', id: owner.id, patch: { edges: withEdge(owner.edges, end, look) } }
+                  }),
+                )
+              },
+              // No line is one of the kinds of line: the line is then not drawn at all.
+              <DashPicker
+                value={edge?.dash ?? inherited.dash}
+                faint={edge?.dash === undefined && line.shown}
+                hidden={{ chosen: !line.shown, onPick: () => show(line.id, false) }}
+                onPick={(pattern) => {
+                  if (!line.shown) show(line.id, true)
+                  set(line.id, { dash: pattern ?? undefined, ...(line.id === 'left' || line.id === 'right' ? { show: undefined } : {}) })
+                }}
+              />,
+            )}
+            {line.shown && (
+              <>
+                {row(
+                  'Color',
+                  edge?.stroke !== undefined,
+                  () => set(line.id, { stroke: undefined }),
+                  <ColorChoice key={`${wall.id} ${line.id}`} stored={edge?.stroke} fallback={inherited.stroke} unset={msg('inherited')} commit={(stroke) => set(line.id, { stroke: stroke as string | undefined })} />,
+                )}
+                {row(
+                  'Weight',
+                  edge?.strokeWidth !== undefined,
+                  () => set(line.id, { strokeWidth: undefined }),
+                  <select className={edge?.strokeWidth === undefined ? 'faint-choice' : ''} value={penOf(edge?.strokeWidth ?? inherited.strokeWidth)} onChange={(e) => set(line.id, { strokeWidth: pixelsOf(Number(e.target.value)) })}>
+                    {(PENS.includes(penOf(edge?.strokeWidth ?? inherited.strokeWidth)) ? PENS : [...PENS, penOf(edge?.strokeWidth ?? inherited.strokeWidth)].sort((p, q) => p - q)).map((mm) => (
+                      <option key={mm} value={mm}>
+                        {mm} mm
+                      </option>
+                    ))}
+                  </select>,
+                )}
+              </>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
 
 /**
  * A wall corner: the point where wall ends meet. It is not an object of the drawing, so what is
@@ -957,15 +1163,20 @@ function CornerPanel({ at }: { at: { x: number; y: number } }) {
       </Section>
       {ends.length === 2 && (
         <Section title={t('Joint')}>
-          <label className="field">
+          <div className="field">
             <span>{t('Type')}</span>
-            <select value={join} onChange={(e) => apply(cornerJoinOps(ends, e.target.value as typeof join, passing))}>
-              {JOINS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {t(option.label)}
-                </option>
-              ))}
-            </select>
+            {/* Seen from the corner there is one butt joint; which wall passes is chosen below. */}
+            <JointPicker
+              choices={['auto', 'miter', 'bevel', 'round', 'through']}
+              cuts={autoJoinCuts(ends)}
+              names={{ through: msg('One wall runs through') }}
+              value={join === 'butt' ? 'through' : join}
+              onPick={(choice) => apply(cornerJoinOps(ends, choice === 'through' ? 'butt' : (choice as Exclude<JointChoice, 'through' | 'butt'>), passing))}
+            />
+          </div>
+          <label className="field">
+            <span>{t('Line between them')}</span>
+            <input type="checkbox" checked={endLineShown(doc, ends[0].wall, ends[0].end)} onChange={(e) => apply(endLineOps(doc, ends[0].wall, ends[0].end, e.target.checked))} />
           </label>
           {join === 'butt' && (
             <button className="text-button" onClick={() => apply(cornerJoinOps(ends, 'butt', passing === 0 ? 1 : 0))}>
@@ -1069,7 +1280,7 @@ export function Properties() {
           <Section title={t('Properties')}>
             <p className="hint">{t('Select an object to edit it. Lengths are in {unit}; the unit is set in Preferences.', { unit: unit() })}</p>
             <p className="hint">
-              {t('Scroll to zoom, drag with the middle button or hold Space to pan. Shift constrains angles, Alt turns snapping off, Esc finishes.')}
+              {t('Scroll to zoom, drag with the middle button or hold Space to pan; a tap on Space goes back to selecting. Shift constrains angles, Alt turns snapping off, Esc finishes.')}
             </p>
           </Section>
         )}

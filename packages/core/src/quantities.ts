@@ -196,13 +196,58 @@ export const QUANTITY_LABELS: QuantityLabels = {
   volume: 'Volume (m³)',
 }
 
+/** The same words for a table in feet and inches. */
+export const IMPERIAL_QUANTITY_LABELS: QuantityLabels = {
+  ...QUANTITY_LABELS,
+  area: 'Area (ft²)',
+  length: 'Length (ft)',
+  thickness: 'Thickness (in)',
+  height: 'Height (ft)',
+  width: 'Width (ft)',
+  footprint: 'Footprint (ft²)',
+  gross: 'Face area, gross (ft²)',
+  cut: 'Openings (ft²)',
+  net: 'Face area, net (ft²)',
+  volume: 'Volume (ft³)',
+}
+
+/** Quantities measured in metres, square metres, cubic metres and millimetres, turned to feet, square feet, cubic feet and inches. */
+function imperial(q: Quantities): Quantities {
+  const scaled = (factor: number, digits: number) => (value: number) => round(value * factor, digits)
+  const maybe = (convert: (value: number) => number) => (value: number | null) => (value === null ? null : convert(value))
+  const ft = scaled(1 / 0.3048, 2)
+  const ft2 = scaled(1 / 0.3048 ** 2, 2)
+  const ft3 = scaled(1 / 0.3048 ** 3, 2)
+  const inches = scaled(1 / 25.4, 2)
+  return {
+    rooms: q.rooms.map((room) => ({ ...room, area: ft2(room.area) })),
+    walls: q.walls.map((w) => ({ ...w, length: ft(w.length), thickness: inches(w.thickness), height: maybe(ft)(w.height), footprint: ft2(w.footprint), gross: maybe(ft2)(w.gross), cut: maybe(ft2)(w.cut), net: maybe(ft2)(w.net), volume: maybe(ft3)(w.volume) })),
+    openings: q.openings.map((o) => ({ ...o, width: ft(o.width), height: maybe(ft)(o.height) })),
+    types: q.types.map((type) => ({
+      ...type,
+      thickness: maybe(inches)(type.thickness),
+      length: ft(type.length),
+      net: maybe(ft2)(type.net),
+      volume: maybe(ft3)(type.volume),
+      layers: type.layers.map((layer) => ({ ...layer, thickness: maybe(inches)(layer.thickness), area: maybe(ft2)(layer.area), volume: maybe(ft3)(layer.volume) })),
+    })),
+  }
+}
+
 /**
  * Quantities as a CSV file a spreadsheet opens: one table after another, each under its title.
  * `separator` and `decimal` follow what spreadsheets expect where the file will be opened (a
- * semicolon and a decimal comma in most of Europe). A value that is not known is an empty cell.
+ * semicolon and a decimal comma in most of Europe). With `system: 'imperial'` the lengths are in
+ * feet, the areas in square feet, the volumes in cubic feet and the thicknesses in inches. A value
+ * that is not known is an empty cell.
  */
-export function quantitiesCsv(q: Quantities, options: { separator?: string; decimal?: string; labels?: QuantityLabels; name?: (kindLabel: string) => string } = {}): string {
-  const { separator = ',', decimal = '.', labels: l = QUANTITY_LABELS, name = (label: string) => label } = options
+export function quantitiesCsv(
+  given: Quantities,
+  options: { separator?: string; decimal?: string; labels?: QuantityLabels; name?: (kindLabel: string) => string; system?: 'metric' | 'imperial' } = {},
+): string {
+  const { separator = ',', decimal = '.', name = (label: string) => label, system = 'metric' } = options
+  const l = options.labels ?? (system === 'imperial' ? IMPERIAL_QUANTITY_LABELS : QUANTITY_LABELS)
+  const q = system === 'imperial' ? imperial(given) : given
   const cell = (value: string | number | null): string => {
     if (value === null) return ''
     if (typeof value === 'number') return String(value).replace('.', decimal)

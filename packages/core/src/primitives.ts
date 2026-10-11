@@ -29,6 +29,8 @@ export interface PrimStyle {
    * `style` then does not override it; unset values still fall back to the layer color and defaults.
    */
   own?: boolean
+  /** Its own stroke, weight and dash win over the node's style; what it leaves unset still comes from the style. */
+  over?: boolean
   /**
    * A surface other things lie on: it is painted beneath them whatever its place in the stacking
    * order, and its fill cannot be clicked (only its outline, if it has one), so that what lies on

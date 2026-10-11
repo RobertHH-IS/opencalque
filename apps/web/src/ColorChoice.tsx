@@ -158,29 +158,56 @@ const PATTERNS: [kind: string, name: string, picture: string][] = [
 ]
 
 /**
- * What a fill is patterned with: the kind of pattern from a row of pictures, how far apart its
- * strokes are, how they are turned, and their colour.
+ * What a fill is patterned with, as rows of the Fill section: the kind of pattern from a row of
+ * pictures, "none" first, then, once there is one, how far apart its strokes are, how they are
+ * turned and their colour. `none` false leaves out the "none" picture, where something else says
+ * whether there is a pattern (a wall type's tick box). `faint` shows a pattern taken from elsewhere.
  */
-function PatternControls({ value, onChange }: { value: Pattern; onChange: (next: Pattern) => void }) {
-  const usual = PATTERN_DEFAULTS[value.kind] ?? { spacing: 100, angle: 0 }
+export function PatternRows({ label, value, onChange, none = true, mixed = false, faint = false }: { label?: string; value: Pattern | undefined; onChange: (next: Pattern | undefined) => void; none?: boolean; mixed?: boolean; faint?: boolean }) {
+  const patterned = value && value.kind !== 'None' ? value : undefined
+  const usual = (patterned && PATTERN_DEFAULTS[patterned.kind]) ?? { spacing: 100, angle: 0 }
+  const keep = (stroke: string | undefined) => (stroke === undefined ? {} : { stroke })
   return (
-    <div className="pattern-controls">
-      <div className="end-picker pattern-picker" role="radiogroup" aria-label={t('Pattern')}>
-        {PATTERNS.map(([kind, name, picture]) => (
-          // Its own spacing and angle suit each pattern; choosing another starts from those again.
-          <button key={kind} type="button" role="radio" aria-checked={kind === value.kind} className={kind === value.kind ? 'active' : ''} title={t(name)} aria-label={t(name)} onClick={() => onChange({ kind, ...(value.stroke ? { stroke: value.stroke } : {}) })}>
-            <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round">
-              <path d={picture} />
-            </svg>
-          </button>
-        ))}
+    <div className="pattern-rows">
+      {/* Not a label: a label would hand every click to the first button in it. */}
+      <div className="field">
+        {label !== undefined && <span>{label}</span>}
+        <div className={`end-picker pattern-picker${faint ? ' faint-choice' : ''}`} role="radiogroup" aria-label={t('Pattern')}>
+          {none && (
+            <button type="button" role="radio" aria-checked={!patterned && !mixed} className={!patterned && !mixed ? 'active' : ''} title={t('No pattern')} aria-label={t('No pattern')} onClick={() => onChange(undefined)}>
+              <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round">
+                <path d="M9 14 19 4" opacity="0.6" />
+              </svg>
+            </button>
+          )}
+          {PATTERNS.map(([kind, name, picture]) => (
+            // Its own spacing and angle suit each pattern; choosing another starts from those again.
+            <button key={kind} type="button" role="radio" aria-checked={kind === patterned?.kind} className={kind === patterned?.kind ? 'active' : ''} title={t(name)} aria-label={t(name)} onClick={() => onChange({ kind, ...keep(patterned?.stroke) })}>
+              <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round">
+                <path d={picture} />
+              </svg>
+            </button>
+          ))}
+        </div>
       </div>
-      <Field label={t('Spacing')} numeric length min={1} value={value.spacing ?? usual.spacing} onCommit={(spacing: number) => spacing > 0 && onChange({ ...value, spacing })} />
-      <Field label={t('Angle')} numeric value={value.angle ?? usual.angle} onCommit={(angle: number) => onChange({ ...value, angle })} />
-      <label className="field">
-        <span>{t('Strokes')}</span>
-        <input type="color" className="swatch" value={value.stroke && /^#[0-9a-f]{6}$/i.test(value.stroke) ? value.stroke : '#9aa3b2'} onChange={(e) => onChange({ ...value, stroke: e.target.value })} />
-      </label>
+      {patterned && (
+        <>
+          <Field label={t('Spacing')} numeric length min={1} value={patterned.spacing ?? usual.spacing} onCommit={(spacing: number) => spacing > 0 && onChange({ ...patterned, spacing })} />
+          <Field label={t('Angle')} numeric value={patterned.angle ?? usual.angle} onCommit={(angle: number) => onChange({ ...patterned, angle })} />
+          <div className="field">
+            <span>{t('Strokes')}</span>
+            <ColorChoice
+              stored={patterned.stroke}
+              fallback="#9aa3b2"
+              unset={msg('default')}
+              commit={(stroke) => {
+                const { stroke: _, ...rest } = patterned
+                onChange({ ...rest, ...keep(stroke as string | undefined) })
+              }}
+            />
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -190,32 +217,29 @@ function PatternControls({ value, onChange }: { value: Pattern; onChange: (next:
  * a picker for any colour, then the colours picked lately, then the drawing's shared colours. A
  * property linked to a shared colour shows that colour's name with a link and follows it whenever
  * it changes; picking another colour gives it one of its own again. `compact` shows only the
- * swatch, for a row of a list or a bar, where there is no room for the name.
- *
- * It is the one place that says what something is filled with. For a fill, `pattern` is given
- * too, and the window starts with a choice between a plain colour and a pattern over it; for
- * the colour of a line or of a layer there is no such choice, a line having nothing to pattern.
+ * swatch, for a row of a list or a bar, where there is no room for the name. A fill's pattern is
+ * not chosen here but on rows of its own, under the fill's colour (`PatternRows`).
  */
-export interface PatternChoice {
-  /** The pattern as it is: the property's own, or the one it takes from elsewhere (a wall type). */
-  value: Pattern | undefined
-  /** Whether leaving it unset would still give a pattern, so that "plain" has to be said. */
-  inherited?: boolean
-  commit: (pattern: Pattern | undefined) => void
-}
-
-export function ColorChoice({ stored, fallback, unset, commit, compact, title, pattern }: { stored: string | undefined; fallback: string; unset?: string; commit: (value: unknown) => void; compact?: boolean; title?: string; pattern?: PatternChoice }) {
+export function ColorChoice({ stored, fallback, unset, commit, compact, title }: { stored: string | undefined; fallback: string; unset?: string; commit: (value: unknown) => void; compact?: boolean; title?: string }) {
   const doc = useStore((s) => s.doc)
   const recent = useRecent((s) => s.colors)
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLSpanElement>(null)
   const menu = useRef<HTMLDivElement>(null)
   const [place, setPlace] = useState<{ left: number; top: number } | null>(null)
+  /** Set while the press that closed the window from elsewhere has not ended: the click it ends with must not open it again. */
+  const closing = useRef(false)
   useEffect(() => {
     if (!open) return
     const onPointerDown = (e: PointerEvent) => {
       // The window is drawn outside the field (see below), so a press in either is not a press elsewhere.
-      if (!box.current?.contains(e.target as HTMLElement) && !menu.current?.contains(e.target as HTMLElement)) setOpen(false)
+      if (!box.current?.contains(e.target as HTMLElement) && !menu.current?.contains(e.target as HTMLElement)) {
+        closing.current = true
+        // The click of that press reaches the window last, after any button it was on.
+        window.addEventListener('click', () => setTimeout(() => (closing.current = false)), { once: true })
+        setTimeout(() => (closing.current = false), 1500)
+        setOpen(false)
+      }
     }
     // The window is placed against the field once; when the panel scrolls under it, it closes.
     const onScroll = (e: Event) => {
@@ -236,8 +260,12 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title, p
   }, [open])
   // The window has a width of its own, whatever the width of the field: it hangs under the field,
   // ending where the field ends, goes above it when there is no room below, and stays in the window.
+  // It is placed once, when it opens: one that moved as its content grew or shrank (a pattern's
+  // settings shown or gone) would jump away from under the pointer between two clicks. What no
+  // longer fits below scrolls inside it.
   useLayoutEffect(() => {
     if (!open || !box.current || !menu.current) return setPlace(null)
+    if (place) return
     const field = box.current.getBoundingClientRect()
     const list = menu.current.getBoundingClientRect()
     const margin = 8
@@ -245,14 +273,13 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title, p
     const below = field.bottom + 4
     const top = below + list.height + margin <= window.innerHeight ? below : Math.max(margin, field.top - 4 - list.height)
     setPlace({ left, top })
-  }, [open, doc.colors, recent.length, stored === undefined, colorRefOf(stored), pattern?.value?.kind])
+  }, [open, place])
 
   const linked = colorRefOf(stored)
   const shared = linked === null ? undefined : doc.colors?.[linked]
   // What is painted: the shared colour's value, the property's own colour, or what it falls back on.
   const shown = resolveColor(doc, stored) ?? fallback
   const colors = colorsOf(doc)
-  const patterned = pattern?.value && pattern.value.kind !== 'None' ? pattern.value : undefined
 
   /** Makes a shared colour out of the one shown and links this property to it. */
   const share = () => {
@@ -267,9 +294,13 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title, p
         type="button"
         className={`color-now${linked ? ' linked' : ''}`}
         title={linked ? `${title ? `${title}: ` : ''}${shared?.name ?? t('Missing colour')}. ${t('Linked to a shared colour: it changes when that colour does')}` : (title ?? t('Choose a colour'))}
-        onClick={() => setOpen(!open)}
+        onClick={() => {
+          // The end of the press that closed it, as on the name of a row that hands its clicks to this button.
+          if (closing.current) return
+          setOpen(!open)
+        }}
       >
-        <i className={patterned ? 'patterned' : ''} style={{ backgroundColor: shown }} />
+        <i style={{ backgroundColor: shown }} />
         {compact ? (
           linked && <Link2 size={9} />
         ) : linked ? (
@@ -287,26 +318,7 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title, p
         // Drawn at the top of the page, not inside the field: a bar that is moved into place with a
         // transform would otherwise take the window along and put it somewhere else.
         createPortal(
-          <div className="color-menu" ref={menu} style={place ? { left: place.left, top: place.top } : { visibility: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-            {pattern && (
-              <>
-                <div className="fill-modes" role="radiogroup" aria-label={t('Fill')}>
-                  {/* Plain: no pattern. Said outright where one would otherwise come from the wall's type. */}
-                  <button type="button" role="radio" aria-checked={!patterned} className={patterned ? '' : 'active'} onClick={() => pattern.commit(pattern.inherited ? { kind: 'None' } : undefined)}>
-                    {t('Plain')}
-                  </button>
-                  <button type="button" role="radio" aria-checked={!!patterned} className={patterned ? 'active' : ''} onClick={() => !patterned && pattern.commit({ kind: 'Lines' })}>
-                    {t('Pattern')}
-                  </button>
-                </div>
-                {patterned && (
-                  <>
-                    <PatternControls value={patterned} onChange={pattern.commit} />
-                    <h4>{t('Background')}</h4>
-                  </>
-                )}
-              </>
-            )}
+          <div className="color-menu" ref={menu} style={place ? { left: place.left, top: place.top, maxHeight: `calc(100vh - ${place.top + 8}px)` } : { visibility: 'hidden' }} onClick={(e) => e.stopPropagation()}>
             <Picker value={shown} onChange={commit} onSettle={remember} />
             {linked && (
               <button type="button" className="color-option" title={t('Linked to a shared colour: it changes when that colour does')} onClick={() => commit(shown)}>
@@ -335,7 +347,7 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title, p
             {!linked && (
               <button type="button" className="color-option" onClick={share}>
                 <Plus size={12} />
-                <span>{t('New shared colour from this one')}</span>
+                <span>{t('New shared colour')}</span>
               </button>
             )}
             {stored !== undefined && (

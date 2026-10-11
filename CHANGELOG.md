@@ -4,6 +4,42 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 0.7.0 — 2026-10-11
+
+### New
+- Feet and inches. A new unit in Preferences shows and reads lengths the way American plans do, as 7' 6 1/2", to the nearest half, quarter, eighth, sixteenth or thirty-second of an inch. Type them as you like: 7'6", 7' 6 1/2", 7-6, 90". Dimensions can be shown that way too, and whatever the unit in use, a length typed in feet and inches is understood.
+- A Split tool in the toolbar (K): point at a wall, a line or a polyline and it shows where it would be cut, with the length of each part on either side, measured by a line with arrows from each end to the cut (following a curved wall); click to cut it there. The cut keeps to whole grid steps from the start, or to where another object lines up; Alt cuts exactly under the pointer.
+- A Rotate tool (E): click the point to turn about, then a second point for the line the turn starts from, then the selection turns with the pointer, the angle shown between the two lines; click to apply, or type the angle. It shares a button with Mirror horizontally and Mirror vertically (the new names of the two flips), which act on the selection at once. The Transform section of the properties is gone: the box around a selection still scales from its corners.
+- Split the wall in two, in the Object menu: the wall becomes two, with a corner in its middle (the Split tool cuts it wherever you point). Split it twice and the part in between is a wall of its own, to delete or to change.
+- A tap on Space puts down the wall or shape being drawn and goes back to the Select tool, which is usually what comes next; held, Space still moves the view.
+
+### Fixed
+- Curved walls joined to another wall, curved or straight, no longer grow a spike, a triangle or a stray corner at the joint: the corner is found where the faces really meet ahead of the joint, not along a tangent nor where a curve crosses the other wall a second time. Two tightly curved walls that leave their joint almost the same way and bend apart (a wall cut in two, then each half curved) meet where their faces cross, and the line drawn between them runs there instead of doubling the cut-off corner.
+- The line where two walls meet now takes the colour, weight and kind of line given to it from either wall; before, only one of the two walls was listened to, so a change made from the other seemed to do nothing. Picking a kind of line for an end that had none now shows it at once.
+- A selected object with a patterned fill is outlined in blue, its pattern left as it is: the pattern was lit up too and hid the shape.
+- The colour window no longer jumps above or below its field when what it shows changes; it stays where it opened and scrolls when it is too tall.
+- A click outside the colour window on the name of its row (Colour, under Stroke or Fill) closes it for good: it used to close and open again at once.
+- Copying an instance of a component and pasting it into the same drawing made a new component, a copy of the first; it now places another instance of the same component. Pasted into another drawing, separate copies of it share one component there too.
+- Angles on the drawing (the angle tool's reading, a rotation) were written as if they were lengths: with lengths in metres, 36° read 0.036°. They are now in degrees whatever the unit.
+- A key pressed while a list of the toolbar or a menu of the menu bar is open closes it; a shortcut still does its work, so W with the shapes list open closes it and takes the wall tool.
+- Closing a run of walls with a double-click no longer draws a tiny extra wall when the pointer moves a pixel or two between the clicks (snapping could take it to the next grid point or to the face of the wall just drawn), and a slower double-click, as the system counts one, still closes the run.
+
+### Improved
+- The Dimension tool shares a button with Text and Annotation.
+- The lists of the toolbar's buttons are as wide as their longest name, each on one line, and show the tool in use in the accent colour rather than with a tick in front.
+- A double-click on a wall selects the walls joined to it end to end, around a room or along a run, stopping where three walls meet; a second double-click takes in every wall that holds together with it.
+- The look of a shape is in two sections that say what they are about: Stroke (colour, weight, kind of line) and Fill. The fill's pattern has rows of its own under its colour: the kind from a row of pictures, "none" first, then its spacing, angle and stroke colour, so a hatched object shows it at a glance; the colour window is a colour window again, without the Plain and Pattern tabs. A wall shows a pattern from its type as inherited, like its other properties, and wall types tick a pattern apart from a fill. Only what applies is shown: a line has no fill, a polygon no ends.
+- Closing or opening a polyline, and curving it through its points or straightening it, are commands in the Object menu and the right-click menu, not boxes among its measurements.
+- One tool for lines, polylines and polygons. The line tool (L) goes on from point to point: Esc after one segment leaves a line, after several a polyline, and a double-click, or a click back on the first point, closes it into a polygon that can be filled. A click back on the last point, a pixel or two off, ends it rather than adding a tiny segment. The separate polyline tool is gone.
+- The welcome window shows the language and the unit, to correct in one click. At a first start the unit follows the computer: feet and inches where plans are drawn in them, millimetres elsewhere.
+- The look of a wall can be split line by line: the button beside Stroke in a wall's properties opens its two faces and the line across each end. Pointing at one of them rings that line on the drawing, where it is actually drawn (along the joint at a corner), leaving the line itself in sight. Each takes the wall's colour, weight and kind of line, marked as inherited, until it is given its own, which is marked too, with an arrow to go back to the wall's; "no line" is one of the kinds of line. A wall split in two simply has the line at its cut drawn, at any angle and however the halves are moved afterwards; choose no line there and the two read as one wall again. The corner of two walls has the same choice, Line between them.
+- A corner now says what it does. Left alone it is Automatic: a sharp corner, cut off when the walls meet at less than 60°; its picture shows which of the two it is drawing. Sharp corner and Cut off are firm choices that hold at any angle, so a point can be kept on a sharp corner, or a right angle cut off. Drawings open as before: their corners were automatic all along.
+- The joint of a corner is picked from small pictures, and a wall's own properties now show how it is finished at its start and at its end, from its own side: automatic, sharp, cut off, rounded, running past the other wall or stopping against it. Choosing there sets both walls of the corner, so they never disagree.
+- The joint where "one wall runs past the other" is now right at every angle: the wall that stops is cut flat against the face of the one that passes, with no gap and nothing sticking out, and two walls that nearly carry on from one another meet at their corner with the line between them drawn through it. Before, it was only right at a right angle.
+- A double-click now means one thing, going inside what was clicked (a component, a group, a text). It no longer cuts a wall: that is the Split tool.
+- The quantities are exported in feet, square feet, cubic feet and inches when lengths are shown in feet or inches.
+- The arrow keys hold a direction while dragging too, not only while drawing: with the button down on an object, a wall end, a corner or any point of a shape, the up or down arrow keeps the movement upright and the left or right arrow keeps it level. A point or a corner held this way stops level with whatever is pointed at elsewhere, as a wall being drawn does.
+
 ## 0.6.0 — 2026-10-10
 
 ### New

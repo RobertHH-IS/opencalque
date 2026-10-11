@@ -29,17 +29,16 @@ export function toDXF(doc: Document, containerId: string, registry: Registry): s
   // appear. That covers a corner, where two walls share an edge, and a wall ending against the
   // middle of another, whose end is hidden and which opens the side it meets.
   const scene = buildScene(doc, containerId, registry)
-  const walls = scene.flatMap((item) => item.prims.flatMap((prim) => (prim.kind === 'path' && prim.union && prim.points.length > 2 ? [prim.points] : [])))
+  const walls = scene.flatMap((item) => item.prims.flatMap((prim) => (prim.kind === 'path' && prim.union && prim.closed && prim.points.length > 2 ? [prim.points] : [])))
   const NEAR = 0.01
   const onEdge = (p: Vec2, polygon: Vec2[]) => polygon.some((q, i) => distToSegment(p, q, polygon[(i + 1) % polygon.length]) < NEAR)
-  const outside = (a: Vec2, b: Vec2, own: Vec2[]): [Vec2, Vec2][] => {
+  const outside = (a: Vec2, b: Vec2): [Vec2, Vec2][] => {
     const d = { x: b.x - a.x, y: b.y - a.y }
     const length = Math.hypot(d.x, d.y)
     if (length < 1e-9) return []
     // Every place along the edge where another wall's outline crosses it or has a corner on it.
     const cuts = [0, 1]
     for (const other of walls) {
-      if (other === own) continue
       other.forEach((c, i) => {
         const e = other[(i + 1) % other.length]
         const along = ((c.x - a.x) * d.x + (c.y - a.y) * d.y) / (length * length)
@@ -57,7 +56,11 @@ export function toDXF(doc: Document, containerId: string, registry: Registry): s
     for (let i = 0; i + 1 < cuts.length; i++) {
       if ((cuts[i + 1] - cuts[i]) * length < NEAR) continue
       const middle = at((cuts[i] + cuts[i + 1]) / 2)
-      if (walls.some((other) => other !== own && (onEdge(middle, other) || pointInPolygon(middle, other)))) continue
+      // Inside the mass of the walls: there is wall just to either side of this stretch. That holds
+      // for an edge two walls share and for one that lies within another wall, whichever wall it is the edge of.
+      const aside = { x: (-d.y / length) * 0.05, y: (d.x / length) * 0.05 }
+      const walled = (q: Vec2) => walls.some((other) => pointInPolygon(q, other))
+      if (walled({ x: middle.x + aside.x, y: middle.y + aside.y }) && walled({ x: middle.x - aside.x, y: middle.y - aside.y })) continue
       // Stretches that follow one another are one line.
       const last = parts[parts.length - 1]
       if (last && Math.hypot(last[1].x - at(cuts[i]).x, last[1].y - at(cuts[i]).y) < NEAR) last[1] = at(cuts[i + 1])
@@ -75,7 +78,7 @@ export function toDXF(doc: Document, containerId: string, registry: Registry): s
         for (let i = 0; i < count; i++) {
           const a = prim.points[i]
           const b = prim.points[(i + 1) % prim.points.length]
-          if (prim.union && prim.points.length > 2) for (const [from, to] of outside(a, b, prim.points)) line(layer, from, to, prim.clip)
+          if (prim.union) for (const [from, to] of outside(a, b)) line(layer, from, to, prim.clip)
           else line(layer, a, b, prim.clip)
         }
       } else if (prim.kind === 'ellipse') {

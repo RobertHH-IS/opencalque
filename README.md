@@ -80,7 +80,7 @@ pnpm dist         # build the installer for the system you are on, into apps/des
 - Lines, rectangles, ellipses and arcs, polylines straight or curved, and annotations with curved, straight or elbowed leaders.
 - Text typed in place, on several lines, bold or not, aligned left, centred or right, with fields such as `{date}` or `{page}` that fill themselves in.
 - Line weights in printed millimetres, dashed and dotted lines, arrows at the ends.
-- Exact sizes: type a length or an angle while drawing, in mm, cm, m, inches or feet.
+- Exact sizes: type a length or an angle while drawing, in mm, cm, m, inches, feet, or feet and inches with fractions.
 - Wall types with a thickness, a fill and layers, shared by the walls built as them.
 - Dimensions with configurable ends, text and units, and chains of them along walls and their openings; a measure tool that only reads.
 
@@ -150,13 +150,13 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Trace a floor plan | File → Import, and pick a PDF or a picture (PNG, JPG, WebP…). Then set its scale: click two points whose real distance you know and type that distance (`3500`, `350 cm`, `3.5 m`). The plan is then locked so you can draw over it |
 | Assistant | The Assistant tab on the right (`Ctrl+J`) changes the drawing from a description, such as "draw a 5 × 4 m room with a door on the bottom wall". Each request is undone with one undo. It needs an AI provider, set up in Preferences |
 | Conversations | The assistant keeps your conversations: pick one at the top of its panel, or type `/resume`. `/new` starts one, `/model` changes the model (also the list under the message), `/clear` deletes. Paste a picture (`Ctrl+V`) or use the paperclip to show it a sketch |
-| Units | Preferences → Unit: millimetres, centimetres, metres, inches or feet. A different unit can always be typed after a number (`350 cm`) |
+| Units | Preferences → Unit: millimetres, centimetres, metres, inches, feet, or feet and inches (`7' 6 1/2"`, to the fraction of an inch you choose). A different unit can always be typed after a number (`350 cm`), and feet and inches are read however you write them (`7'6"`, `7-6`, `90"`) |
 | Autosave | On by default (File → Save automatically): a drawing is saved to its file a moment after each change. Save a new drawing once to give it a file |
 | Commands | `Ctrl+K` (`Cmd+K` on macOS) lists every command; type to filter, Enter to run. Click a command's shortcut there to change it, Backspace to remove it. Your shortcuts are remembered on this computer |
-| Tools | `V` select, `H` pan, `L` line, `R` rectangle, `O` ellipse, `P` polyline, `W` wall, `D` dimension, `M` measure, `T` text, `I` eyedropper. The plain shapes share one toolbar button; the arrow beside it lists them |
+| Tools | `V` select, `H` pan, `L` line (one segment, several, or closed into a polygon), `R` rectangle, `O` ellipse, `W` wall, `D` dimension, `E` rotate, `M` measure, `T` text, `I` eyedropper. The plain shapes share one toolbar button; the arrow beside it lists them |
 | Exact sizes | While drawing, a bar above the tools shows the shape's sizes. Type a number (just start typing) to fix one, Tab to the next, Enter to draw. For a rectangle, type both and click once to place it |
 | Draw | Click the first point, click the second. Lines and walls keep chaining; `Esc` or a double-click ends. Dragging also works |
-| Navigate | Scroll to zoom, middle-drag or `Space`+drag to pan, `Shift+1` to fit |
+| Navigate | Scroll to zoom, middle-drag or `Space`+drag to pan, `Shift+1` to fit; a tap on `Space` goes back to selecting |
 | Snapping | Snaps to existing points, then to the grid. `Shift` constrains to 45°, `Alt` turns it off |
 | Edit | Drag objects or their square handles, or type exact values in the right panel |
 | Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the component library. Double-click an instance to edit the component; every instance updates |
@@ -191,7 +191,7 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Drag a number | Hold `Alt` over a number in the panels and drag sideways to change it; `Shift` goes ten times faster |
 | Transform | Select, then drag a corner of the box to scale or the round handle above it to turn (`Shift` for 15° steps). `Shift+R` turns a quarter, `Shift+H` and `Shift+V` flip, the arrow keys move by one grid step. Exact angles and percentages are in the right panel, under Transform |
 | Annotation | The arrow beside the text button, or `Shift+T`: click what the note is about, click where the note goes, type it. Ends (arrow, open arrow, dot, tick, none), path (curved, straight or elbow) and text size are in the right panel; drag the middle of the line to bend it |
-| Corners | Click the end of a wall to select the corner: drag it and every wall that meets there follows. In the right panel, choose how two walls are joined: mitred, rounded, cut off, or one running through. Double-click a wall to put a corner in it |
+| Corners | Click the end of a wall to select the corner: drag it and every wall that meets there follows. In the right panel, choose how two walls are joined from small pictures: mitred, rounded, cut off, two walls with the line between them, or one running past the other. A wall's own properties show the same choice for each of its ends. Use the Split tool (`K`) to cut a wall, a line or a polyline in two: it shows the length either side before you click |
 | Rooms | `A`, then click inside closed walls: the room gets a tinted floor, a name and its area, and follows the walls when they move. Pick it by its name. The arrow beside the button has the divider (`Shift+A`), a dashed line that splits an open space into two rooms |
 | Patterns | Open the Fill of any closed shape (or of a wall type) and choose Pattern: lines, cross-hatch, planks, tiles, dots for concrete, zigzag for insulation, with their spacing, angle and stroke colour over the fill's colour. A room's floor takes one from Add… → Hatch under Modifiers |
 | Colours | A colour field opens a picker, the colours you picked lately, and the drawing's shared colours |

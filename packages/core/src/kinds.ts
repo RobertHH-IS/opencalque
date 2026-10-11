@@ -2,14 +2,15 @@ import { childrenOf, isVisible } from './document'
 import { add, dist, len, mid, norm, perp, rotate, scale, sub, type Vec2, ellipseArc, smoothPoints } from './geometry'
 import { resolveColor } from './colors'
 import { fillFields } from './fields'
+import { formatFeetInches } from './imperial'
 import { applyModifiers, movedModifiers, segmentsInside, HATCH_INK, patternStrokes } from './modifiers'
 import { transformPrimitive, type Primitive } from './primitives'
 import type { Op } from './ops'
 import type { Registry } from './registry'
-import type { Asset, Document, Node, NodeOf, NodeType } from './schema'
+import type { Asset, Document, Node, NodeOf, NodeType, WallEdge } from './schema'
 import { DEFAULT_PAPER_SCALE, paperFormat } from './papers'
 import { roomAt } from './rooms'
-import { bulgeThrough, hostWall, wallMiddle, wallParallel, wallPoints, wallPolygons, wallSeams } from './walls'
+import { bulgeThrough, hostWall, wallMiddle, wallParallel, wallPoints, wallPolygons, wallSeams, wallOutlineRuns } from './walls'
 
 export const DEFAULT_INK = '#1f1f1f'
 export const WALL_FILL = '#ffffff'
@@ -83,9 +84,11 @@ function parametricPrimitives(node: NodeOf<'parametric'>, ctx: KindContext): Pri
 }
 
 /** The text a dimension shows for a measured length in mm. */
-export function dimensionLabel(node: Pick<NodeOf<'dimension'>, 'text' | 'unit' | 'decimals' | 'showUnit'>, length: number): string {
+export function dimensionLabel(node: Pick<NodeOf<'dimension'>, 'text' | 'unit' | 'decimals' | 'showUnit' | 'fraction'>, length: number): string {
   if (node.text) return node.text
   const unit = node.unit ?? 'mm'
+  // Feet and inches say their own units with their marks.
+  if (unit === 'ft-in') return formatFeetInches(length, node.fraction ?? 16)
   const value = (length / { mm: 1, cm: 10, m: 1000, in: 25.4, ft: 304.8 }[unit]).toFixed(node.decimals ?? { mm: 0, cm: 1, m: 2, in: 1, ft: 2 }[unit])
   return node.showUnit ? `${value} ${unit}` : value
 }
@@ -505,9 +508,15 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     primitives: (node, ctx) => {
       const type = node.wallType ? ctx.doc.wallTypes?.[node.wallType] : undefined
       const pieces = wallPolygons(node, ctx.doc, ctx.registry)
+      // With an edge hidden or given a look of its own, the wall is still filled whole, but its
+      // outline is drawn edge by edge: runs of the edges shown, each with its look, as lines that
+      // merge like the outline does.
+      const runs = wallOutlineRuns(node, pieces)
+      const look = (edge: WallEdge | undefined) => (edge ? { over: true, stroke: edge.stroke, strokeWidth: edge.strokeWidth, dash: edge.dash } : {})
       return [
-        ...pieces.map((points): Primitive => ({ kind: 'path', closed: true, union: 'wall', fill: type?.fill ?? WALL_FILL, points })),
-        ...wallSeams(node, ctx.doc).map((points): Primitive => ({ kind: 'path', points })),
+        ...pieces.map((points): Primitive => ({ kind: 'path', closed: true, union: 'wall', fill: type?.fill ?? WALL_FILL, points, ...(runs ? { stroke: 'none' } : {}) })),
+        ...(runs ?? []).map(({ points, edge }): Primitive => ({ kind: 'path', union: 'wall', fill: 'none', points, ...look(edge === 'opening' ? undefined : node.edges?.[edge]) })),
+        ...wallSeams(node, ctx.doc).map(({ points, end }): Primitive => ({ kind: 'path', points, ...look(node.edges?.[end]) })),
         // Only a build-up measured through and through can be drawn to scale inside the wall.
         ...wallLayerLines(node, (type?.layers ?? []).every((layer) => layer.thickness !== undefined) ? (type?.layers as { thickness: number }[] | undefined) ?? [] : [], pieces),
       ]
@@ -628,14 +637,17 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
   const styled = kindOf(node)
     .primitives(node, ctx)
     .map((p) => {
-      const stroke = paint(p.own ? p.stroke : (style?.stroke ?? p.stroke)) ?? layerColor ?? DEFAULT_INK
-      const fill = paint(p.own ? p.fill : (style?.fill ?? p.fill))
+      // A merged shape that is only filled, or only drawn, stays so whatever the style says: it is
+      // one half of a wall whose outline is drawn edge by edge.
+      const split = p.kind === 'path' && p.union !== undefined
+      const stroke = split && p.stroke === 'none' ? 'none' : (paint(p.own ? p.stroke : p.over ? (p.stroke ?? style?.stroke) : (style?.stroke ?? p.stroke)) ?? layerColor ?? DEFAULT_INK)
+      const fill = split && p.fill === 'none' ? 'none' : paint(p.own ? p.fill : (style?.fill ?? p.fill))
       return {
         ...p,
         stroke,
-        strokeWidth: (p.own ? p.strokeWidth : (style?.strokeWidth ?? p.strokeWidth)) ?? 1,
+        strokeWidth: (p.own ? p.strokeWidth : p.over ? (p.strokeWidth ?? style?.strokeWidth) : (style?.strokeWidth ?? p.strokeWidth)) ?? 1,
         fill: fill === 'stroke' ? stroke : fill,
-        dash: p.own ? p.dash : (style?.dash ?? p.dash),
+        dash: p.own ? p.dash : p.over ? (p.dash ?? style?.dash) : (style?.dash ?? p.dash),
       }
     })
   // The pattern of the fill: strokes inside each closed shape, cut to it, over its colour.

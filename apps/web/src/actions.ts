@@ -1,5 +1,9 @@
 import {
   applyOps,
+  distToWall,
+  newId,
+  splitWallOps,
+  wallMiddle,
   buildScene,
   childrenOf,
   cloneOps,
@@ -44,6 +48,7 @@ import {
 } from '@opencalque/core'
 import { gridStep } from './canvas/draw'
 import { language, t, tn } from './i18n'
+import { imperialUnit } from './units'
 import { platform } from './platform'
 import { usePrefs } from './prefs'
 import { apply, cancel, commit, isDirty, loadDocument, registry, replaceDoc, select, selectCorner, setTool, toast, useStore, showPage } from './store'
@@ -206,6 +211,9 @@ export const exportQuantities = (pageId?: string) =>
     const { doc, page } = get()
     // Whether numbers are written with a decimal comma where the app's language is spoken.
     const comma = new Intl.NumberFormat(language()).format(1.5).includes(',')
+    // In feet when lengths are shown in feet or inches, in metres otherwise.
+    const system = imperialUnit() ? 'imperial' : 'metric'
+    const [length, area, volume, thickness] = system === 'imperial' ? ['ft', 'ft²', 'ft³', 'in'] : ['m', 'm²', 'm³', 'mm']
     const labels: QuantityLabels = {
       rooms: t('Rooms'),
       walls: t('Walls'),
@@ -217,18 +225,18 @@ export const exportQuantities = (pageId?: string) =>
       kind: t('Kind'),
       count: t('Count'),
       total: t('Total'),
-      area: t('Area (m²)'),
-      length: t('Length (m)'),
-      thickness: t('Thickness (mm)'),
-      height: t('Height (m)'),
-      width: t('Width (m)'),
-      footprint: t('Footprint (m²)'),
-      gross: t('Face area, gross (m²)'),
-      cut: t('Openings (m²)'),
-      net: t('Face area, net (m²)'),
-      volume: t('Volume (m³)'),
+      area: t('Area ({unit})', { unit: area }),
+      length: t('Length ({unit})', { unit: length }),
+      thickness: t('Thickness ({unit})', { unit: thickness }),
+      height: t('Height ({unit})', { unit: length }),
+      width: t('Width ({unit})', { unit: length }),
+      footprint: t('Footprint ({unit})', { unit: area }),
+      gross: t('Face area, gross ({unit})', { unit: area }),
+      cut: t('Openings ({unit})', { unit: area }),
+      net: t('Face area, net ({unit})', { unit: area }),
+      volume: t('Volume ({unit})', { unit: volume }),
     }
-    const csv = quantitiesCsv(quantities(doc, pageId ?? page, registry), { separator: comma ? ';' : ',', decimal: comma ? ',' : '.', labels, name: (label) => t(label) })
+    const csv = quantitiesCsv(quantities(doc, pageId ?? page, registry), { separator: comma ? ';' : ',', decimal: comma ? ',' : '.', labels, name: (label) => t(label), system })
     await platform.save(csv, `${baseName()}.csv`)
   })
 
@@ -366,6 +374,49 @@ function wallsToFit(): { walls: Extract<Node, { type: 'wall' }>[]; end?: 'a' | '
 }
 
 export const canFitWalls = () => wallsToFit().walls.length > 0
+
+/** The one wall that is selected, if that is all that is. */
+const oneWall = (): Extract<Node, { type: 'wall' }> | null => {
+  const { doc, selection } = get()
+  const node = selection.length === 1 ? doc.nodes[selection[0]] : undefined
+  return node?.type === 'wall' ? node : null
+}
+
+export const canSplitWall = () => oneWall() !== null
+
+/** The polylines and polygons among the selection. */
+const selectedPolylines = () => {
+  const { doc, selection } = get()
+  return selection.flatMap((id) => {
+    const node = doc.nodes[id]
+    return node?.type === 'polyline' ? [node] : []
+  })
+}
+export const canClosePolylines = () => selectedPolylines().some((n) => !n.closed && n.points.length >= 3)
+export const canOpenPolylines = () => selectedPolylines().some((n) => n.closed)
+export const canCurvePolylines = () => selectedPolylines().some((n) => !n.smooth)
+export const canStraightenPolylines = () => selectedPolylines().some((n) => n.smooth)
+/** Closes or opens the selected polylines, or curves or straightens them; null takes the property away. */
+export function setPolylines(patch: { closed?: true | null; smooth?: true | null }): void {
+  apply(selectedPolylines().map((n): Op => ({ op: 'update_node', id: n.id, patch })))
+}
+
+/**
+ * Makes the selected wall two, with a corner between them: where it was right-clicked when the
+ * command comes from that menu, otherwise in its middle. Split twice, the part in between is a
+ * wall of its own, to delete or to change.
+ */
+export function splitWall(): void {
+  const wall = oneWall()
+  if (!wall) return
+  const { menuPoint } = get()
+  // A right-click made elsewhere, earlier, says nothing about this wall.
+  const at = menuPoint && distToWall(menuPoint, wall) <= wall.thickness / 2 + 1 ? menuPoint : wallMiddle(wall)
+  useStore.setState({ menuPoint: null })
+  const split = splitWallOps(wall, at, newId())
+  if (!split) return toast(t('A wall cannot be split at one of its ends.'))
+  if (apply(split.ops)) selectCorner(split.at)
+}
 
 /** Lengthens the selected walls, or the selected wall end, to the next wall in their way; or cuts back what sticks out past a wall. */
 export function fitWalls(how: 'extend' | 'trim'): void {

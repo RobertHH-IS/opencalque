@@ -13,13 +13,13 @@ export const BUILT_IN_EXTENSION = architecture.id
  */
 export const registry = new Registry()
 
-export type Tool = 'select' | 'hand' | 'line' | 'rect' | 'ellipse' | 'polyline' | 'wall' | 'dimension' | 'measure' | 'angle' | 'calibrate' | 'eyedropper' | 'text' | 'annotation' | 'paper' | 'room' | 'divider' | 'place'
+export type Tool = 'select' | 'hand' | 'line' | 'rect' | 'ellipse' | 'wall' | 'dimension' | 'measure' | 'angle' | 'split' | 'rotate' | 'calibrate' | 'eyedropper' | 'text' | 'annotation' | 'paper' | 'room' | 'divider' | 'place'
 /** The plain shapes, which share one toolbar button. */
-export const SHAPE_TOOLS: Tool[] = ['line', 'rect', 'ellipse', 'polyline']
+export const SHAPE_TOOLS: Tool[] = ['line', 'rect', 'ellipse']
 /** The tools for naming spaces, which share another. */
 export const ROOM_TOOLS: Tool[] = ['room', 'divider']
 /** The tools for writing on the drawing, which share a third. */
-export const TEXT_TOOLS: Tool[] = ['text', 'annotation']
+export const TEXT_TOOLS: Tool[] = ['text', 'annotation', 'dimension']
 /** The tools that read something off the drawing without adding to it. */
 export const MEASURE_TOOLS: Tool[] = ['measure', 'angle']
 
@@ -102,6 +102,8 @@ interface State {
   calibration: { a: Vec2; b: Vec2 } | null
   preferencesOpen: boolean
   welcomeOpen: boolean
+  /** The line of a wall the pointer is over in the properties panel, to show on the drawing. */
+  edgeHover: { wall: string; edge: 'left' | 'right' | 'a' | 'b' } | null
   exportOpen: boolean
   aboutOpen: boolean
   /**
@@ -117,6 +119,8 @@ interface State {
   extensionsVersion: number
   /** Where the right-click menu is open, in window coordinates. */
   contextMenu: { x: number; y: number } | null
+  /** Where on the drawing the last right-click was, for commands of its menu that act at that very place. */
+  menuPoint: Vec2 | null
   view: View
   viewport: { width: number; height: number }
   status: string
@@ -162,9 +166,11 @@ function initial(doc: Document, file: StoredFile | null): State {
     calibration: null,
     preferencesOpen: false,
     welcomeOpen: false,
+    edgeHover: null,
     exportOpen: false,
     aboutOpen: false,
     contextMenu: null,
+    menuPoint: null,
     warehouse: null,
     preferencesPage: null,
     editingText: null,

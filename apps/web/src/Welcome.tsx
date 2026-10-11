@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { FilePlus, FileText, FolderOpen, LayoutTemplate, type LucideIcon } from 'lucide-react'
 import { newDocument, openDocument, openExample, openRecent } from './actions'
-import { t } from './i18n'
+import { LANGUAGES, t } from './i18n'
 import { platform } from './platform'
 import { setPrefs, usePrefs } from './prefs'
 import { VERSION } from './release'
 import { useStore } from './store'
+import { UNITS } from './units'
 
 const close = () => useStore.setState({ welcomeOpen: false })
 
@@ -38,6 +39,8 @@ function Choice(props: { icon: LucideIcon; title: string; note: string; onClick:
 export function Welcome() {
   const open = useStore((s) => s.welcomeOpen)
   const show = usePrefs((p) => p.showWelcome)
+  const chosenLanguage = usePrefs((p) => p.language)
+  const chosenUnit = usePrefs((p) => p.unit)
   const [recent, setRecent] = useState<{ name: string; path: string }[]>([])
 
   const box = useRef<HTMLDivElement>(null)
@@ -95,6 +98,30 @@ export function Welcome() {
             ))}
           </div>
         )}
+        {/* Taken from the computer at the first start; here to be seen, and put right if the guess was wrong. */}
+        <div className="welcome-settings">
+          <label>
+            <span>{t('Language')}</span>
+            <select value={chosenLanguage} onChange={(e) => setPrefs({ language: e.target.value })}>
+              <option value="auto">{t('Same as the system')}</option>
+              {LANGUAGES.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>{t('Unit')}</span>
+            <select value={chosenUnit} onChange={(e) => setPrefs({ unit: e.target.value as typeof chosenUnit })}>
+              {UNITS.map(([code, name]) => (
+                <option key={code} value={code}>
+                  {t(name)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <footer>
           <label>
             <input type="checkbox" checked={show} onChange={(e) => setPrefs({ showWelcome: e.target.checked })} />

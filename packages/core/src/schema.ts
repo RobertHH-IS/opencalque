@@ -93,6 +93,7 @@ export const WallTypeSchema = z
 
 export type SharedColor = z.infer<typeof SharedColorSchema>
 export type WallType = z.infer<typeof WallTypeSchema>
+export type WallEdge = z.infer<typeof WallEdgeSchema>
 
 export const ModifierSchema = z
   .object({
@@ -136,6 +137,14 @@ const tip = z.enum(DIMENSION_MARKERS).optional()
 const markerSize = z.number().positive().optional().describe('Length of the end symbols in mm. Defaults to 150.')
 /** The paths an annotation's leader can take. */
 export const LEADER_SHAPES = ['curve', 'straight', 'elbow'] as const
+
+/** One line of a wall's outline: whether it is drawn, and its own colour, weight and kind of line over the wall's. */
+export const WallEdgeSchema = z.object({
+  show: z.boolean().optional(),
+  stroke: z.string().optional().describe('A CSS colour or a shared colour reference.'),
+  strokeWidth: z.number().positive().optional().describe('In screen pixels, as in a style.'),
+  dash: z.array(z.number().positive()).optional().describe('Dash pattern in screen pixels, as in a style.'),
+})
 
 export const NodeSchema = z
   .discriminatedUnion('type', [
@@ -273,6 +282,12 @@ export const NodeSchema = z
             'Makes the wall curved: how far, in mm, the middle of its centerline stands off the straight line from a to b, the wall then following the arc of a circle through a, that point and b. Positive bows to the right of the direction a to b as seen on screen, negative to the left. At most half the distance from a to b, which is a half circle. Absent or 0 is a straight wall.',
           ),
         height: z.number().positive().optional().describe('How high it stands, in mm, when that differs from its page. Used to measure its face; nothing is drawn with it.'),
+        edges: z
+          .object({ left: WallEdgeSchema.optional(), right: WallEdgeSchema.optional(), a: WallEdgeSchema.optional(), b: WallEdgeSchema.optional() })
+          .optional()
+          .describe(
+            'The lines of its outline one by one, each with a look of its own over the wall\'s style. "left" and "right" are its two faces, as it runs from a to b; "a" and "b" are the lines across its ends. "show": false hides a line. Across an end, left out, the line is drawn when the end is free or stops against another wall, and not where two walls are joined into one; "show": true draws the line between two joined walls (what cutting a wall in two gives).',
+          ),
         wallType: Id.optional().describe('The id of the wall type it is built as, among the document\'s "wallTypes". It takes what the type defines.'),
         overrides: z
           .array(z.enum(['thickness']))
@@ -282,7 +297,7 @@ export const NodeSchema = z
           .object({ a: join, b: join })
           .optional()
           .describe(
-            "How each end is finished where it meets exactly one other wall. 'miter' (the default) brings both to a sharp corner, 'round' and 'bevel' round or cut that corner off, and 'through' with 'butt' on the other wall's end lets this wall run past while the other stops against it. Give both ends of a corner the same value, or the through/butt pair.",
+            "How each end is finished where it meets exactly one other wall. Left out (the default), the corner is automatic: a sharp point, cut off when the walls meet at less than 60° and the point would stick out. 'miter' keeps the sharp point at any angle, 'round' and 'bevel' round or cut that corner off, and 'through' with 'butt' on the other wall's end lets this wall run past while the other stops against it. Give both ends of a corner the same value, or the through/butt pair.",
           ),
       })
       .describe('A wall along the centerline a-b, straight or, with "bulge", an arc. Walls sharing an endpoint are drawn joined.'),
@@ -306,7 +321,8 @@ export const NodeSchema = z
         textColor: z.string().optional().describe('Defaults to the color of the dimension line.'),
         textPosition: z.enum(['above', 'center', 'below']).optional().describe("Where the text sits relative to the dimension line. Defaults to 'above'."),
         textRotation: z.enum(['aligned', 'horizontal']).optional().describe("Defaults to 'aligned' (along the dimension line)."),
-        unit: z.enum(['mm', 'cm', 'm', 'in', 'ft']).optional().describe("Unit the measured value is shown in. Defaults to 'mm'. Coordinates stay in mm whatever this is."),
+        unit: z.enum(['mm', 'cm', 'm', 'in', 'ft', 'ft-in']).optional().describe("Unit the measured value is shown in. Defaults to 'mm'. 'ft-in' writes feet and inches with a fraction, as 7' 6 1/2\". Coordinates stay in mm whatever this is."),
+        fraction: z.number().int().positive().optional().describe("With unit 'ft-in': the fraction of an inch the value is rounded to, as its lower number (2, 4, 8, 16, 32). Defaults to 16."),
         decimals: z.number().int().min(0).max(6).optional().describe('Decimal places. Defaults to 0 for mm, 1 for cm and in, 2 for m and ft.'),
         showUnit: z.boolean().optional().describe('Append the unit to the value.'),
       })

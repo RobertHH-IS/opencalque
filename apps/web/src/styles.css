@@ -1621,12 +1621,27 @@ body.scrubbing .quick-field input[title] {
 .tool-menu {
   top: auto;
   bottom: 44px;
-  width: 210px;
+  /* As wide as its longest name, each on one line, whatever the language. */
+  width: max-content;
+  min-width: 150px;
 }
 
 .tool-menu button {
   align-items: center;
   gap: 8px;
+}
+
+.tool-menu .menu-title {
+  white-space: nowrap;
+}
+
+.tool-menu kbd {
+  margin-left: 16px;
+}
+
+.tool-menu button.current {
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* Sizes typed while drawing */
@@ -2456,52 +2471,125 @@ body.scrubbing .quick-field input[title] {
   color: #c2410c;
 }
 
-/* What something is filled with: a plain colour, or a pattern over it */
+/* The pattern of a fill: rows of their own under its colour, kept together as one block */
 
-.fill-modes {
+.pattern-rows {
+  flex: 1;
+  min-width: 0;
+}
+
+.type-prop > .pattern-rows .field > span {
+  width: 64px;
+}
+
+/* Seven pictures share the width of the row: they shrink rather than run past its end. */
+.pattern-picker svg {
+  width: 100%;
+  max-width: 28px;
+}
+
+/* Language and unit in the welcome window: small, to be glanced at and corrected */
+.welcome-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 2px 24px 14px;
+  color: var(--muted);
+}
+
+.welcome-settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.welcome-settings select {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+/* The joints of walls, as pictures to pick from */
+.joint-picker button {
+  height: 24px;
+}
+
+.field > em {
+  flex: 1;
+  font-style: normal;
+}
+
+/* The lines of a wall one by one, once its look is split */
+.section-actions {
   display: flex;
   gap: 2px;
-  margin-bottom: 8px;
-  padding: 2px;
+}
+
+.wall-edges {
+  margin-top: 4px;
+}
+
+.wall-edge {
+  margin: 4px 8px 6px;
+  padding: 2px 0 4px;
   border-radius: 6px;
   background: var(--hover);
 }
 
-.fill-modes button {
-  flex: 1;
-  height: 24px;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  cursor: pointer;
+.wall-edge-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 0 4px;
 }
 
-.fill-modes button.active {
-  background: var(--bg);
-  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 8%);
-  color: var(--text);
+.wall-edge-head strong {
+  flex: 1;
+  font-size: 12px;
   font-weight: 600;
 }
 
-.pattern-controls {
-  margin-bottom: 4px;
+.wall-edge-head .text-button {
+  margin: 0;
+  font-size: 11px;
 }
 
-.pattern-controls .field {
-  padding: 2px 0;
+.wall-edge .field {
+  padding-left: 12px;
 }
 
-.pattern-controls .field > span {
-  width: 64px;
+.wall-edge.off strong {
+  color: var(--muted);
 }
 
-.pattern-picker {
-  margin-bottom: 4px;
+/* A line of a wall: its rows lean on the left, the pointer over it lights the line on the drawing */
+.wall-edge {
+  transition: box-shadow 80ms;
 }
 
-/* A patterned fill shows its swatch hatched over its colour. */
-.color-now > i.patterned {
-  background-image: repeating-linear-gradient(45deg, rgb(0 0 0 / 55%) 0 1px, transparent 1px 4px);
+.wall-edge:hover {
+  box-shadow: inset 0 0 0 1px #f97316;
+}
+
+.wall-edge-head {
+  padding: 4px 8px 0 12px;
+}
+
+.wall-edge-head em {
+  font-size: 11px;
+  font-style: normal;
+}
+
+.wall-edge .typed-row > .field {
+  padding-left: 12px;
+}
+
+/* A value that is inherited reads lighter than one the line has of its own. */
+select.faint-choice,
+.end-picker.faint-choice button.active {
+  opacity: 0.65;
 }

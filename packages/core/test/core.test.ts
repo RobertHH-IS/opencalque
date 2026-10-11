@@ -342,8 +342,20 @@ describe('clipboard', () => {
     expect(componentsOf(pasted.doc).map((c) => c.name)).toEqual(['Chair'])
     const chair = childrenOf(pasted.doc, componentsOf(pasted.doc)[0].id)[0]
     expect(chair).toMatchObject({ type: 'rect', layer: 'x' })
-    // Pasting the same thing again reuses the component.
+    // Pasting the same thing again reuses the component, and so does pasting another copy of it.
     expect(componentsOf(pasteNodes(pasted.doc, parseDocument(clip), 'page_1', { x: 0, y: 0 }).doc)).toHaveLength(1)
+    const again = JSON.parse(JSON.stringify(copyNodes(doc, [groupId])))
+    expect(componentsOf(pasteNodes(pasted.doc, parseDocument(again), 'page_1', { x: 0, y: 0 }).doc)).toHaveLength(1)
+  })
+
+  it('pastes a copy of an instance back into its own drawing as another instance of the same component', () => {
+    const made = createComponent(applyOps(createDocument(), [{ op: 'add_node', node: { type: 'rect', id: 'r', parent: 'page_1', x: 0, y: 0, width: 50, height: 50 } }]), registry, ['r'], 'Chair')
+    const clip = parseDocument(JSON.parse(JSON.stringify(copyNodes(made.doc, [made.instanceId]))))
+    const once = pasteNodes(made.doc, clip, 'page_1', { x: 200, y: 200 })
+    const twice = pasteNodes(once.doc, clip, 'page_1', { x: 400, y: 400 })
+    expect(componentsOf(twice.doc)).toHaveLength(1)
+    const component = (made.doc.nodes[made.instanceId] as any).component
+    for (const id of [...once.ids, ...twice.ids]) expect(twice.doc.nodes[id]).toMatchObject({ type: 'instance', component })
   })
 })
 

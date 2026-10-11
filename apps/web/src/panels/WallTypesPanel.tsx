@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { WallType } from '@opencalque/core'
-import { ColorChoice } from '../ColorChoice'
+import { ColorChoice, PatternRows } from '../ColorChoice'
 import { t } from '../i18n'
 import { apply, useStore } from '../store'
 import { penOf, PENS, pixelsOf } from '../strokes'
@@ -88,8 +88,12 @@ export function WallTypes() {
             <Defines label={t('Height')} on={type.height !== undefined} onToggle={(on) => set({ height: on ? 2500 : null })}>
               <Field label="" numeric length min={1} value={type.height ?? 0} onCommit={(height) => height > 0 && set({ height })} />
             </Defines>
-            <Defines label={t('Fill')} on={type.fill !== undefined || type.pattern !== undefined} onToggle={(on) => set(on ? { fill: '#e7e5e4' } : { fill: null, pattern: null })}>
-              <ColorChoice stored={type.fill} fallback="#ffffff" commit={(fill) => set({ fill: (fill as string | undefined) ?? null })} pattern={{ value: type.pattern, commit: (pattern) => set({ pattern: pattern ?? null }) }} />
+            <Defines label={t('Fill')} on={type.fill !== undefined} onToggle={(on) => set({ fill: on ? '#e7e5e4' : null })}>
+              <ColorChoice stored={type.fill} fallback="#ffffff" commit={(fill) => set({ fill: (fill as string | undefined) ?? null })} />
+            </Defines>
+            <Defines label={t('Pattern')} on={type.pattern !== undefined} onToggle={(on) => set({ pattern: on ? { kind: 'Lines' } : null })}>
+              {/* Whether there is one is the tick box's to say: the pictures start at the first pattern. */}
+              <PatternRows value={type.pattern} none={false} onChange={(pattern) => set({ pattern: pattern ?? null })} />
             </Defines>
             <Defines label={t('Outline colour')} on={type.stroke !== undefined} onToggle={(on) => set({ stroke: on ? '#1f1f1f' : null })}>
               <ColorChoice stored={type.stroke} fallback="#1f1f1f" commit={(stroke) => set({ stroke: (stroke as string | undefined) ?? null })} />

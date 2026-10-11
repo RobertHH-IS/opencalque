@@ -5,7 +5,7 @@ import { msg, t } from './i18n'
 import { useStore, type Tool } from './store'
 import { dashIndex, DASHES, penOf, PENS, pixelsOf } from './strokes'
 import { DashPicker, scrub } from './ui'
-import { formatNumber, parseLength, parseNumber, unit } from './units'
+import { formatNumber, parseLength, parseNumber, unit, unitSuffix } from './units'
 
 /** Where the clicked points can lie on a wall, as it is drawn from left to right: its name and where the line is in its picture. */
 const JUSTIFY: ['left' | 'center' | 'right', string, number][] = [
@@ -14,16 +14,28 @@ const JUSTIFY: ['left' | 'center' | 'right', string, number][] = [
   ['right', msg('Points along the right face of the wall'), 13],
 ]
 
-/** The two sizes each drawing tool lets you type, and whether the second is an angle rather than a length. */
-const SIZES: Partial<Record<Tool, [first: string, second: string, angle: boolean]>> = {
-  rect: [msg('Width'), msg('Height'), false],
-  ellipse: [msg('Width'), msg('Height'), false],
-  paper: [msg('Width'), msg('Height'), false],
-  line: [msg('Length'), msg('Angle'), true],
-  polyline: [msg('Length'), msg('Angle'), true],
-  wall: [msg('Length'), msg('Angle'), true],
-  divider: [msg('Length'), msg('Angle'), true],
+type Kind = 'length' | 'angle'
+type Size = { which: 'a' | 'b'; label: string; kind: Kind }
+const box: Size[] = [
+  { which: 'a', label: msg('Width'), kind: 'length' },
+  { which: 'b', label: msg('Height'), kind: 'length' },
+]
+const run: Size[] = [
+  { which: 'a', label: msg('Length'), kind: 'length' },
+  { which: 'b', label: msg('Angle'), kind: 'angle' },
+]
+/** The sizes each tool lets you type: lengths, an angle, or for resizing a percentage. */
+const SIZES: Partial<Record<Tool, Size[]>> = {
+  rect: box,
+  ellipse: box,
+  paper: box,
+  line: run,
+  wall: run,
+  divider: run,
+  rotate: [{ which: 'b', label: msg('Angle'), kind: 'angle' }],
 }
+/** The tools that make a shape: only those take the colour, weight and kind of line of the next shapes. */
+const INKED: Tool[] = ['rect', 'ellipse', 'line', 'wall', 'divider']
 
 /** Stroke colours offered for the next shapes; the first means "the layer's colour". */
 const COLORS = [null, '#e5484d', '#9ca3af', '#0d99ff']
@@ -33,7 +45,8 @@ const COLORS = [null, '#e5484d', '#9ca3af', '#0d99ff']
  * typed value then holds, and Enter finishes the shape with it. Lengths are typed in the unit set
  * in Preferences (or with a unit written after them) and kept in millimetres.
  */
-function Size({ which, label, angle }: { which: 'a' | 'b'; label: string; angle: boolean }) {
+function SizeField({ which, label, kind }: Size) {
+  const angle = kind !== 'length'
   const locked = useStore((s) => s.drawLocks[which])
   const live = useStore((s) => s.drawLive?.[which])
   /** What is being typed, or null while the field just reflects the drawing. */
@@ -64,7 +77,7 @@ function Size({ which, label, angle }: { which: 'a' | 'b'; label: string; angle:
           setTyped(e.target.value)
           // A length must be positive; an angle can be anything.
           const n = angle ? parseNumber(e.target.value) : parseLength(e.target.value)
-          setLock(n !== null && Number.isFinite(n) && (angle || n > 0) ? n : undefined)
+          setLock(n !== null && Number.isFinite(n) && (kind === 'angle' || n > 0) ? n : undefined)
         }}
         onBlur={() => {
           setFocused(false)
@@ -82,7 +95,7 @@ function Size({ which, label, angle }: { which: 'a' | 'b'; label: string; angle:
           }
         }}
       />
-      <em>{angle ? '°' : unit()}</em>
+      <em>{kind === 'angle' ? '°' : unitSuffix()}</em>
     </label>
   )
 }
@@ -101,12 +114,13 @@ export function QuickBar() {
   const wallType = useStore((s) => s.wallType)
   const wallTypes = useStore((s) => s.doc.wallTypes)
   const paperScale = useStore((s) => s.paperScale)
-  const started = useStore((s) => s.drawStep > 0)
+  // The rotate tool takes an angle once its base line is set, at its second step.
+  const started = useStore((s) => s.drawStep > (s.tool === 'rotate' ? 1 : 0))
   const sizes = SIZES[tool]
   if (!sizes) return null
-  // A length and an angle mean nothing before there is a point to measure them from. A width and
-  // a height do: typed first, they make a box that one click places.
-  const measurable = !sizes[2] || started
+  // A length or an angle means nothing before there is a point to measure it from. A
+  // width and a height do: typed first, they make a box that one click places.
+  const measurable = sizes === box || started
   const setThickness = (text: string) => {
     const mm = parseLength(text)
     // A thickness typed by hand is a wall of no type.
@@ -115,8 +129,7 @@ export function QuickBar() {
   return (
     <div className="quickbar">
       <div className="quick-group">
-        {measurable && <Size which="a" label={t(sizes[0])} angle={false} />}
-        {measurable && <Size which="b" label={t(sizes[1])} angle={sizes[2]} />}
+        {measurable && sizes.map((size) => <SizeField key={size.which} {...size} label={t(size.label)} />)}
         {tool === 'wall' && (
           <label className="quick-field locked">
             <span>{t('Thickness')}</span>
@@ -129,7 +142,7 @@ export function QuickBar() {
               onBlur={(e) => setThickness(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
             />
-            <em>{unit()}</em>
+            <em>{unitSuffix()}</em>
           </label>
         )}
         {tool === 'wall' && Object.keys(wallTypes ?? {}).length > 0 && (
@@ -181,7 +194,7 @@ export function QuickBar() {
           </label>
         )}
       </div>
-      <div className="quick-group" hidden={tool === 'paper'}>
+      <div className="quick-group" hidden={!INKED.includes(tool)}>
         {COLORS.map((c) => (
           <button
             key={c ?? 'layer'}

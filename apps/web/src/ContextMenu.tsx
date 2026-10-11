@@ -33,6 +33,8 @@ export function ContextMenu() {
   const hasSelection = useStore((s) => s.selection.length > 0)
   // A picture that was brought in can have its scale set again, from here as well as from its properties.
   const onPicture = useStore((s) => s.selection.length === 1 && s.doc.nodes[s.selection[0]]?.type === 'image')
+  // A polyline or a polygon can be closed or opened, curved or straightened.
+  const onPolyline = useStore((s) => s.selection.some((id) => s.doc.nodes[id]?.type === 'polyline'))
   const overrides = useCommands((s) => s.overrides)
   const menu = useRef<HTMLDivElement>(null)
   const [position, setPosition] = useState({ left: 0, top: 0 })
@@ -64,7 +66,7 @@ export function ContextMenu() {
 
   if (!at) return null
   const commands = allCommands()
-  const items = [...(hasSelection ? ON_SELECTION : ON_NOTHING), ...(onPicture ? [null, 'tool.calibrate'] : [])].map((id) => commands.find((c) => c.id === id) ?? null)
+  const items = [...(hasSelection ? ON_SELECTION : ON_NOTHING), ...(onPicture ? [null, 'tool.calibrate'] : []), ...(onPolyline ? [null, 'shape.close', 'shape.open', 'shape.curve', 'shape.straighten'] : [])].map((id) => commands.find((c) => c.id === id) ?? null)
 
   return (
     <div ref={menu} className="menu-list context-menu" role="menu" style={position} onContextMenu={(e) => e.preventDefault()}>

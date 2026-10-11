@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { usePrefs } from './prefs'
-import { formatLength, formatNumber, parseLength } from './units'
+import { formatAngle, formatLength, formatNumber, parseLength } from './units'
 
 const use = (unit: 'mm' | 'cm' | 'm' | 'in' | 'ft') => usePrefs.setState({ unit, language: 'en' })
 
@@ -17,6 +17,14 @@ describe('units', () => {
     expect(formatLength(3048)).toBe('10 ft')
     use('in')
     expect(formatNumber(254)).toBe('10')
+  })
+
+  it('writes an angle in degrees whatever the unit of lengths', () => {
+    for (const unit of ['mm', 'm', 'ft'] as const) {
+      use(unit)
+      expect(formatAngle(36)).toBe('36')
+      expect(formatAngle(12.3456)).toBe('12.35')
+    }
   })
 
   it('reads a bare number in the chosen unit, with a point or a comma', () => {

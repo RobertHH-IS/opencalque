@@ -20,7 +20,7 @@ function pictureFor(href: string): HTMLImageElement | null {
   return picture.complete && picture.naturalWidth > 0 ? picture : null
 }
 import type { View } from '../store'
-import { formatLength, formatNumber } from '../units'
+import { formatAngle, formatLength, formatNumber } from '../units'
 
 const ACCENT = '#0d99ff'
 /** The colour of what the pointer snaps to and of the guides shown while something is moved. */
@@ -114,6 +114,10 @@ export interface Overlay {
   link?: [Vec2, Vec2]
   /** While something is moved: where it lines up with other things, and the gaps it keeps equal. */
   smart?: MoveGuides
+  /** A line of a wall pointed at in the properties panel, in world coordinates. */
+  edgeHover?: Vec2[][]
+  /** Where the split tool would cut: a point, the way the thing runs there, and how far the mark reaches to either side. */
+  cut?: { at: Vec2; dir: Vec2; half: number; parts?: Vec2[][]; gap?: number }
   /** The measure tool's reading, in world coordinates. It is not part of the drawing. */
   measure?: { a: Vec2; b: Vec2 }
   /** Sizes written next to the shape being drawn or selected. */
@@ -132,7 +136,7 @@ export interface Overlay {
   /** A guide across the whole view through `at`, shown while the line being drawn is exactly horizontal or vertical. */
   axis?: { at: Vec2; vertical: boolean }
   /** An angle being read: its corner, a point along its first side and, once chosen, one along its second. */
-  angleReading?: { vertex: Vec2; a?: Vec2; b?: Vec2 }
+  angleReading?: { vertex: Vec2; a?: Vec2; b?: Vec2; label?: string }
   /** The line something is being kept on while it is dragged: through a point, at an angle in radians, shown across the whole view. */
   guide?: { at: Vec2; angle: number }
 }
@@ -172,6 +176,8 @@ export interface SizeLabel {
   text: string
   /** Degrees the text is turned, clockwise: -90 for a height, or the direction of a line. */
   rotation?: number
+  /** Written in the magenta of the measuring tools, beside a line of that colour, rather than as a size. */
+  measure?: boolean
 }
 
 /** The angle of a line being drawn, shown as a wedge at its start, measured counter-clockwise from the right. */
@@ -287,6 +293,14 @@ function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, 
   }
 }
 
+let ring: HTMLCanvasElement | null = null
+/** A spare canvas the size of the view, where an outline is drawn and hollowed before it is laid on the drawing. */
+function ringCanvas(width: number, height: number): HTMLCanvasElement {
+  ring ??= document.createElement('canvas')
+  if (ring.width !== width || ring.height !== height) Object.assign(ring, { width, height })
+  return ring
+}
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   size: { width: number; height: number; dpr: number },
@@ -321,7 +335,8 @@ export function drawScene(
   const selected = scene.filter((item) => selection.includes(item.id))
   for (const item of selected) {
     for (const prim of item.prims) {
-      if (prim.kind === 'text' || prim.kind === 'image') continue
+      // The lines of a pattern are a surface, not an outline: lit up, they would hide the shape and what is under it.
+      if (prim.kind === 'text' || prim.kind === 'image' || prim.texture) continue
       paint(ctx, { prim: { ...prim, stroke: ACCENT, strokeWidth: 1.5, dash: undefined }, stroke: true, fill: false, widthScale: 1, widthExtra: 0, seam: 0 }, view.zoom)
     }
   }
@@ -456,7 +471,7 @@ export function drawScene(
     ctx.setLineDash([])
   }
   if (overlay.angleReading?.a) {
-    const { vertex, a, b } = overlay.angleReading
+    const { vertex, a, b, label: given } = overlay.angleReading
     const v = toScreen(vertex)
     const sides = [a, ...(b ? [b] : [])].map(toScreen)
     ctx.strokeStyle = '#e5008a'
@@ -485,7 +500,7 @@ export function drawScene(
       ctx.beginPath()
       ctx.arc(v.x, v.y, radius, from, from + sweep, sweep < 0)
       ctx.stroke()
-      const label = `${formatNumber(angleBetween(vertex, a, b))}°`
+      const label = given ?? `${formatAngle(angleBetween(vertex, a, b))}°`
       ctx.font = `600 12px ${FONT}`
       const width = ctx.measureText(label).width + 12
       const x = v.x + Math.cos(from + sweep / 2) * (radius + 22)
@@ -498,6 +513,91 @@ export function drawScene(
       ctx.textBaseline = 'middle'
       ctx.fillText(label, x, y + 0.5)
       ctx.textBaseline = 'alphabetic'
+    }
+  }
+  if (overlay.edgeHover && ctx.canvas.width > 0 && ctx.canvas.height > 0) {
+    // A hollow outline round the line, in orange to stand out from the blue of the selection:
+    // the line itself is left alone, so that what is being changed on it can be seen.
+    const ring = ringCanvas(ctx.canvas.width, ctx.canvas.height)
+    const rc = ring.getContext('2d')!
+    rc.setTransform(1, 0, 0, 1, 0, 0)
+    rc.clearRect(0, 0, ring.width, ring.height)
+    rc.setTransform(ctx.getTransform())
+    rc.lineCap = 'round'
+    rc.lineJoin = 'round'
+    for (const [width, colour, cut] of [[22, 'rgb(249 115 22 / 22%)', false], [17, '#f97316', false], [12, '#000', true]] as const) {
+      rc.globalCompositeOperation = cut ? 'destination-out' : 'source-over'
+      rc.strokeStyle = colour
+      rc.lineWidth = width
+      for (const line of overlay.edgeHover) {
+        rc.beginPath()
+        line.forEach((p, i) => {
+          const q = toScreen(p)
+          if (i === 0) rc.moveTo(q.x, q.y)
+          else rc.lineTo(q.x, q.y)
+        })
+        rc.stroke()
+      }
+    }
+    rc.globalCompositeOperation = 'source-over'
+    ctx.save()
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.drawImage(ring, 0, 0)
+    ctx.restore()
+  }
+  if (overlay.cut) {
+    const { at, dir, half } = overlay.cut
+    const n = { x: -dir.y * half, y: dir.x * half }
+    const [a, b] = [toScreen({ x: at.x - n.x, y: at.y - n.y }), toScreen({ x: at.x + n.x, y: at.y + n.y })]
+    ctx.strokeStyle = '#e5008a'
+    ctx.lineWidth = 2
+    ctx.setLineDash([])
+    ctx.beginPath()
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+    ctx.stroke()
+    const { parts, gap = 0 } = overlay.cut
+    ctx.fillStyle = '#e5008a'
+    ctx.lineWidth = 1
+    for (const [k, part] of (parts ?? []).entries()) {
+      // The part on screen, and the side the lengths are written on at each of its points.
+      const on = part.map(toScreen)
+      const sides = on.map((_, i) => {
+        const [p, q] = [on[Math.max(0, i - 1)], on[Math.min(on.length - 1, i + 1)]]
+        const l = Math.hypot(q.x - p.x, q.y - p.y) || 1
+        return { x: -(q.y - p.y) / l, y: (q.x - p.x) / l }
+      })
+      const line = on.map((p, i) => ({ x: p.x + sides[i].x * gap, y: p.y + sides[i].y * gap }))
+      if (Math.hypot(line[line.length - 1].x - line[0].x, line[line.length - 1].y - line[0].y) < 16) continue
+      ctx.beginPath()
+      line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+      ctx.stroke()
+      // A dotted line from each end of the measuring line back to the point it measures from: the
+      // node at the end of the thing (a wall's corner, in the middle of its thickness) or the cut.
+      ctx.setLineDash([3, 3])
+      ctx.beginPath()
+      for (const i of [0, on.length - 1]) {
+        ctx.moveTo(on[i].x, on[i].y)
+        ctx.lineTo(on[i].x + sides[i].x * (gap + 4), on[i].y + sides[i].y * (gap + 4))
+      }
+      ctx.stroke()
+      ctx.setLineDash([])
+      // The node itself, marked: the first part starts at one, the second ends at the other.
+      const node = k === 0 ? on[0] : on[on.length - 1]
+      ctx.beginPath()
+      ctx.arc(node.x, node.y, 3, 0, Math.PI * 2)
+      ctx.fill()
+      // An arrow at each end, pointing at the end it measures to.
+      for (const [tip, back] of [[line[0], line[1]], [line[line.length - 1], line[line.length - 2]]]) {
+        const l = Math.hypot(tip.x - back.x, tip.y - back.y) || 1
+        const [ux, uy] = [(tip.x - back.x) / l, (tip.y - back.y) / l]
+        ctx.beginPath()
+        ctx.moveTo(tip.x, tip.y)
+        ctx.lineTo(tip.x - ux * 7 - uy * 3, tip.y - uy * 7 + ux * 3)
+        ctx.lineTo(tip.x - ux * 7 + uy * 3, tip.y - uy * 7 - ux * 3)
+        ctx.closePath()
+        ctx.fill()
+      }
     }
   }
   if (overlay.measure) {
@@ -559,11 +659,11 @@ export function drawScene(
     if (label.rotation) ctx.rotate((label.rotation * Math.PI) / 180)
     ctx.font = `600 11px ${FONT}`
     const width = ctx.measureText(label.text).width + 12
-    ctx.fillStyle = palette.label.fill
+    ctx.fillStyle = label.measure ? '#e5008a' : palette.label.fill
     ctx.beginPath()
     ctx.roundRect(-width / 2, -9, width, 18, 4)
     ctx.fill()
-    ctx.fillStyle = palette.label.text
+    ctx.fillStyle = label.measure ? '#ffffff' : palette.label.text
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.fillText(label.text, 0, 0.5)

@@ -14,7 +14,9 @@ export interface Prefs {
   /** In the dark theme, draw the drawing light on dark too. Off, the drawing keeps its paper colours. */
   darkCanvas: boolean
   /** The unit lengths are shown and typed in. Drawings are stored in millimetres whatever it is. */
-  unit: 'mm' | 'cm' | 'm' | 'in' | 'ft'
+  unit: 'mm' | 'cm' | 'm' | 'in' | 'ft' | 'ft-in'
+  /** With feet and inches: the fraction of an inch lengths are rounded to, as its lower number (16 for sixteenths). */
+  fraction: number
   /** Save a drawing to its file by itself a moment after each change. */
   autosave: boolean
   /** Offer a new drawing, a file or the example in a window when the app starts. */
@@ -50,11 +52,23 @@ export const CLAUDE_MODELS: [string, string][] = [
   ['claude-fable-5-1', msg('Claude Fable 5.1 (most capable)')],
 ]
 
+/**
+ * The unit a first start begins with: feet and inches where plans are drawn in them (the region of
+ * the system's language is the United States, Liberia or Myanmar), millimetres everywhere else.
+ * It is a guess, shown in the welcome window to be corrected; once chosen, the unit is kept.
+ */
+function usualUnit(): Prefs['unit'] {
+  // The first language the system lists says where it is: "en-US", "es-US".
+  const first = typeof navigator === 'undefined' ? '' : (navigator.language ?? '')
+  return /[-_](US|LR|MM)$/i.test(first) ? 'ft-in' : 'mm'
+}
+
 const DEFAULTS: Prefs = {
   language: 'auto',
   theme: 'system',
   darkCanvas: true,
-  unit: 'mm',
+  unit: usualUnit(),
+  fraction: 16,
   autosave: true,
   showWelcome: true,
   showGrid: true,
