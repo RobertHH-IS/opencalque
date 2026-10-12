@@ -1,7 +1,7 @@
-import { useState } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, ArrowDown, ArrowUp, Copy } from 'lucide-react'
+import { useState, type DragEvent } from 'react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Copy } from 'lucide-react'
 import { childrenOf, layersOf, pagesOf, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
-import { moveInOrder, duplicatePage, movePage } from '../actions'
+import { moveInOrder, duplicatePage } from '../actions'
 import { ColorChoice } from '../ColorChoice'
 import { t } from '../i18n'
 import { apply, editComponent, select, showPage, useStore } from '../store'
@@ -39,34 +39,88 @@ export function Colors() {
   )
 }
 
-/** Marks a drag as one of our object rows, so nothing else reacts to it. */
+/** Marks a drag as one of our rows, so nothing else reacts to it. */
 const ROW_DRAG = 'application/x-opencalque-node'
+
+/** The rows being dragged, and the list they come from: pages are not dropped among objects. */
+let dragged: { list: 'pages' | 'objects'; ids: string[] } | null = null
+
+const half = (e: DragEvent): 'above' | 'below' => {
+  const box = e.currentTarget.getBoundingClientRect()
+  return e.clientY < box.top + box.height / 2 ? 'above' : 'below'
+}
+
+/**
+ * Makes a row of a list draggable, taking `take()` along (the rows selected with it), and lets
+ * rows of the same list be dropped above or below it; `place` is told which. A row being dragged
+ * is not a place to drop.
+ */
+function useRowDrag(list: 'pages' | 'objects', id: string, enabled: boolean, take: () => string[], place: (ids: string[], where: 'above' | 'below') => void) {
+  const [drop, setDrop] = useState<'above' | 'below' | null>(null)
+  const accepts = () => enabled && dragged?.list === list && !dragged.ids.includes(id)
+  return {
+    drop,
+    handlers: {
+      draggable: enabled,
+      onDragStart: (e: DragEvent) => {
+        dragged = { list, ids: take() }
+        e.dataTransfer.setData(ROW_DRAG, dragged.ids.join(' '))
+        e.dataTransfer.effectAllowed = 'move'
+      },
+      onDragEnd: () => {
+        dragged = null
+      },
+      onDragOver: (e: DragEvent) => {
+        if (!accepts()) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        setDrop(half(e))
+      },
+      // Going over the name or a button of the row is not leaving it.
+      onDragLeave: (e: DragEvent) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Element | null)) setDrop(null)
+      },
+      onDrop: (e: DragEvent) => {
+        setDrop(null)
+        if (!accepts()) return
+        e.preventDefault()
+        place(dragged!.ids, half(e))
+        dragged = null
+      },
+    },
+  }
+}
+
+/** A page in the list: a click shows it; dragged, it takes its place among the others. */
+function PageRow({ id, count }: { id: string; count: number }) {
+  const doc = useStore((s) => s.doc)
+  const scope = useStore((s) => s.scope)
+  const page = doc.nodes[id]
+  // The first page comes first: dropped above a page, a page goes before it.
+  const { drop, handlers } = useRowDrag('pages', id, count > 1, () => [id], (ids, where) => moveInOrder(ids, id, where === 'below'))
+  return (
+    <div className={`row${id === scope ? ' selected' : ''}${drop ? ` drop-${drop}` : ''}`} onClick={() => showPage(id)} {...handlers}>
+      <EditableText value={labelOf(doc, page)} onChange={rename(id)} />
+      <IconButton title={t('Duplicate this page, with what is on it')} onClick={() => duplicatePage(id)}>
+        <Copy size={13} />
+      </IconButton>
+      {count > 1 && (
+        <IconButton title={t('Delete page')} onClick={() => apply([{ op: 'remove_node', id }])}>
+          <Trash2 size={13} />
+        </IconButton>
+      )}
+    </div>
+  )
+}
 
 export function Pages() {
   const doc = useStore((s) => s.doc)
-  const scope = useStore((s) => s.scope)
   const pages = pagesOf(doc)
   const add = () => apply([{ op: 'add_node', node: { type: 'page', name: t('Page {n}', { n: pages.length + 1 }) } }])
   return (
     <Section title={t('Pages')} action={<IconButton title={t('Add page')} onClick={add}><Plus size={14} /></IconButton>}>
-      {pages.map((page, index) => (
-        <div key={page.id} className={`row${page.id === scope ? ' selected' : ''}`} onClick={() => showPage(page.id)}>
-          <EditableText value={labelOf(doc, page)} onChange={rename(page.id)} />
-          <IconButton title={t('Move up')} onClick={() => movePage(page.id, -1)} disabled={index === 0}>
-            <ArrowUp size={13} />
-          </IconButton>
-          <IconButton title={t('Move down')} onClick={() => movePage(page.id, 1)} disabled={index === pages.length - 1}>
-            <ArrowDown size={13} />
-          </IconButton>
-          <IconButton title={t('Duplicate this page, with what is on it')} onClick={() => duplicatePage(page.id)}>
-            <Copy size={13} />
-          </IconButton>
-          {pages.length > 1 && (
-            <IconButton title={t('Delete page')} onClick={() => apply([{ op: 'remove_node', id: page.id }])}>
-              <Trash2 size={13} />
-            </IconButton>
-          )}
-        </div>
+      {pages.map((page) => (
+        <PageRow key={page.id} id={page.id} count={pages.length} />
       ))}
     </Section>
   )
@@ -107,21 +161,21 @@ export function Layers() {
 }
 
 /**
- * One object in the list, with what is inside it when it is an opened group. Rows directly in the
- * container being edited can be selected, and dragged up or down to change the stacking order.
- */
-/**
  * The row a range selected with Shift starts from: the last one clicked without Shift, as in a
  * file manager. It is only a convenience of this list, so it is kept here and not in the store.
  */
 let anchor: string | null = null
 
+/**
+ * One object in the list, with what is inside it when it is an opened group. Rows directly in the
+ * container being edited can be selected, and dragged up or down, with the rest of the selection,
+ * to change the stacking order.
+ */
 function ObjectRow({ node, depth }: { node: Node; depth: number }) {
   const doc = useStore((s) => s.doc)
   const scope = useStore((s) => s.scope)
   const selection = useStore((s) => s.selection)
   const [open, setOpen] = useState(false)
-  const [drop, setDrop] = useState<'above' | 'below' | null>(null)
   const top = node.parent === scope
   const selected = top && selection.includes(node.id)
 
@@ -146,34 +200,33 @@ function ObjectRow({ node, depth }: { node: Node; depth: number }) {
     select(toggling ? (selected ? selection.filter((id) => id !== node.id) : [...selection, node.id]) : [node.id])
   }
 
+  // A selected row takes the whole selection along; any other is picked up on its own. The list is
+  // topmost first, so dropped above a row, objects go just after it in the stacking order.
+  const { drop, handlers } = useRowDrag(
+    'objects',
+    node.id,
+    top,
+    () => {
+      if (selected) return selection
+      anchor = node.id
+      select([node.id])
+      return [node.id]
+    },
+    (ids, where) => moveInOrder(ids, node.id, where === 'above'),
+  )
+
   return (
     <>
       <div
         className={`row${selected ? ' selected' : ''}${drop ? ` drop-${drop}` : ''}`}
         style={{ paddingLeft: 8 + depth * 14 }}
-        draggable={top}
         onClick={(e) => pick(e)}
         onContextMenu={(e) => {
           e.preventDefault()
           if (!selected) pick()
           useStore.setState({ contextMenu: { x: e.clientX, y: e.clientY } })
         }}
-        onDragStart={(e) => {
-          e.dataTransfer.setData(ROW_DRAG, node.id)
-          e.dataTransfer.effectAllowed = 'move'
-        }}
-        onDragOver={(e) => {
-          if (!top || !e.dataTransfer.types.includes(ROW_DRAG)) return
-          e.preventDefault()
-          const box = e.currentTarget.getBoundingClientRect()
-          setDrop(e.clientY < box.top + box.height / 2 ? 'above' : 'below')
-        }}
-        onDragLeave={() => setDrop(null)}
-        onDrop={(e) => {
-          const dragged = e.dataTransfer.getData(ROW_DRAG)
-          if (dragged && drop) moveInOrder(dragged, node.id, drop)
-          setDrop(null)
-        }}
+        {...handlers}
       >
         {node.type === 'group' ? (
           <IconButton title={open ? t('Hide what is inside') : t('Show what is inside')} onClick={() => setOpen(!open)}>

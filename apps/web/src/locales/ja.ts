@@ -68,6 +68,7 @@ export const ja: Record<string, string> = {
   "Undo": "元に戻す",
   "Redo": "やり直し",
   "Zoom to fit": "全体を表示",
+  "Zoom to selection": "選択範囲にズーム",
   "Screen pixels per metre": "1 メートルあたりの画面ピクセル数",
   "Editing component “{name}”. The red and green axes cross at its insertion point.": "コンポーネント「{name}」を編集中です。赤と緑の軸が交わる点が挿入点です。",
   "Untitled": "無題",

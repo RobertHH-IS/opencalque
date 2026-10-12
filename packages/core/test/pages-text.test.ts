@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { annotationCurve, applyOps, buildScene, childrenOf, createDocument, sheetContentOf, sheetContentOps, duplicatePageOps, fillFields, hitTest, kindOf, movePageOps, pagesOf, Registry, type Document, type Op } from '../src'
+import { annotationCurve, applyOps, buildScene, childrenOf, createDocument, sheetContentOf, sheetContentOps, duplicatePageOps, fillFields, hitTest, kindOf, pagesOf, reorderOps, Registry, type Document, type Op } from '../src'
 
 const registry = new Registry()
 const add = (node: Record<string, unknown>): Op => ({ op: 'add_node', node: { parent: 'page_1', ...node } }) as Op
@@ -57,9 +57,16 @@ describe('pages', () => {
       { op: 'add_node', node: { type: 'page', id: 'p2', name: 'B' } },
       { op: 'add_node', node: { type: 'page', id: 'p3', name: 'C' } },
     ])
-    const moved = applyOps(three, movePageOps(three, 'p3', -1))
+    const moved = applyOps(three, reorderOps(three, ['p3'], 'p2', false))
     expect(pagesOf(moved).map((p) => p.name)).toEqual(['Ground floor', 'C', 'B'])
-    expect(movePageOps(three, 'page_1', -1)).toEqual([])
+    const both = applyOps(three, reorderOps(three, ['p2', 'p3'], 'page_1', false))
+    expect(pagesOf(both).map((p) => p.name)).toEqual(['B', 'C', 'Ground floor'])
+    // Ones that were apart arrive together, in the order they had.
+    const apart = applyOps(three, reorderOps(three, ['p3', 'page_1'], 'p2', true))
+    expect(pagesOf(apart).map((p) => p.name)).toEqual(['B', 'Ground floor', 'C'])
+    // Already there, or dropped on itself: nothing to undo afterwards.
+    expect(reorderOps(three, ['p3'], 'p2', true)).toEqual([])
+    expect(reorderOps(three, ['p2', 'p3'], 'p3', true)).toEqual([])
   })
 
   it('fill in the fields of a text: page name, number and count', () => {

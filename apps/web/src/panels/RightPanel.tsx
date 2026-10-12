@@ -867,7 +867,7 @@ function Selection({ nodes }: { nodes: Node[] }) {
           </>
         )}
         {single && node.type === 'instance' && (
-          <button className="text-button" onClick={() => editComponent(node.component)}>
+          <button className="text-button" onClick={() => editComponent(node.component, node)}>
             {t('Edit component')}
           </button>
         )}

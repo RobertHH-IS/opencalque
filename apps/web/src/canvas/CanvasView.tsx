@@ -1321,7 +1321,7 @@ export function CanvasView() {
       const run = connectedWalls(s.doc, hit.node)
       const whole = run.every((id) => s.selection.includes(id)) && s.selection.length === run.length
       select(whole ? connectedWalls(s.doc, hit.node, true) : run)
-    } else if (hit?.node.type === 'instance') editComponent(hit.node.component)
+    } else if (hit?.node.type === 'instance') editComponent(hit.node.component, hit.node)
     else if (hit?.node.type === 'group') editComponent(hit.id)
     else if (hit?.node.type === 'text' || hit?.node.type === 'annotation') useStore.setState({ editingText: { id: hit.id } })
   }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { applyOps, createDocument, declarativeExtension, holdsChildren, layersOf, pagesOf, Registry, type Document, type NodeInput, type Op, type Vec2, wallEndsAt } from '@opencalque/core'
+import { applyOps, applyTransform, buildScene, createDocument, declarativeExtension, holdsChildren, layersOf, pagesOf, Registry, rootOf, sceneBounds, type Document, type NodeInput, type NodeOf, type Op, type Transform, type Vec2, wallEndsAt } from '@opencalque/core'
 import { architecture } from '@opencalque/ext-architecture'
 import type { StoredFile } from './platform'
 import { usePrefs } from './prefs'
@@ -45,6 +45,11 @@ interface State {
   page: string
   /** The page, component or group whose direct children are shown and edited. */
   scope: string
+  /**
+   * The instances double-clicked, outermost first, to reach the component being edited from the
+   * page, so the view can keep it where it was drawn; null when it was opened some other way.
+   */
+  through: string[] | null
   selection: string[]
   /**
    * The wall corner that is selected, as the point where the wall ends are: a corner is not an
@@ -140,6 +145,7 @@ function initial(doc: Document, file: StoredFile | null): State {
     file,
     page,
     scope: page,
+    through: [],
     selection: [],
     corner: null,
     tool: 'select',
@@ -195,6 +201,7 @@ function settle(s: State, doc: Document): Partial<State> {
     doc,
     page,
     scope,
+    through: scope === s.scope ? s.through : [],
     selection: s.selection.filter((id) => doc.nodes[id]?.parent === scope),
     // A corner is a place, not an object: after an undo no wall may end there any more.
     corner: s.corner && wallEndsAt(doc, scope, s.corner).length > 0 ? s.corner : null,
@@ -316,19 +323,44 @@ export function selectCorner(at: Vec2 | null): void {
 }
 
 export function showPage(id: string): void {
-  set({ page: id, scope: id, selection: [] })
+  set({ page: id, scope: id, through: [], selection: [] })
 }
 
 /**
  * Goes inside a component or group to edit what it contains, or with null comes back out: from a
- * group to whatever holds it (leaving the group selected), from a component to the page.
+ * group to whatever holds it (leaving the group selected), from a component to the page. Given the
+ * instance it was reached by, a component stays where and as large as that instance drew it, and
+ * comes back out the same way: only the rest of the drawing goes away.
  */
-export function editComponent(id: string | null): void {
-  if (id !== null) return set({ scope: id, selection: [] })
-  const { doc, scope, page } = get()
+export function editComponent(id: string | null, instance?: NodeOf<'instance'>): void {
+  const { doc, scope, page, view, through } = get()
+  if (id !== null) {
+    if (doc.nodes[id]?.type !== 'component') return set({ scope: id, selection: [] })
+    const chain = rootOf(doc, scope)?.type === 'page' ? [] : through
+    if (!instance || !chain) return set({ scope: id, through: null, selection: [] })
+    return set({ scope: id, through: [...chain, instance.id], selection: [], view: carried(view, doc, id, [instance], 1) })
+  }
   const inside = doc.nodes[scope]
-  if (inside?.type === 'group' && inside.parent) set({ scope: inside.parent, selection: [inside.id] })
-  else set({ scope: page, selection: [] })
+  if (inside?.type === 'group' && inside.parent) return set({ scope: inside.parent, selection: [inside.id] })
+  const root = rootOf(doc, scope)
+  const instances = (through ?? []).map((ref) => doc.nodes[ref]).filter((node) => node?.type === 'instance')
+  const back = root?.type === 'component' && through && through.length > 0 && instances.length === through.length
+  set({ scope: page, through: [], selection: [], ...(back ? { view: carried(view, doc, root.id, instances, -1) } : {}) })
+}
+
+/**
+ * The view that shows a component's contents where `instances` (outermost first) draw them, going
+ * in (1), or the other way, coming out (-1). The middle of the contents is what stays put, which
+ * for an instance that is not turned is every point of it.
+ */
+function carried(view: View, doc: Document, component: string, instances: Transform[], way: 1 | -1): View {
+  const box = sceneBounds(buildScene(doc, component, registry))
+  const inner = box ? { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 } : { x: 0, y: 0 }
+  const outer = instances.reduceRight((p, t) => applyTransform(p, t), inner)
+  const scale = instances.reduce((k, t) => k * (t.scale ?? 1), 1)
+  const [from, to, zoom] = way === 1 ? [outer, inner, view.zoom * scale] : [inner, outer, view.zoom / scale]
+  const at = { x: from.x * view.zoom + view.x, y: from.y * view.zoom + view.y }
+  return { zoom, x: at.x - to.x * zoom, y: at.y - to.y * zoom }
 }
 
 export const isDirty = (s: State = get()) => (s.base ?? s.doc) !== s.saved

@@ -5,6 +5,9 @@ import {
   splitWallOps,
   wallMiddle,
   buildScene,
+  boundsOf,
+  nodePrimitives,
+  type Bounds,
   childrenOf,
   cloneOps,
   copyNodes,
@@ -44,8 +47,8 @@ import {
   toPDF,
   pdfFontCharacters,
   duplicatePageOps,
-  movePageOps,
   pagesOf,
+  reorderOps,
   type Node,
 } from '@opencalque/core'
 import { gridStep } from './canvas/draw'
@@ -492,10 +495,6 @@ export function duplicatePage(id: string): void {
 }
 
 /** Moves a page one place up or down the list of pages. */
-export function movePage(id: string, by: -1 | 1): void {
-  apply(movePageOps(get().doc, id, by))
-}
-
 /** The scene items of the selection, each with the box it takes up. */
 function selectedBoxes() {
   const { doc, scope, selection } = get()
@@ -627,15 +626,10 @@ export function reorderSelection(to: 'front' | 'forward' | 'backward' | 'back'):
   replaceDoc(doc)
 }
 
-/** Puts one object just above or just below another in the stacking order (as dragged in the object list). */
-export function moveInOrder(id: string, target: string, place: 'above' | 'below'): void {
-  const { doc, scope } = get()
-  if (id === target) return
-  const others = childrenOf(doc, scope).filter((n) => n.id !== id)
-  const at = others.findIndex((n) => n.id === target)
-  if (at < 0) return
-  const order = place === 'above' ? orderBetween(others[at].order, others[at + 1]?.order ?? null) : orderBetween(others[at - 1]?.order ?? null, others[at].order)
-  apply([{ op: 'update_node', id, patch: { order } }])
+/** Puts objects, or pages, just before or just after another, keeping their own order (as dragged in a list). */
+export function moveInOrder(ids: string[], target: string, after: boolean): void {
+  const ops = reorderOps(get().doc, ids, target, after)
+  if (ops.length > 0) apply(ops)
 }
 
 export function runCommand(id: string): void {
@@ -653,8 +647,24 @@ export function zoomBy(factor: number): void {
 }
 
 export function zoomToFit(): void {
-  const { doc, scope, viewport } = get()
-  const b = sceneBounds(buildScene(doc, scope, registry))
+  const { doc, scope } = get()
+  showBounds(sceneBounds(buildScene(doc, scope, registry)))
+}
+
+/** Brings what is selected into the middle of the view, filling it: to see where an object picked in a list is. */
+export function zoomToSelection(): void {
+  const { doc, selection } = get()
+  const ctx = { doc, registry, depth: 0 }
+  const b = boundsOf(selection.flatMap((id) => (doc.nodes[id] ? nodePrimitives(doc.nodes[id], ctx) : [])))
+  if (!b) return
+  // Room around it, as much again as it is large and at least a metre, so that one sees where it is and not only what.
+  const room = Math.max(b.maxX - b.minX, b.maxY - b.minY, 1000)
+  showBounds({ minX: b.minX - room, minY: b.minY - room, maxX: b.maxX + room, maxY: b.maxY + room })
+}
+
+/** Fits a rectangle of the drawing in the view, with a margin, zooming in no further than 2 px a millimetre. */
+function showBounds(b: Bounds | null): void {
+  const { viewport } = get()
   if (!b || viewport.width === 0) return
   const margin = 80
   const zoom = Math.min(

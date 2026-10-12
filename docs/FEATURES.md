@@ -41,10 +41,10 @@ Last updated: 2026-10-10.
 - **Smart guides**: what is moved lines up with the sides and middles of other objects and keeps equal gaps with its neighbours, with lines and gap sizes shown while moving.
 
 ### Organising a drawing
-- Pages, which can be duplicated with their contents and reordered, and layers with colour, visibility and lock. **On every sheet**: a title, a logo or a north arrow drawn once, in millimetres of paper, shows on every paper at its own scale, in the corner it was drawn nearest to, with fields (`{sheet}`, `{scale}`, `{page}`, `{project}`…) filled in for each sheet.
+- Pages, which can be duplicated with their contents and reordered by dragging, and layers with colour, visibility and lock. **On every sheet**: a title, a logo or a north arrow drawn once, in millimetres of paper, shows on every paper at its own scale, in the corner it was drawn nearest to, with fields (`{sheet}`, `{scale}`, `{page}`, `{project}`…) filled in for each sheet.
 - **Groups**: several objects treated as one (`Ctrl+G`, `Ctrl+Shift+G`), nestable; double-click to edit inside.
 - **Components**: a reusable definition with instances that all update together; double-click an instance to edit the component.
-- **Stacking order**: bring forward or send backward one step or all the way, from the properties panel, the right-click menu, shortcuts, or by dragging rows in the object list.
+- **Stacking order**: bring forward or send backward one step or all the way, from the properties panel, the right-click menu, shortcuts, or by dragging rows in the object list (several at once when they are selected).
 - A Structure panel listing the objects, with an icon per kind of object, expandable groups, lock and hide per object.
 - Cut, copy and paste, including between drawings and windows.
 

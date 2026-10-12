@@ -68,6 +68,7 @@ export const de: Record<string, string> = {
   "Undo": "Rückgängig",
   "Redo": "Wiederholen",
   "Zoom to fit": "Alles anzeigen",
+  "Zoom to selection": "Auf Auswahl zoomen",
   "Screen pixels per metre": "Bildschirmpixel pro Meter",
   "Editing component “{name}”. The red and green axes cross at its insertion point.": "Komponente „{name}“ wird bearbeitet. Die rote und die grüne Achse kreuzen sich an ihrem Einfügepunkt.",
   "Untitled": "Unbenannt",

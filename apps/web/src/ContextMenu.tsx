@@ -6,6 +6,9 @@ import { useStore } from './store'
 /** What a right-click offers, as command ids; null is a separator. */
 const ON_SELECTION = [
   // The few things reached for most; the rest is in the Object menu and the properties panel.
+  // First, where it is: from the list of objects, the thing picked may be anywhere on the drawing.
+  'view.zoomToSelection',
+  null,
   'edit.cut',
   'edit.copy',
   'edit.paste',

@@ -182,7 +182,7 @@ export function ExportDialog() {
             <span className="export-spinner" aria-hidden="true"><LoaderCircle size={20} /></span>
             <div>
               <strong>{t(PROGRESS[progress])}</strong>
-              {format === 'pdf' && <p>{t('The first PDF export may take longer while fonts download. You can cancel and try again later.')}</p>}
+              {progress === 'fonts' && <p>{t('The first PDF export may take longer while fonts download. You can cancel and try again later.')}</p>}
             </div>
           </div>
         )}

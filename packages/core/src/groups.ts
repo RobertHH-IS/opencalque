@@ -70,15 +70,21 @@ export function duplicatePageOps(doc: Document, pageId: string, name: string): {
   return { ops, id }
 }
 
-/** The operations that move a page one place earlier (-1) or later (+1) in the list of pages. */
-export function movePageOps(doc: Document, pageId: string, by: -1 | 1): Op[] {
-  const pages = pagesOf(doc)
-  const from = pages.findIndex((p) => p.id === pageId)
-  const other = pages[from + by]
-  if (from < 0 || !other) return []
-  // The two pages swap their places in the order.
-  return [
-    { op: 'update_node', id: pageId, patch: { order: other.order } },
-    { op: 'update_node', id: other.id, patch: { order: pages[from].order } },
-  ]
+/**
+ * The operations that move sibling nodes next to `target`, just before or just after it in their
+ * parent's order, keeping their order among themselves. Pages are put among the pages. Nothing is
+ * done when they would end up where they are, or when the target is one of them.
+ */
+export function reorderOps(doc: Document, ids: string[], target: string, after: boolean): Op[] {
+  const node = doc.nodes[target]
+  const moving = new Set(ids)
+  if (!node || moving.has(target)) return []
+  const siblings = node.parent === null ? pagesOf(doc) : childrenOf(doc, node.parent)
+  const moved = siblings.filter((n) => moving.has(n.id))
+  const rest = siblings.filter((n) => !moving.has(n.id))
+  const at = rest.findIndex((n) => n.id === target) + (after ? 1 : 0)
+  const result = [...rest.slice(0, at), ...moved, ...rest.slice(at)]
+  if (moved.length === 0 || result.every((n, i) => n === siblings[i])) return []
+  const orders = generateNKeysBetween(rest[at - 1]?.order ?? null, rest[at]?.order ?? null, moved.length)
+  return moved.map((n, i): Op => ({ op: 'update_node', id: n.id, patch: { order: orders[i] } }))
 }

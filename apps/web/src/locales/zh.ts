@@ -68,6 +68,7 @@ export const zh: Record<string, string> = {
   "Undo": "撤销",
   "Redo": "重做",
   "Zoom to fit": "缩放至全部",
+  "Zoom to selection": "缩放至所选对象",
   "Screen pixels per metre": "每米屏幕像素数",
   "Editing component “{name}”. The red and green axes cross at its insertion point.": "正在编辑组件“{name}”。红色与绿色轴线的交点是它的插入点。",
   "Untitled": "未命名",

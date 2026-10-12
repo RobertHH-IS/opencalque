@@ -4,6 +4,19 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 0.8.5 — 2026-10-12
+
+### New
+- Zoom to selection (Shift+2), first in the right-click menu: picked from the list of objects, a thing is brought into view, to see where it is.
+
+### Improved
+- Pages are put in order by dragging them in the Pages panel, in place of the up and down arrows.
+- Dragging a selected row in the Structure panel takes the whole selection along: the objects arrive together, in the order they had.
+- The Export dialog stays open while a PDF is made, saying what it is doing, and Cancel or Esc stops it while a font is still loading, so no file turns up later. Contributed by @Seeker-Star.
+
+### Fixed
+- Double-clicking a component to edit it no longer moves the view: it stays where and as large as it was drawn, only the rest of the drawing goes away, and leaving it (Esc or Done) puts everything back where it was.
+
 ## 0.8.4 — 2026-10-12
 
 ### New
