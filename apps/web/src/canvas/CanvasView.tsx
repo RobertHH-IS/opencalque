@@ -210,13 +210,11 @@ function boxLabels(box: { x: number; y: number; width: number; height: number })
 }
 
 /**
- * What a paper is, written above it: its format and its scale, as "A4 · 1:100". Its size in the
- * drawing is not shown: it says nothing a format and a scale do not, and reads as a size to draw to.
+ * What is written above a selected paper: its scale, as "1:100". Its format is in the panel, and
+ * its size in the drawing says nothing a format and a scale do not.
  */
 function paperLabel(paper: { x: number; y: number; width: number; height: number; scale?: number }): SizeLabel[] {
-  const scale = paper.scale ?? DEFAULT_PAPER_SCALE
-  const sheet = paperFormat(paper)?.name ?? `${formatNumber(Math.round(paper.width / scale))} × ${formatNumber(Math.round(paper.height / scale))} mm`
-  return [{ at: { x: paper.x + paper.width / 2, y: paper.y }, dx: 0, dy: -18, text: `${sheet} · 1:${formatNumber(scale)}` }]
+  return [{ at: { x: paper.x + paper.width / 2, y: paper.y }, dx: 0, dy: -18, text: `1:${formatNumber(paper.scale ?? DEFAULT_PAPER_SCALE)}` }]
 }
 
 /**

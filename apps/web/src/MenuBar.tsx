@@ -13,7 +13,7 @@ import { Logo } from './Welcome'
  * category (used for the lists that depend on the drawing and on extensions).
  */
 const MENUS: [string, (string | null)[]][] = [
-  [msg('File'), ['file.new', 'file.open', 'file.openExample', 'file.save', 'file.saveAs', 'file.autosave', null, 'file.import', 'file.export', null, 'tool.calibrate']],
+  [msg('File'), ['file.new', 'file.open', 'file.save', 'file.saveAs', 'file.autosave', null, 'file.import', 'file.export', null, 'tool.calibrate']],
   [msg('Edit'), ['edit.undo', 'edit.redo', null, 'edit.cut', 'edit.copy', 'edit.paste', 'edit.duplicate', 'edit.delete', null, 'edit.selectAll', 'edit.deselect']],
   // What is done to the selection as an object, as against editing in general: arranging, transforming, modifying.
   [

@@ -27,6 +27,14 @@ import {
   Type,
   Undo2,
   type LucideIcon,
+  AlignCenterHorizontal,
+  AlignCenterVertical,
+  AlignEndHorizontal,
+  AlignEndVertical,
+  AlignHorizontalSpaceAround,
+  AlignStartHorizontal,
+  AlignStartVertical,
+  AlignVerticalSpaceAround,
 } from 'lucide-react'
 import { zoomToFit } from './actions'
 import { CanvasView } from './canvas/CanvasView'
@@ -58,6 +66,18 @@ const ICONS: Partial<Record<Tool, [title: string, icon: LucideIcon]>> = {
 }
 
 /** Flipping the selection on itself, listed with the rotate tool. */
+/** Aligning and spacing the selection: one button in the toolbar, its choices in a list. The commands say when they apply. */
+const ARRANGE: (GroupAction & { least: number })[] = [
+  { command: 'edit.align.left', title: msg('Align left'), icon: AlignStartVertical, least: 2 },
+  { command: 'edit.align.center', title: msg('Align centres, across'), icon: AlignCenterVertical, least: 2 },
+  { command: 'edit.align.right', title: msg('Align right'), icon: AlignEndVertical, least: 2 },
+  { command: 'edit.align.top', title: msg('Align top'), icon: AlignStartHorizontal, least: 2 },
+  { command: 'edit.align.middle', title: msg('Align middles, up and down'), icon: AlignCenterHorizontal, least: 2 },
+  { command: 'edit.align.bottom', title: msg('Align bottom'), icon: AlignEndHorizontal, least: 2 },
+  { command: 'edit.distribute.x', title: msg('Space evenly, across'), icon: AlignHorizontalSpaceAround, least: 3 },
+  { command: 'edit.distribute.y', title: msg('Space evenly, up and down'), icon: AlignVerticalSpaceAround, least: 3 },
+]
+
 const FLIPS: GroupAction[] = [
   { command: 'edit.flipHorizontal', title: msg('Mirror horizontally'), icon: FlipHorizontal2 },
   { command: 'edit.flipVertical', title: msg('Mirror vertically'), icon: FlipVertical2 },
@@ -186,6 +206,54 @@ function ToolGroup({ tools, current: shape, more, actions = [] }: { tools: Tool[
   )
 }
 
+/** The button that aligns and spaces the selection; usable from two objects, spacing from three. */
+function ArrangeMenu() {
+  const count = useStore((s) => s.selection.length)
+  const [open, setOpen] = useState(false)
+  const group = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onPointerDown = (e: PointerEvent) => {
+      if (!group.current?.contains(e.target as HTMLElement)) setOpen(false)
+    }
+    const onKeyDown = () => setOpen(false)
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('keydown', onKeyDown, true)
+    }
+  }, [open])
+  // Nothing to line up with fewer than two: the list closes rather than offering only greyed choices.
+  useEffect(() => {
+    if (count < 2) setOpen(false)
+  }, [count])
+  return (
+    <div className="tool-group" ref={group}>
+      <IconButton title={t('Align and space evenly')} active={open} disabled={count < 2} onClick={() => setOpen(!open)}>
+        <AlignStartVertical size={18} />
+      </IconButton>
+      {open && (
+        <div className="menu-list tool-menu" role="menu">
+          {ARRANGE.map((action, i) => (
+            <div key={action.command} style={{ display: 'contents' }}>
+              {i === 6 && <hr />}
+              <ActionChoice
+                action={action}
+                disabled={count < action.least}
+                onPick={() => {
+                  setOpen(false)
+                  executeById(action.command)
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 type Hint = [key: string, text: string]
 
 /**
@@ -300,6 +368,7 @@ function Toolbar() {
       <ToolButton id="split" />
       {/* Mirroring is not a tool: the selection is flipped on itself, at once, from the same list. */}
       <ToolGroup tools={['rotate']} current="rotate" more={t('Mirror')} actions={FLIPS} />
+      <ArrangeMenu />
       <ToolGroup tools={MEASURE_TOOLS} current={measureTool} more={t('Measure an angle')} />
       <ToolGroup tools={TEXT_TOOLS} current={textTool} more={t('Annotation, dimension')} />
       <ToolButton id="paper" />

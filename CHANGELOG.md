@@ -4,6 +4,20 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 0.8.4 — 2026-10-12
+
+### New
+- A button in the toolbar aligns the selected objects (left, centre, right, top, middle, bottom) and spaces them evenly across or up and down.
+
+### Improved
+- A paper's panel gives its position (X and Y) at the top and no longer has stacking order, which means nothing for a sheet that is always beneath the drawing.
+- The File menu no longer offers the example drawing: it is on the welcome screen, and in the command palette (Ctrl+K).
+- A selected paper shows only its scale above it, as "1:100", and the panel no longer lists its width and height in the drawing: its format and scale say what it is.
+- The paper's panel no longer has an "Export this sheet as PDF" button: exporting is in the File menu (Ctrl+P), with the other formats.
+
+### Fixed
+- Typing a scale for a paper of a size of its own changed what printed instead of what the sheet covers: the frame stayed as it was. It now does what pulling a corner does, for a sheet of any size.
+
 ## 0.8.3 — 2026-10-12
 
 ### New

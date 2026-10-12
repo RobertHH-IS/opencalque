@@ -1,4 +1,4 @@
-import { childrenOf, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
+import { childrenOf, paperRescaled, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
 import { executeById } from '../commands'
 import { useEffect, useRef, useState, useLayoutEffect, type ReactNode } from 'react'
 import { Pipette, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Undo2, SquareSplitHorizontal } from 'lucide-react'
@@ -125,7 +125,8 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
   dimension: DIMENSION,
   annotation: ANNOTATION,
   rect: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), ...STYLE],
-  paper: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H'))],
+  // A paper's size is its format and scale, and where it lies is typed at the top of its panel: it has no geometry section.
+  paper: [],
   room: [
     len('x', msg('X')),
     len('y', msg('Y')),
@@ -770,8 +771,8 @@ function PaperSheet({ node, update }: { node: Extract<Node, { type: 'paper' }>; 
           <option value="landscape">{t('Lying')}</option>
         </select>
       </label>
-      {/* Changing the scale of a standard sheet keeps it that sheet, so its size in the drawing changes. */}
-      <Field label={t('Scale 1:')} numeric min={1} value={scale} onCommit={(v) => v > 0 && resize(format?.name ?? '', landscape, v)} />
+      {/* Changing the scale keeps the sheet the sheet it is, as pulling a corner does: it covers more or less of the drawing. */}
+      <Field label={t('Scale 1:')} numeric min={1} value={scale} onCommit={(v) => v > 0 && update(() => paperRescaled(node, v))} />
       <p className="hint">{t('A paper moves on its own, over the drawing: put it where it frames what to print. Pulling a corner changes its scale, or its size with Alt. Copying or duplicating it takes along what lies on it.')}</p>
       <label className="field">
         <span>{t('Title block')}</span>
@@ -795,9 +796,6 @@ function PaperSheet({ node, update }: { node: Extract<Node, { type: 'paper' }>; 
         </button>
       )}
       <p className="hint">{t('What is drawn there shows on every sheet of the drawing: a title, a logo, a north arrow. It is drawn once, in millimetres of paper, and each sheet shows it at its own scale, each thing in the corner of the sheet it was drawn nearest to. In its texts, fields such as {sheet}, {scale} or {page} say each sheet’s own.')}</p>
-      <button className="text-button" onClick={() => executeById('file.exportPdf')}>
-        {t('Export this sheet as PDF…')}
-      </button>
     </Section>
   )
 }
@@ -823,21 +821,30 @@ function Selection({ nodes }: { nodes: Node[] }) {
             ))}
           </select>
         </label>
-        <div className="field">
-          <span>{t('Order')}</span>
-          <IconButton title={t('Bring to front')} onClick={() => reorderSelection('front')}>
-            <ArrowUpToLine size={14} />
-          </IconButton>
-          <IconButton title={t('Bring forward')} onClick={() => reorderSelection('forward')}>
-            <ArrowUp size={14} />
-          </IconButton>
-          <IconButton title={t('Send backward')} onClick={() => reorderSelection('backward')}>
-            <ArrowDown size={14} />
-          </IconButton>
-          <IconButton title={t('Send to back')} onClick={() => reorderSelection('back')}>
-            <ArrowDownToLine size={14} />
-          </IconButton>
-        </div>
+        {/* A paper is always beneath the drawing: stacking means nothing for it, where it lies does. */}
+        {single && node.type === 'paper' && (
+          <>
+            <Field label={t('Position X')} numeric length value={node.x} onCommit={(x) => update(() => ({ x }))} />
+            <Field label={t('Position Y')} numeric length value={node.y} onCommit={(y) => update(() => ({ y }))} />
+          </>
+        )}
+        {!(single && node.type === 'paper') && (
+          <div className="field">
+            <span>{t('Order')}</span>
+            <IconButton title={t('Bring to front')} onClick={() => reorderSelection('front')}>
+              <ArrowUpToLine size={14} />
+            </IconButton>
+            <IconButton title={t('Bring forward')} onClick={() => reorderSelection('forward')}>
+              <ArrowUp size={14} />
+            </IconButton>
+            <IconButton title={t('Send backward')} onClick={() => reorderSelection('backward')}>
+              <ArrowDown size={14} />
+            </IconButton>
+            <IconButton title={t('Send to back')} onClick={() => reorderSelection('back')}>
+              <ArrowDownToLine size={14} />
+            </IconButton>
+          </div>
+        )}
         {nodes.every((n) => n.type === 'wall') && <WallTypeChoice walls={nodes as Extract<Node, { type: 'wall' }>[]} />}
         {single && node.type === 'wall' && <WallEnds wall={node} />}
         {single && node.type === 'wall' && <WallCurve wall={node} />}

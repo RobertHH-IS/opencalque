@@ -63,6 +63,16 @@ export function paperScaleTo(paper: { x: number; y: number; width: number; heigh
   return { x: Math.min(fixed.x, fixed.x + d.x * k), y: Math.min(fixed.y, fixed.y + d.y * k), width: paper.width * k, height: paper.height * k, scale }
 }
 
+/**
+ * A paper at another scale: the same sheet covering more or less of the drawing, as when a corner
+ * is pulled, its middle staying where it is. A sheet of any size, standard or not, grows with it.
+ */
+export function paperRescaled(paper: { x: number; y: number; width: number; height: number; scale?: number }, scale: number): { x: number; y: number; width: number; height: number; scale: number } {
+  const k = scale / (paper.scale ?? DEFAULT_PAPER_SCALE)
+  const [width, height] = [paper.width * k, paper.height * k]
+  return { x: paper.x + (paper.width - width) / 2, y: paper.y + (paper.height - height) / 2, width, height, scale }
+}
+
 /** What a paper says of itself to the fields of what is drawn on every sheet: its name, its scale, and its format or its size in millimetres. */
 export function paperSheet(paper: { name?: string; width: number; height: number; scale?: number }): { name: string; scale: number; format: string } {
   const scale = paper.scale ?? DEFAULT_PAPER_SCALE

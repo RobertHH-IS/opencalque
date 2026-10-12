@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyOps,
+  paperRescaled,
   buildScene,
   createDocument,
   hitTest,
@@ -61,6 +62,16 @@ describe('paper', () => {
     expect(paperScaleTo(sheet, 0, { x: 21000, y: 14850 })).toEqual({ x: 21000, y: 14850, width: 21000, height: 14850, scale: 50 })
     // Pulled past the opposite corner, it stops at 1:1 rather than turning inside out.
     expect(paperScaleTo(sheet, 2, { x: -5000, y: -5000 }).scale).toBe(1)
+  })
+
+  it('given a scale, covers more or less of the drawing about its middle, whatever its size', () => {
+    // A sheet of no standard size, 200 × 100 mm at 1:50: at 1:100 it is the same sheet, twice as large in the drawing.
+    expect(paperRescaled({ x: 0, y: 0, width: 10000, height: 5000, scale: 50 }, 100)).toEqual({ x: -5000, y: -2500, width: 20000, height: 10000, scale: 100 })
+    // As pulling a corner does, but with the middle staying.
+    const a3 = { x: 0, y: 0, width: 42000, height: 29700, scale: 100 }
+    const typed = paperRescaled(a3, 200)
+    expect([typed.width, typed.height]).toEqual([paperScaleTo(a3, 2, { x: 84000, y: 59400 }).width, paperScaleTo(a3, 2, { x: 84000, y: 59400 }).height])
+    expect(paperFormat(typed)).toEqual({ name: 'A3', landscape: true })
   })
 
   it('holds what lies entirely on it, by position', () => {
