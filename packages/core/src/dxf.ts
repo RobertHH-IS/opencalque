@@ -5,6 +5,8 @@ import { buildScene } from './scene'
 import type { Document } from './schema'
 
 const n = (value: number) => String(Math.round(value * 1000) / 1000)
+/** The height a DXF gives a text is that of a capital letter, as a part of the size of the font, which is what a text has here. */
+export const DXF_CAP = 0.72
 /** DXF layer names allow few characters; anything else becomes an underscore. */
 const layerName = (name: string | undefined) => (name ?? '0').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 31) || '0'
 /**
@@ -103,7 +105,7 @@ export function toDXF(doc: Document, containerId: string, registry: Registry): s
       } else if (prim.kind === 'text') {
         // A text is kept whole or left out, by where it starts.
         if (prim.clip?.some((outline) => !pointInPolygon(prim, outline))) continue
-        const codes: (string | number)[] = [10, n(prim.x), 20, n(-prim.y), 40, n(prim.size), 1, dxfText(prim.text), 50, n(-(prim.rotation ?? 0))]
+        const codes: (string | number)[] = [10, n(prim.x), 20, n(-prim.y), 40, n(prim.size * DXF_CAP), 1, dxfText(prim.text), 50, n(-(prim.rotation ?? 0))]
         // Centred text needs its alignment point repeated in the second point.
         if (prim.align === 'center' || prim.align === 'right') codes.push(72, prim.align === 'center' ? 1 : 2, 11, n(prim.x), 21, n(-prim.y))
         entity('TEXT', layer, codes)

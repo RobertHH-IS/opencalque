@@ -8,6 +8,7 @@ import {
   paintOrder,
   paperContents,
   paperFormat,
+  paperScaleTo,
   paperSize,
   Registry,
   wallEndFollowOps,
@@ -48,6 +49,18 @@ describe('paper', () => {
     expect(paperFormat({ width: 42000, height: 29700, scale: 100 })).toEqual({ name: 'A3', landscape: true })
     expect(paperFormat({ width: 29700, height: 42000 })).toEqual({ name: 'A3', landscape: false })
     expect(paperFormat({ width: 30000, height: 20000, scale: 100 })).toBeNull()
+  })
+
+  it('changes scale, not shape, when a corner is pulled', () => {
+    const sheet = { x: 0, y: 0, width: 42000, height: 29700, scale: 100 }
+    // The bottom right corner pulled out, off the diagonal: the top left stays, the sheet is still an A3.
+    const larger = paperScaleTo(sheet, 2, { x: 84500, y: 50000 })
+    expect(larger).toEqual({ x: 0, y: 0, width: 84000, height: 59400, scale: 200 })
+    expect(paperFormat(larger)).toEqual({ name: 'A3', landscape: true })
+    // The top left corner pulled in: the bottom right stays.
+    expect(paperScaleTo(sheet, 0, { x: 21000, y: 14850 })).toEqual({ x: 21000, y: 14850, width: 21000, height: 14850, scale: 50 })
+    // Pulled past the opposite corner, it stops at 1:1 rather than turning inside out.
+    expect(paperScaleTo(sheet, 2, { x: -5000, y: -5000 }).scale).toBe(1)
   })
 
   it('holds what lies entirely on it, by position', () => {

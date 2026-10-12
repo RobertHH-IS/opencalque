@@ -4,6 +4,24 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 0.8.2 — 2026-10-12
+
+### New
+- A DXF laid out as a sheet, as AutoCAD's paper space and SketchUp LayOut write them, comes in as that sheet: a paper at its scale, what is drawn on it, and what each of its windows shows of the model, at its true size and cropped to the window. LayOut's own layers are found again.
+- DXF import reads much more: blocks placed in the drawing (as groups), hatches (as fills, plain or patterned, joined to the outline they fill), curves, filled shapes, dimensions and leaders with their notes (as dimensions and annotations), and the colours, line weights, dashes, fonts and bold of what it reads.
+- `opencalque import drawing.opencalque a.dxf b.dxf` on the command line makes one drawing of several DXF files, a page each, with the pictures they refer to.
+
+### Improved
+- A `{page}` or `{page-number}` written on a shared layer says the page it is seen on, so one title kept on a shared layer names every sheet.
+- Moving a paper no longer moves what is drawn on it: the sheet slides over the drawing, so it can be put where it frames what to print. Copying and duplicating a paper still take along what lies on it.
+- Pulling a corner of a paper changes its scale instead of its shape: an A4 stays an A4 and covers more or less of the drawing. The corner keeps to the diagonal, which is shown, and the scale goes by round values (1:20, 1:25, 1:50…). Hold Alt for a sheet of any size.
+- A selected paper shows what it is above it, as "A4 · 1:100", instead of its width and height in the drawing.
+- Changing the scale or the format of a paper keeps its middle in place, so what it frames stays in the middle of the sheet instead of ending up in a corner.
+
+### Fixed
+- Text from a DXF came in a quarter too small, and went out a third too large: a DXF gives the height of a capital letter, not the size of the font.
+- Multi-line text from a DXF kept stray formatting codes such as "\l" in front of its words.
+
 ## 0.8.1 — 2026-10-12
 
 ### New

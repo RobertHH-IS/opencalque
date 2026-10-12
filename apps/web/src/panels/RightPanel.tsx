@@ -730,7 +730,8 @@ function PaperSheet({ node, update }: { node: Extract<Node, { type: 'paper' }>; 
   const landscape = node.width > node.height
   const resize = (name: string, lying: boolean, at: number) => {
     const size = paperSize(name, lying, at)
-    update(() => (size ? { ...size, scale: at } : { scale: at }))
+    // The sheet keeps its middle, so that what it frames stays in the middle of it.
+    update(() => (size ? { ...size, x: node.x + (node.width - size.width) / 2, y: node.y + (node.height - size.height) / 2, scale: at } : { scale: at }))
   }
   return (
     <Section title={t('Sheet')}>
@@ -754,7 +755,7 @@ function PaperSheet({ node, update }: { node: Extract<Node, { type: 'paper' }>; 
       </label>
       {/* Changing the scale of a standard sheet keeps it that sheet, so its size in the drawing changes. */}
       <Field label={t('Scale 1:')} numeric min={1} value={scale} onCommit={(v) => v > 0 && resize(format?.name ?? '', landscape, v)} />
-      <p className="hint">{t('Moving, copying or duplicating a paper takes along everything that lies on it. Deleting it leaves the drawing in place.')}</p>
+      <p className="hint">{t('A paper moves on its own, over the drawing: put it where it frames what to print. Pulling a corner changes its scale, or its size with Alt. Copying or duplicating it takes along what lies on it.')}</p>
       <label className="field">
         <span>{t('Title block')}</span>
         <input type="checkbox" checked={node.titleBlock !== undefined} onChange={(e) => update(() => ({ titleBlock: e.target.checked ? {} : null }))} />
@@ -1263,7 +1264,7 @@ export function Properties() {
           <AnnotationTool />
         ) : tool === 'paper' ? (
           <Section title={t('Paper tool')}>
-            <p className="hint">{t('A paper is a sheet laid on the drawing, like a frame: it shows what goes on one page, and carries what is drawn on it when it is moved.')}</p>
+            <p className="hint">{t('A paper is a sheet laid on the drawing, like a frame: it shows what goes on one page. Draw at real size; the scale of the paper sets how much of the drawing it covers.')}</p>
             <p className="hint">{t('Click one corner, then pull. The standard formats appear at the scale set in the bar above the tools; come close to one to take it, or click anywhere for a size of your own.')}</p>
           </Section>
         ) : tool === 'wall' ? (

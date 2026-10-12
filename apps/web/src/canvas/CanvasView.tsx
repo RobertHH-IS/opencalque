@@ -20,6 +20,9 @@ import {
   type Op,
   type Vec2,
   PAPER_FORMATS,
+  DEFAULT_PAPER_SCALE,
+  paperFormat,
+  paperScaleTo,
   paperSize,
   type SceneItem,
   wallEndFollowOps,
@@ -51,7 +54,7 @@ import {
   splitPlace,
   wallEdgeLines,
 } from '@opencalque/core'
-import { finishTextEdit, zoomToFit, withPaperContents, pickStyle } from '../actions'
+import { finishTextEdit, zoomToFit, pickStyle } from '../actions'
 import { onCommand } from '../commands'
 import { t } from '../i18n'
 import { usePrefs } from '../prefs'
@@ -207,6 +210,16 @@ function boxLabels(box: { x: number; y: number; width: number; height: number })
 }
 
 /**
+ * What a paper is, written above it: its format and its scale, as "A4 · 1:100". Its size in the
+ * drawing is not shown: it says nothing a format and a scale do not, and reads as a size to draw to.
+ */
+function paperLabel(paper: { x: number; y: number; width: number; height: number; scale?: number }): SizeLabel[] {
+  const scale = paper.scale ?? DEFAULT_PAPER_SCALE
+  const sheet = paperFormat(paper)?.name ?? `${formatNumber(Math.round(paper.width / scale))} × ${formatNumber(Math.round(paper.height / scale))} mm`
+  return [{ at: { x: paper.x + paper.width / 2, y: paper.y }, dx: 0, dy: -18, text: `${sheet} · 1:${formatNumber(scale)}` }]
+}
+
+/**
  * The look given to what is drawn next, as chosen in the bar above the tools: a colour, a line
  * weight, a kind of line. Nothing at all when each is left to the layer and the defaults.
  */
@@ -350,7 +363,8 @@ export function CanvasView() {
   // The sizes of the one selected shape, shown beside it while nothing is being drawn.
   const selectionLabels = useMemo((): SizeLabel[] => {
     const node = tool === 'select' && selection.length === 1 ? doc.nodes[selection[0]] : undefined
-    if ((node?.type === 'rect' && !node.rotation) || node?.type === 'paper') return boxLabels(node)
+    if (node?.type === 'paper') return paperLabel(node)
+    if (node?.type === 'rect' && !node.rotation) return boxLabels(node)
     if (node?.type === 'ellipse') return boxLabels({ x: node.cx - node.rx, y: node.cy - node.ry, width: node.rx * 2, height: node.ry * 2 })
     // A curved wall is as long as its curve, which is written at the top of it.
     if (node?.type === 'wall' && node.bulge) return [{ at: wallMiddle(node), dx: 0, dy: -18, text: formatLength(wallLength(node)) }]
@@ -782,7 +796,7 @@ export function CanvasView() {
       const grip = gripAt(at)
       if (grip) {
         const { box, corner } = grip
-        const nodes = withPaperContents(s.selection).map((id) => s.doc.nodes[id])
+        const nodes = s.selection.map((id) => s.doc.nodes[id])
         const points = [{ x: box.minX, y: box.minY }, { x: box.maxX, y: box.minY }, { x: box.maxX, y: box.maxY }, { x: box.minX, y: box.maxY }]
         const middle = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
         if (corner === 'knob') setGripCursor('grabbing')
@@ -815,7 +829,7 @@ export function CanvasView() {
         // a click that does not become a drag lets them go.
         const box = adding ? null : gripBox()
         if (box && boundsContainPoint(box, world, 6 / s.view.zoom)) {
-          gesture.current = { kind: 'press', at, start: world, nodes: withPaperContents(s.selection).map((id) => s.doc.nodes[id]), beside: true }
+          gesture.current = { kind: 'press', at, start: world, nodes: s.selection.map((id) => s.doc.nodes[id]), beside: true }
           return
         }
         if (!adding) select([])
@@ -826,8 +840,8 @@ export function CanvasView() {
       if (adding) ids = ids.includes(hit.id) ? ids.filter((id) => id !== hit.id) : [...ids, hit.id]
       else if (!ids.includes(hit.id)) ids = [hit.id]
       select(ids)
-      // A paper is moved with everything that lies on it.
-      if (ids.includes(hit.id)) gesture.current = { kind: 'press', at, start: world, nodes: withPaperContents(ids).map((id) => s.doc.nodes[id]) }
+      // A paper moves alone, over the drawing: that is how a sheet is put where it frames what it should.
+      if (ids.includes(hit.id)) gesture.current = { kind: 'press', at, start: world, nodes: ids.map((id) => s.doc.nodes[id]) }
     } else if (s.tool === 'text') {
       // The text starts empty and is typed in place; see TextEditor.
       const { p } = snap(world, e, [])
@@ -869,7 +883,7 @@ export function CanvasView() {
         if (hit) select([hit.id])
         return
       }
-      gesture.current = { kind: 'turn', nodes: withPaperContents(s.selection).map((id) => s.doc.nodes[id]), pivot: snap(world, e, []).p }
+      gesture.current = { kind: 'turn', nodes: s.selection.map((id) => s.doc.nodes[id]), pivot: snap(world, e, []).p }
     } else if (s.tool === 'measure' || s.tool === 'calibrate') {
       // First click starts a reading, the second freezes it on screen until the next one.
       // Calibration picks points on a picture, which has nothing to snap to.
@@ -1004,6 +1018,17 @@ export function CanvasView() {
         break
       }
       case 'handle': {
+        if (g.node.type === 'paper' && !e.altKey) {
+          // A corner of a paper sets its scale: the sheet stays the sheet it is, so the corner keeps
+          // to the diagonal, which is shown running across the view. Alt gives it any size instead.
+          const patch = paperScaleTo(g.node, g.index, world)
+          const fixed = kindOf(g.node).handles!(g.node)[(g.index + 2) % 4]
+          guide = { at: fixed, angle: Math.atan2(g.node.height, g.node.width) * (g.index % 2 === 0 ? 1 : -1) }
+          labels = paperLabel(patch)
+          status = labels[0].text
+          previewed = preview([{ op: 'update_node', id: g.node.id, patch }])
+          break
+        }
         // Shift locks a wall or a line to the line it already lies on: its end only slides along it,
         // and that line is shown running across the view.
         const ends = 'a' in g.node && 'b' in g.node && g.index < 2 ? { moved: g.index === 0 ? g.node.a : g.node.b, fixed: g.index === 0 ? g.node.b : g.node.a } : null

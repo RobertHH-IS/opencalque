@@ -164,7 +164,10 @@ export const exportDxf = (container?: string) =>
 // Kept as well as the system clipboard, which a browser may refuse to let a page read.
 let lastCopy = ''
 
-/** The given objects plus everything lying on any paper among them: a paper carries what is on it. */
+/**
+ * The given objects plus everything lying on any paper among them. A paper is copied, cut and
+ * duplicated with what is on it; moving or transforming it leaves the drawing where it is.
+ */
 export function withPaperContents(ids: string[]): string[] {
   const { doc, scope } = get()
   if (!ids.some((id) => doc.nodes[id]?.type === 'paper')) return ids
@@ -270,7 +273,7 @@ export function placeDxf(name: string, content: string): void {
   if (!apply(ops)) return
   select(Object.keys(get().doc.nodes).filter((id) => !before.has(id)))
   zoomToFit()
-  const left = skipped > 0 ? ' ' + tn(skipped, '{n} other was left out (blocks, hatches and dimensions are not read).', '{n} others were left out (blocks, hatches and dimensions are not read).') : ''
+  const left = skipped > 0 ? ' ' + tn(skipped, '{n} other was left out (a kind of object that is not read).', '{n} others were left out (kinds of object that are not read).') : ''
   toast(tn(added, 'Imported {n} object from {file}.', 'Imported {n} objects from {file}.', { file: name }) + left)
 }
 
@@ -339,7 +342,7 @@ export function transformSelection(change: { rotation?: number; mirror?: 'horizo
   const box = sceneBounds(buildScene(doc, scope, registry).filter((item) => selection.includes(item.id)))
   if (!box || (change.scale !== undefined && !(change.scale > 0))) return
   const pivot = { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
-  const nodes = withPaperContents(selection).map((id) => doc.nodes[id])
+  const nodes = selection.map((id) => doc.nodes[id])
   // Top to bottom is left to right followed by a half turn.
   const rotation = (change.rotation ?? 0) + (change.mirror === 'vertical' ? 180 : 0)
   apply(transformOps(doc, nodes, { pivot, mirror: change.mirror !== undefined, rotation, scale: change.scale }, registry))
@@ -457,8 +460,8 @@ function selectedBoxes() {
   return buildScene(doc, scope, registry).flatMap((item) => (selection.includes(item.id) && item.bounds ? [{ node: item.node, box: item.bounds }] : []))
 }
 
-/** The operations that move one selected object, with what a paper carries, by `d`. */
-const shift = (node: Node, d: { x: number; y: number }): Op[] => (d.x === 0 && d.y === 0 ? [] : withPaperContents([node.id]).flatMap((id) => moveOps(get().doc, get().doc.nodes[id], d)))
+/** The operations that move one selected object by `d`. */
+const shift = (node: Node, d: { x: number; y: number }): Op[] => (d.x === 0 && d.y === 0 ? [] : moveOps(get().doc, node, d))
 
 /** Lines the selected objects up on one side, or on the middle, of the box around them all. */
 export function alignSelection(to: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom'): void {
@@ -513,7 +516,7 @@ export function nudgeSelection(dx: number, dy: number): void {
   const { doc, selection, view } = get()
   const step = gridStep(view.zoom)
   const d = { x: dx * step, y: dy * step }
-  const nodes = withPaperContents(selection).map((id) => doc.nodes[id])
+  const nodes = selection.map((id) => doc.nodes[id])
   apply([...nodes.flatMap((node) => moveOps(doc, node, d)), ...wallFollowOps(doc, nodes, d, registry)])
 }
 

@@ -100,7 +100,7 @@ pnpm dist         # build the installer for the system you are on, into apps/des
 
 **Bring in and take out**
 - Drop a PDF or a picture to trace it, and set its scale from one known distance.
-- Import a DXF from another CAD program: lines, polylines, circles, arcs and text, on their layers.
+- Import a DXF from another CAD program: its geometry and text on their layers, blocks as groups, hatches, dimensions and leaders. A DXF laid out as a sheet, as AutoCAD's paper space and SketchUp LayOut write them, comes in as a paper at its scale.
 - Export a vector PDF at true scale, one page per paper, with a title block, its text in any script but Korean. Also SVG and DXF.
 - Export the quantities as a CSV for a spreadsheet: room areas, wall lengths and faces less openings, doors and windows by kind, wall types layer by layer.
 
@@ -117,6 +117,7 @@ pnpm opencalque describe plan.opencalque                         # a JSON summar
 pnpm opencalque pdf plan.opencalque --out plan.pdf               # every paper as a page, at its real size and scale
 pnpm opencalque svg plan.opencalque --out plan.svg
 pnpm opencalque dxf plan.opencalque --out plan.dxf
+pnpm opencalque import plan.opencalque ground.dxf first.dxf     # each DXF becomes a page, with its pictures
 pnpm opencalque validate plan.opencalque
 pnpm opencalque schema --out schema                              # JSON Schemas of documents and operations
 ```
@@ -177,13 +178,13 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Select | Click an object. A component or a library object is picked anywhere inside its outline; a plain shape with no fill by its line. A room is picked by its name, so what stands on its floor stays easy to click |
 | Arcs and curves | Draw an ellipse (`O`), then type a start and an end angle under "Arc from" and "Arc to" in the right panel: angles run clockwise from the right. Tick Curved on a polyline to make it flow through its points |
 | Repeat | Select something, Object → Repeat in rows and columns, then set how many across, how many rows and the steps under Modifiers. The copies are drawn, not made: change the object and they all follow |
-| Import DXF | File → Import, or drop the file. It must be a text (ASCII) DXF; a DWG has to be saved as DXF first. Blocks, hatches and dimensions are not read |
+| Import DXF | File → Import, or drop the file. It must be a text (ASCII) DXF; a DWG has to be saved as DXF first. Blocks come in as groups, and a file laid out as a sheet as a paper with what its windows show. Its pictures come in only through the command line (`opencalque import`), which also makes one drawing of several DXF files, a page each |
 | Stairs | Component library → straight, L-shaped, U-shaped or spiral. `R` rotates before placing. Steps, tread, width and turn direction are in the right panel |
 | Groups | `Ctrl+G` groups the selection, `Ctrl+Shift+G` ungroups. Double-click a group to edit inside it |
 | Order | `]` to front, `[` to back, `Ctrl+]` and `Ctrl+[` one step. Also in the properties panel, the right-click menu, or drag rows in the Structure panel |
 | Right-click | On an object or the drawing, for order, grouping, copy and paste |
 | Copy and paste | `Ctrl+C`, `Ctrl+X`, `Ctrl+V`, also between drawings |
-| Paper | `F`, click a corner, pull: the standard formats (A5 to A0) appear at the scale shown in the bar, upright or lying as you move; come close to one to take it, or hold `Alt` for any size. A paper carries what is drawn on it when moved, copied or duplicated; grab it by its edge or its name |
+| Paper | `F`, click a corner, pull: the standard formats (A5 to A0) appear at the scale shown in the bar, upright or lying as you move; come close to one to take it, or hold `Alt` for any size. A paper moves on its own, to frame the drawing; pulling a corner changes its scale (`Alt` for any size), and is copied or duplicated with what is drawn on it; grab it by its edge or its name |
 | Wall faces | With the wall tool, the three small pictures in the bar above the tools say where the points you click lie: along the left face, the middle or the right face of the wall, as you draw it. Trace the inside of a room clockwise with "left" and the walls land outside it |
 | Extend and trim | Select a wall end (click it): Extend runs it on to the next wall, Trim cuts it back to the last wall it crossed. Object → Extend or Trim does it for every free end of the selected walls |
 | Keep on course | Hold `Shift` while dragging the end of a wall or a line: it stays on the line it lies on, at any angle, shown as a dashed line across the view, and stops on the walls that line crosses. On a corner, `Shift` keeps it on the line of one of its walls |
@@ -369,7 +370,7 @@ Extensions are currently compiled in: add yours to the registry in [`apps/web/sr
 - **Printing.** PDF export uses the standard fonts of PDF readers (sans-serif, serif, monospace, plain or bold), so text is close to the screen but not identical, and letters outside Western European alphabets print as "?". Pictures other than JPEG and PNG are left out. A sheet cannot yet show a part of the plan at another scale.
 - **Drawing.** Arcs are made by typing angles, not yet drawn with a tool of their own. Scaling is uniform only.
 - **Walls.** No curved walls yet.
-- **Import.** One page of a PDF at a time. DXF import reads lines, polylines, circles, arcs, ellipses and text, not blocks, hatches or dimensions, and not binary DXF or DWG.
+- **Import.** One page of a PDF at a time. DXF import does not read binary DXF or DWG, block attributes, or angular and radial dimensions as dimensions; a hatch pattern becomes the nearest of the app's own, and a hatch filled with a picture a plain colour.
 - **Hosted version.** Accounts, cloud storage and realtime collaboration are planned; the data model is prepared for them, nothing is built.
 - **Extensions.** Those installed at runtime can add objects and modifiers as data. Extensions that add tools must be compiled in.
 

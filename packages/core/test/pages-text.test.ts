@@ -33,6 +33,8 @@ describe('pages', () => {
     expect(childrenOf(next, copy.id).some((n) => n.type === 'text')).toBe(false)
     const there = buildScene(next, copy.id, registry).find((item) => item.id === 'title')!
     expect(there).toMatchObject({ foreign: true, locked: true })
+    // Its fields say the page it is seen on, not the one it is kept on.
+    expect((there.prims[0] as any).text).toBe('Sheet 2 of 2: First floor')
     expect(hitTest(buildScene(next, copy.id, registry), { x: 300, y: -550 }, 20)).toBeNull()
     expect(hitTest(buildScene(next, 'page_1', registry), { x: 300, y: -550 }, 20)?.id).toBe('title')
     // Unshared, it is only on its own page again.

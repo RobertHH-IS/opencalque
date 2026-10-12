@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { basename, dirname, extname, join } from 'node:path'
 import * as z from 'zod'
 import {
   applyOps,
@@ -8,7 +8,9 @@ import {
   componentsOf,
   createDocument,
   DocumentSchema,
+  dxfOps,
   layersOf,
+  newId,
   OpSchema,
   pagesOf,
   parseDocument,
@@ -29,6 +31,9 @@ const USAGE = `opencalque <command>
   validate <file>              Check that a file is a valid document
   describe <file>              Print a JSON summary: pages, layers, components, object counts
   apply <file> <ops.json>      Apply a JSON array of operations and save the file
+  import <file> <drawing.dxf>...
+                               Add each DXF as a page of the drawing, which is created when it does
+                               not exist. A DXF laid out as a sheet comes in as its paper.
   svg <file> [--page <id>] [--out <file.svg>]
                                Render a page (default: the first) to SVG
   pdf <file> [--out <file.pdf>] Export every paper as a page of a PDF, at its real size and scale
@@ -83,6 +88,34 @@ function main(): void {
       const ops = parseOps(JSON.parse(readFileSync(extra, 'utf8')))
       writeFileSync(file, serializeDocument(applyOps(read(file), ops)))
       console.log(`Applied ${ops.length} operations`)
+      return
+    }
+    case 'import': {
+      const sources = args.slice(2)
+      if (!file || sources.length === 0) throw new Error('Give the drawing, then the DXF files to add to it.')
+      const fresh = !existsSync(file)
+      let doc = fresh ? createDocument(basename(file, extname(file))) : read(file)
+      const texts = sources.map((source) => readFileSync(source, 'utf8'))
+      // A file names its pictures from the folder it is in.
+      const picture = (source: string) => (path: string) => {
+        const found = join(dirname(source), path)
+        const mime = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg' }[extname(found).toLowerCase()]
+        if (!mime || !existsSync(found)) return undefined
+        const data = readFileSync(found)
+        return { mime, data: data.toString('base64'), ...(mime === 'image/png' ? { width: data.readUInt32BE(16), height: data.readUInt32BE(20) } : {}) }
+      }
+      // A sheet that shows nothing at a scale of its own takes the scale of the others, so that the pages go together.
+      const scales = texts.map((text) => dxfOps(doc, pagesOf(doc)[0].id, text).sheet?.scale).filter((scale) => scale !== undefined && scale !== 1)
+      const scale = scales.sort((a, b) => scales.filter((s) => s === b).length - scales.filter((s) => s === a).length)[0]
+      sources.forEach((source, i) => {
+        const id = fresh && i === 0 ? pagesOf(doc)[0].id : newId('page')
+        if (!doc.nodes[id]) doc = applyOps(doc, [{ op: 'add_node', node: { type: 'page', id, parent: null } }])
+        const result = dxfOps(doc, id, texts[i], { picture: picture(source), scale })
+        // The page is named after the sheet when the file is one, after the file otherwise.
+        doc = applyOps(doc, [{ op: 'update_node', id, patch: { name: result.sheet?.name || basename(source, extname(source)) } }, ...result.ops])
+        console.log(`${source}: ${result.added} objects${result.sheet ? `, a sheet at 1:${result.sheet.scale}` : ''}${result.skipped ? `, ${result.skipped} left out` : ''}`)
+      })
+      writeFileSync(file, serializeDocument(doc))
       return
     }
     case 'svg': {

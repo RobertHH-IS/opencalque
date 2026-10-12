@@ -20,7 +20,7 @@ Last updated: 2026-10-10.
 - **Align and space evenly**, and the common properties of several selected objects edited together.
 - A guide line across the view while a segment is exactly horizontal or vertical, and a hint bar with the keys that matter for the tool in use.
 - Lengths shown and typed in millimetres, centimetres, metres, inches, feet, or feet and inches (7' 6 1/2").
-- **Papers**: sheets like frames, drawn at a standard format (A5 to A0, upright or lying, at a drawing scale) or any size, named above their corner, carrying what is drawn on them when moved, copied or duplicated.
+- **Papers**: sheets like frames, drawn at a standard format (A5 to A0, upright or lying, at a drawing scale) or any size, named above their corner, moved on their own over the drawing to frame it, and copied or duplicated with what is drawn on them.
 - Walls stay joined: moving a wall or a corner stretches the walls that meet it, and its doors and windows follow.
 - Numbers in the panels change by holding Alt and dragging sideways.
 - **Transforming** any selection: turn about a clicked point with the Rotate tool (by a base line, or a typed angle), mirror horizontally or vertically, scale and nudge, by dragging the grips of the selection box, from the menus or the keyboard.
@@ -41,7 +41,7 @@ Last updated: 2026-10-10.
 - **Smart guides**: what is moved lines up with the sides and middles of other objects and keeps equal gaps with its neighbours, with lines and gap sizes shown while moving.
 
 ### Organising a drawing
-- Pages, which can be duplicated with their contents and reordered, and layers with colour, visibility and lock. A **shared layer** shows what is on it on every page.
+- Pages, which can be duplicated with their contents and reordered, and layers with colour, visibility and lock. A **shared layer** shows what is on it on every page, a `{page}` written there naming each page in turn.
 - **Groups**: several objects treated as one (`Ctrl+G`, `Ctrl+Shift+G`), nestable; double-click to edit inside.
 - **Components**: a reusable definition with instances that all update together; double-click an instance to edit the component.
 - **Stacking order**: bring forward or send backward one step or all the way, from the properties panel, the right-click menu, shortcuts, or by dragging rows in the object list.
@@ -57,7 +57,7 @@ Last updated: 2026-10-10.
 ### Working from an existing plan
 - Drop a picture, a PDF, a drawing or an extension onto the window and it goes to the right place.
 - Import a PDF (any one of its pages) or a picture as a background, set its scale from one known distance, and trace over it.
-- Import a DXF: lines, polylines, circles, arcs, ellipses and text, on their layers.
+- Import a DXF: lines, polylines, circles, arcs, ellipses, curves and text on their layers, with their colours and weights; blocks as groups, hatches as fills, dimensions and leaders as dimensions and annotations. A DXF laid out as a sheet (from AutoCAD's paper space or SketchUp LayOut) comes in as a paper at its scale, with what each of its windows shows.
 
 ### Assistant
 - A chat panel that changes the drawing from a description, through the same validated operations as the rest of the app; one undo per request.
@@ -84,7 +84,7 @@ Ranked by how much each one moves the app from "promising" to "usable for real w
 | 2 | **Extension warehouse** | **Done** for data-only extensions (new parametric objects). Extensions that add tools or commands still have to be compiled in. |
 | 3 | **Groups, stacking order, right-click menu** | **Done.** |
 | 4 | **Cut, copy, paste** | **Done**, including across drawings. |
-| 5 | **DXF export** | **Done** (lines, circles, text, layers), and DXF import of the same kinds of geometry. Blocks, hatches and dimensions are not imported. |
+| 5 | **DXF export** | **Done** (lines, circles, text, layers), and DXF import: geometry, blocks (as groups), hatches, dimensions, leaders, and sheets laid out in paper space. Blocks do not become components yet. |
 | 6 | **Sheets and printing**: paper size, drawing scale, title block, PDF export to scale | **Done**: papers with format, direction, scale and a title block; vector PDF export at true scale, one page per paper. Views of the plan at another scale on a sheet are in the ideas below. |
 | 7 | **More drawing tools**: polyline and polygon tool, arcs and curves, typed lengths while drawing, room areas | **Mostly done**: one line tool for lines, polylines and polygons (a double-click closes the shape), typed sizes, room areas, arcs (by angles) and curved polylines, snapping to middles, crossings, perpendiculars and lines. A tool to draw an arc directly is not started. |
 | 8 | **Transforming**: rotate and scale handles, align and distribute, mirror, array | **Mostly done**: rotate (a tool, about a clicked point), mirror, uniform scale and nudge for any selection, from grips on the selection box, menus and shortcuts. Align, distribute, a repeat (array) modifier and smart guides while moving are done; non-uniform scaling is not. |
@@ -116,7 +116,7 @@ Agreed with the owner in October 2026. The first was built straight away.
 - Trim, extend and fillet for lines
 
 **Import and sharing**
-- ~~DXF import~~ (done for plain geometry); blocks as components
+- ~~DXF import~~ (done, with blocks as groups); blocks as components
 - PNG export
 - A live demo on GitHub Pages; ~~downloadable installers~~ (done, unsigned); signed installers and automatic updates
 
@@ -151,7 +151,7 @@ Not ranked within an area.
 - Translations of the extensions' own texts beyond what they carry.
 
 **Import and export**
-- DWG import; DXF blocks, hatches and dimensions; IFC export; PNG export at a chosen resolution.
+- DWG import; IFC export; PNG export at a chosen resolution.
 - Straighten and crop a scan; trace a scan automatically.
 
 **Assistant**

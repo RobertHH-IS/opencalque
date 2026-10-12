@@ -133,13 +133,79 @@ describe('DXF', () => {
     expect(nodes[1]).toMatchObject({ closed: true })
     // Anticlockwise from 0 to 90 with Y up is, on screen, clockwise from 270 to 360.
     expect(nodes[3]).toMatchObject({ rx: 1000, from: 270, to: 0 })
-    expect(nodes[4]).toMatchObject({ text: 'Kitchen', size: 200, x: 1000, y: -2000 })
+    // The height a DXF gives a text is that of its capitals, 0.72 of the size of the font.
+    expect(nodes[4]).toMatchObject({ text: 'Kitchen', size: 277.778, x: 1000, y: -2000 })
     expect(() => dxfOps(empty, 'page_1', 'not a drawing')).toThrow()
+  })
+
+  it('reads a block placed in the drawing as a group, with the colours, the weights and the hatch of what it holds', () => {
+    const file = ['0', 'SECTION', '2', 'BLOCKS', '0', 'BLOCK', '2', 'Chair', '10', '0', '20', '0',
+      // Coloured as the block is where it is placed, and on the layer it is placed on.
+      '0', 'LINE', '8', '0', '62', '0', '10', '0', '20', '0', '11', '1', '21', '0',
+      '0', 'LWPOLYLINE', '5', 'A1', '8', '0', '62', '1', '370', '50', '70', '1', '10', '0', '20', '0', '10', '1', '20', '0', '10', '1', '20', '1',
+      '0', 'HATCH', '8', '0', '62', '3', '2', 'SOLID', '70', '1', '91', '1', '92', '2', '72', '0', '73', '1', '93', '3', '10', '0', '20', '0', '10', '1', '20', '0', '10', '1', '20', '1', '97', '1', '330', 'A1',
+      '0', 'ENDBLK', '0', 'ENDSEC', '0', 'SECTION', '2', 'ENTITIES',
+      '0', 'INSERT', '2', 'Chair', '8', 'Furniture', '62', '5', '10', '10', '20', '5', '50', '90',
+      '0', 'ENDSEC', '0', 'EOF'].join('\n')
+    const result = dxfOps(createDocument(), 'page_1', file)
+    expect([result.added, result.skipped]).toEqual([2, 0])
+    const doc = applyOps(createDocument(), result.ops)
+    const group = Object.values(doc.nodes).find((node) => node.type === 'group')!
+    expect(group.name).toBe('Chair')
+    const [line, shape] = Object.values(doc.nodes).filter((node) => node.parent === group.id)
+    // Turned a quarter anticlockwise about where it is placed, then Y turned over.
+    expect(line).toMatchObject({ type: 'line', a: { x: 10, y: -5 }, b: { x: 10, y: -6 }, style: { stroke: '#0000ff' } })
+    expect(doc.layers[line.layer!].name).toBe('Furniture')
+    // The hatch and the outline it fills are one shape.
+    expect(shape).toMatchObject({ type: 'polyline', closed: true, style: { stroke: '#ff0000', strokeWidth: 2, fill: '#00ff00' } })
+  })
+
+  it('brings a file laid out as a sheet in as a paper, with what each window shows at its true size', () => {
+    const sheet = (line: string[]) =>
+      ['0', 'SECTION', '2', 'ENTITIES',
+        '0', 'LINE', ...line,
+        '0', 'LINE', '10', '90000', '20', '0', '11', '95000', '21', '0',
+        // The window every layout has onto itself, then a title, then a window showing 5 m of the model on 100 mm of paper.
+        '0', 'VIEWPORT', '67', '1', '69', '1', '10', '148', '20', '105', '40', '300', '41', '210', '45', '210',
+        '0', 'TEXT', '67', '1', '10', '10', '20', '200', '40', '3.6', '1', 'Title',
+        '0', 'VIEWPORT', '67', '1', '69', '2', '10', '100', '20', '100', '40', '100', '41', '50', '12', '2500', '22', '0', '45', '2500',
+        '0', 'ENDSEC', '0', 'SECTION', '2', 'OBJECTS',
+        '0', 'LAYOUT', '100', 'AcDbPlotSettings', '40', '0', '41', '0', '44', '297', '45', '210', '46', '0', '47', '0', '72', '1', '73', '0', '100', 'AcDbLayout', '1', 'Plan', '71', '1',
+        '0', 'ENDSEC', '0', 'EOF'].join('\n')
+    const result = dxfOps(createDocument(), 'page_1', sheet(['10', '0', '20', '0', '11', '5000', '21', '0']))
+    expect(result.sheet).toEqual({ name: 'Plan', scale: 50 })
+    const nodes = Object.values(applyOps(createDocument(), result.ops).nodes).filter((node) => node.type !== 'page')
+    expect(nodes.map((node) => node.type)).toEqual(['paper', 'text', 'line'])
+    // An A4 at 1:50, its top left corner at the origin; the title is where it was on the paper, fifty times larger.
+    expect(nodes[0]).toMatchObject({ name: 'Plan', x: 0, y: 0, width: 14850, height: 10500, scale: 50 })
+    expect(nodes[1]).toMatchObject({ text: 'Title', x: 500, y: 500, size: 250 })
+    // The 5 m of the model are 5 m here, in the window's place; what no window shows is left out.
+    expect(nodes[2]).toMatchObject({ a: { x: 2500, y: 5500 }, b: { x: 7500, y: 5500 } })
+    // What reaches beyond its window is cropped to it.
+    const wider = applyOps(createDocument(), dxfOps(createDocument(), 'page_1', sheet(['10', '-1000', '20', '0', '11', '6000', '21', '0'])).ops)
+    const cropped = Object.values(wider.nodes).find((node) => node.modifiers)!
+    expect(cropped.modifiers).toEqual([{ type: 'crop', frame: { x: 2500, y: 4250 }, params: { width: 5000, height: 2500 } }])
+  })
+
+  it('reads a leader with its note as an annotation, and a dimension as a dimension', () => {
+    const file = ['0', 'SECTION', '2', 'ENTITIES',
+      '0', 'MULTILEADER', '300', 'CONTEXT_DATA{', '41', '2.5', '304', '\\fArial|b0;\\H1.5x;\\lBath\\P', '12', '12', '22', '11',
+      '302', 'LEADER{', '10', '10', '20', '10', '11', '1', '21', '0', '40', '2', '304', 'LEADER_LINE{', '10', '10', '20', '0', '305', '}', '303', '}', '301', '}', '170', '1', '42', '3',
+      '0', 'DIMENSION', '70', '0', '13', '0', '23', '0', '14', '4', '24', '3', '10', '4', '20', '-1', '50', '0',
+      '1001', 'ACAD', '1000', 'DSTYLE', '1002', '{', '1070', '3', '1000', 'cm', '1070', '271', '1070', '1', '1002', '}',
+      '0', 'ENDSEC', '0', 'EOF'].join('\n')
+    const nodes = Object.values(applyOps(createDocument(), dxfOps(createDocument(), 'page_1', file).ops).nodes).filter((node) => node.type !== 'page')
+    // The note without its formatting codes, at the far end of the level stretch, its first line at the leader.
+    expect(nodes[0]).toMatchObject({ type: 'annotation', text: 'Bath', font: 'Arial', a: { x: 10, y: 0 }, b: { x: 12, y: -9.125 }, shape: 'elbow', size: 5.208, markerSize: 3 })
+    // Measured along X only, as the file says, and showing centimetres as it did.
+    expect(nodes[1]).toMatchObject({ type: 'dimension', a: { x: 0, y: 0 }, b: { x: 4, y: 0 }, offset: 1, unit: 'cm', showUnit: true, decimals: 1, startMarker: 'arrow' })
   })
 
   it('reads back what it wrote', () => {
     const doc = applyOps(createDocument(), [add({ type: 'line', a: { x: 0, y: 0 }, b: { x: 1000, y: 500 } }), add({ type: 'ellipse', cx: 0, cy: 0, rx: 300, ry: 300 }), add({ type: 'text', x: 10, y: 20, text: 'Hall', size: 150 })])
     const back = dxfOps(createDocument(), 'page_1', toDXF(doc, 'page_1', registry))
     expect(back.added).toBe(3)
+    // A text keeps its size both ways.
+    expect(Object.values(applyOps(createDocument(), back.ops).nodes).find((node) => node.type === 'text')).toMatchObject({ text: 'Hall', size: 150 })
   })
 })

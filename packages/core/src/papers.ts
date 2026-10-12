@@ -1,4 +1,4 @@
-import { boundsContain } from './geometry'
+import { boundsContain, type Vec2 } from './geometry'
 import type { SceneItem } from './scene'
 
 /**
@@ -34,6 +34,33 @@ export function paperFormat(paper: { width: number; height: number; scale?: numb
   const [short, long] = [Math.min(paper.width, paper.height) / scale, Math.max(paper.width, paper.height) / scale]
   const sheet = PAPER_FORMATS.find((f) => Math.abs(f.short - short) < 0.5 && Math.abs(f.long - long) < 0.5)
   return sheet ? { name: sheet.name, landscape } : null
+}
+
+/** The scale nearest to `scale` among those a plan is drawn at: whole numbers up to 1:10, then steps of 5, of 25 and of 100. */
+export function roundPaperScale(scale: number): number {
+  const step = scale < 10 ? 1 : scale < 100 ? 5 : scale < 500 ? 25 : 100
+  return Math.max(1, Math.round(scale / step) * step)
+}
+
+/**
+ * What a paper becomes when its corner `index` (clockwise from the top left) is pulled to `p`: the
+ * same sheet at another scale. The opposite corner stays put and the pulled one keeps to the
+ * diagonal through both, so the sheet keeps its proportions; the scale is a round one.
+ */
+export function paperScaleTo(paper: { x: number; y: number; width: number; height: number; scale?: number }, index: number, p: Vec2): { x: number; y: number; width: number; height: number; scale: number } {
+  const corners = [
+    { x: paper.x, y: paper.y },
+    { x: paper.x + paper.width, y: paper.y },
+    { x: paper.x + paper.width, y: paper.y + paper.height },
+    { x: paper.x, y: paper.y + paper.height },
+  ]
+  const fixed = corners[(index + 2) % 4]
+  const d = { x: corners[index].x - fixed.x, y: corners[index].y - fixed.y }
+  const was = paper.scale ?? DEFAULT_PAPER_SCALE
+  const along = ((p.x - fixed.x) * d.x + (p.y - fixed.y) * d.y) / (d.x * d.x + d.y * d.y || 1)
+  const scale = roundPaperScale(was * Math.max(along, 0))
+  const k = scale / was
+  return { x: Math.min(fixed.x, fixed.x + d.x * k), y: Math.min(fixed.y, fixed.y + d.y * k), width: paper.width * k, height: paper.height * k, scale }
 }
 
 /** Ids of everything lying entirely on a paper: what moves, and is copied, with it. */

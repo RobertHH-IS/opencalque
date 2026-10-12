@@ -20,7 +20,8 @@ export interface SceneItem {
 export function buildScene(doc: Document, containerId: string, registry: Registry): SceneItem[] {
   const ctx = { doc, registry, depth: 0 }
   const item = (node: Node, foreign: boolean): SceneItem => {
-    const prims = nodePrimitives(node, ctx)
+    // A title kept on one page and shown on all says the name and number of the page it is seen on.
+    const prims = nodePrimitives(node, foreign ? { ...ctx, page: containerId } : ctx)
     // What comes from another page cannot be picked up here: it is that page's to change.
     return { id: node.id, node, prims, bounds: boundsOf(prims), locked: foreign || isLocked(doc, node), ...(foreign ? { foreign } : {}) }
   }

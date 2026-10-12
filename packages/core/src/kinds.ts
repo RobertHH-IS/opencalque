@@ -28,6 +28,8 @@ export interface KindContext {
   doc: Document
   registry: Registry
   depth: number
+  /** The page being drawn, for what shows there from another page's shared layer: its text fields say that page, not the one it is kept on. */
+  page?: string
 }
 
 /** How one node type draws itself and responds to direct manipulation. */
@@ -295,7 +297,7 @@ export function annotationText(node: { a: Vec2; b: Vec2; size?: number }): { x: 
 function annotationPrimitives(node: NodeOf<'annotation'>, ctx: KindContext): Primitive[] {
   const curve = annotationCurve(node)
   const words = annotationText(node)
-  const text = textLines(fillFields(node.text, ctx.doc, node.parent), words, words.size, { align: words.right ? 'right' : 'left', font: node.font })
+  const text = textLines(fillFields(node.text, ctx.doc, ctx.page ?? node.parent), words, words.size, { align: words.right ? 'right' : 'left', font: node.font })
   if (curve.length < 2 || dist(node.a, node.b) < 1e-6) return text
   const markerSize = node.markerSize ?? words.size * 0.75
   // Each end symbol points the way the leader is heading as it arrives there.
@@ -478,7 +480,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     },
   },
   text: {
-    primitives: (node, ctx) => textLines(fillFields(node.text, ctx.doc, node.parent), node, node.size, { rotation: node.rotation, font: node.font, align: node.align, bold: node.bold }),
+    primitives: (node, ctx) => textLines(fillFields(node.text, ctx.doc, ctx.page ?? node.parent), node, node.size, { rotation: node.rotation, font: node.font, align: node.align, bold: node.bold }),
     move: moveXY,
     snapPoints: (node) => [{ x: node.x, y: node.y }],
   },
