@@ -148,7 +148,7 @@ export const exportPdf = (only?: string[]) =>
     const chosen = only ?? papers.filter((paper) => selection.includes(paper.id)).map((paper) => paper.id)
     const ids = chosen.length > 0 ? chosen : undefined
     // Letters the standard PDF fonts lack (Chinese, Greek, Polish…) need a font, loaded the first time.
-    const fonts = await pdfFonts(pdfFontCharacters(doc, registry, ids))
+    const fonts = await pdfFonts(pdfFontCharacters(doc, registry, ids), language() === 'ja')
     const pdf = toPDF(doc, registry, ids, { fonts })
     const stored = await platform.save(pdf, `${baseName()}.pdf`)
     if (stored) toast(tn(chosen.length || papers.length, 'Exported {n} sheet as PDF, to scale', 'Exported {n} sheets as PDF, to scale'))

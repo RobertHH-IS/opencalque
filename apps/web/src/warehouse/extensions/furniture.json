@@ -54,6 +54,18 @@
       "Depth": "深度",
       "Seats": "座位数",
       "Bays": "格数"
+    },
+    "ja": {
+      "Adjustable furniture": "サイズ可変の家具",
+      "Tables, beds and shelving whose size and number of seats or bays you set.": "サイズや席数・棚の数を設定できるテーブル、ベッド、棚。",
+      "Table with chairs": "テーブルといす",
+      "Bed": "ベッド",
+      "Shelving unit": "棚",
+      "Length": "長さ",
+      "Width": "幅",
+      "Depth": "奥行き",
+      "Seats": "席数",
+      "Bays": "棚の数"
     }
   },
   "objects": [

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { FileText, PenTool, Ruler, Table2, type LucideIcon } from 'lucide-react'
 import { pagesOf, pdfFontCharacters } from '@opencalque/core'
 import { exportDxf, exportPdf, exportQuantities, exportSvg } from './actions'
-import { msg, t } from './i18n'
+import { language, msg, t } from './i18n'
 import { preparePdfFonts } from './pdfFonts'
 import { apply, registry, useStore } from './store'
 import { Field, labelOf } from './ui'
@@ -45,7 +45,7 @@ export function ExportDialog() {
   }, [open])
   // A PDF that needs a font gets it loading now, while the papers are chosen: the Chinese one is large.
   useEffect(() => {
-    if (open && format === 'pdf' && papers.length > 0) preparePdfFonts(pdfFontCharacters(doc, registry))
+    if (open && format === 'pdf' && papers.length > 0) preparePdfFonts(pdfFontCharacters(doc, registry), language() === 'ja')
   }, [open, format])
 
   if (!open) return null

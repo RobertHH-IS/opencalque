@@ -1,6 +1,6 @@
 {
   "name": "opencalque",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@9.14.2",

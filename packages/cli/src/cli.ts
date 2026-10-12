@@ -94,8 +94,11 @@ function main(): void {
     }
     case 'pdf': {
       const doc = read(file)
-      // Letters the standard PDF fonts lack are printed in the fonts the app ships.
-      const fonts = pdfFontCharacters(doc, registry).length === 0 ? [] : ['NotoSans-Regular.ttf', 'NotoSansSC-Regular.ttf'].map((name) => new Uint8Array(readFileSync(new URL(`../../../fonts/${name}`, import.meta.url))))
+      // Letters the standard PDF fonts lack are printed in the fonts the app ships; kanji in their
+      // Japanese forms when the drawing has kana, so is Japanese.
+      const characters = pdfFontCharacters(doc, registry)
+      const order = characters.some((char) => /[\u3040-\u30ff]/.test(char)) ? ['NotoSans', 'NotoSansJP', 'NotoSansSC'] : ['NotoSans', 'NotoSansSC']
+      const fonts = characters.length === 0 ? [] : order.map((name) => new Uint8Array(readFileSync(new URL(`../../../fonts/${name}-Regular.ttf`, import.meta.url))))
       const pdf = toPDF(doc, registry, undefined, { fonts })
       if (out) writeFileSync(out, pdf)
       else process.stdout.write(pdf)

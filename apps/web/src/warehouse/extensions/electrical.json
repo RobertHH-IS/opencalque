@@ -54,6 +54,18 @@
       "Two-way": "双控",
       "Size": "大小",
       "Place the flat side against the wall.": "将平直的一边靠墙放置。"
+    },
+    "ja": {
+      "Electrical symbols": "電気記号",
+      "Sockets, switches and light points for electrical layouts.": "電気設備図のためのコンセント、スイッチ、照明。",
+      "Socket": "コンセント",
+      "Switch": "スイッチ",
+      "Ceiling light": "シーリングライト",
+      "Wall light": "ブラケット",
+      "Count": "数",
+      "Two-way": "3 路",
+      "Size": "サイズ",
+      "Place the flat side against the wall.": "平らな側を壁に付けて置いてください。"
     }
   },
   "objects": [

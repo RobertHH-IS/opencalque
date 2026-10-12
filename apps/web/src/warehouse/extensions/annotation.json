@@ -54,6 +54,18 @@
       "Divisions": "分段数",
       "Level": "标高",
       "Text size": "文字大小"
+    },
+    "ja": {
+      "Plan annotations": "図面記号",
+      "North arrow, scale bar and level marker.": "方位記号、スケールバー、レベル記号。",
+      "North arrow": "方位記号",
+      "Scale bar": "スケールバー",
+      "Level marker": "レベル記号",
+      "Size": "サイズ",
+      "Length": "長さ",
+      "Divisions": "分割数",
+      "Level": "レベル",
+      "Text size": "文字サイズ"
     }
   },
   "objects": [

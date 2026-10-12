@@ -4,6 +4,14 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 0.8.1 — 2026-10-12
+
+### New
+- The interface in Japanese, chosen under Preferences › Language or followed from the system. The component library, doors, windows and stairs are named in Japanese too.
+
+### Improved
+- Japanese text in an exported PDF is drawn with a Japanese font, so its kanji take their Japanese forms rather than the Chinese ones. A text is taken as Japanese when it has kana, or when the app is in Japanese.
+
 ## 0.8.0 — 2026-10-12
 
 ### New

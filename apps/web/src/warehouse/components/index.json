@@ -61,6 +61,20 @@
         "Desk with chair": "书桌和椅子",
         "Wardrobe": "衣柜",
         "Coffee table, round": "圆形茶几"
+      },
+      "ja": {
+        "Furniture": "家具",
+        "Beds, seating, tables and storage for furnishing a plan.": "ベッド、いす、テーブル、収納で図面に家具を配置します。",
+        "Double bed": "ダブルベッド",
+        "Single bed": "シングルベッド",
+        "Sofa, two seats": "2 人掛けソファ",
+        "Armchair": "アームチェア",
+        "Chair": "いす",
+        "Dining table, six chairs": "ダイニングテーブル（いす 6 脚）",
+        "1800 × 900 table": "1800 × 900 テーブル",
+        "Desk with chair": "デスクといす",
+        "Wardrobe": "ワードローブ",
+        "Coffee table, round": "丸いローテーブル"
       }
     }
   },
@@ -102,6 +116,14 @@
         "Washbasin": "洗手盆",
         "Bathtub": "浴缸",
         "Shower tray": "淋浴底盘"
+      },
+      "ja": {
+        "Bathroom": "浴室・トイレ",
+        "Sanitary fittings.": "衛生器具。",
+        "Toilet": "便器",
+        "Washbasin": "洗面器",
+        "Bathtub": "浴槽",
+        "Shower tray": "シャワーパン"
       }
     }
   },
@@ -147,6 +169,15 @@
         "Hob": "灶台",
         "Fridge": "冰箱",
         "Washing machine": "洗衣机"
+      },
+      "ja": {
+        "Kitchen": "キッチン",
+        "Units and appliances on a 600 mm module.": "600 mm モジュールのキャビネットと家電。",
+        "Base unit": "ベースキャビネット",
+        "Sink unit": "シンクキャビネット",
+        "Hob": "コンロ",
+        "Fridge": "冷蔵庫",
+        "Washing machine": "洗濯機"
       }
     }
   },
@@ -276,6 +307,36 @@
         "Smoke detector": "烟雾探测器",
         "Extractor fan": "排气扇",
         "Electric radiator": "电暖器"
+      },
+      "ja": {
+        "Electrical": "電気",
+        "Lights, wall lights, sockets, switches and other symbols for an electrical plan.": "照明、ブラケット、コンセント、スイッチなど電気設備図の記号。",
+        "Ceiling light": "シーリングライト",
+        "Pendant light": "ペンダントライト",
+        "Wall light": "ブラケット",
+        "Top edge on the wall": "上辺を壁に付ける",
+        "Recessed spotlight": "ダウンライト",
+        "Light strip": "ライン照明",
+        "Socket": "コンセント",
+        "Double socket": "2 口コンセント",
+        "Socket, 32 A": "32 A コンセント",
+        "For a cooker. Top edge on the wall": "電気コンロ用。上辺を壁に付ける",
+        "TV socket": "テレビ端子",
+        "Network socket": "LAN 端子",
+        "Switch": "スイッチ",
+        "One-way": "片切",
+        "Double switch": "2 連スイッチ",
+        "Two circuits": "2 回路",
+        "Two-way switch": "3 路スイッチ",
+        "One of two controlling the same light": "同じ照明を 2 か所で入り切りするスイッチの一方",
+        "Push button": "押しボタン",
+        "Dimmer": "調光器",
+        "Switch with a dimmer": "調光スイッチ",
+        "Consumer unit": "分電盤",
+        "Junction box": "ジョイントボックス",
+        "Smoke detector": "煙感知器",
+        "Extractor fan": "換気扇",
+        "Electric radiator": "電気ヒーター"
       }
     }
   }
