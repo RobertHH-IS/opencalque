@@ -1,5 +1,10 @@
 /** French. Keys are the English texts used in the source; see i18n.ts. */
 export const fr: Record<string, string> = {
+  "Preparing PDF fonts…": "Préparation des polices PDF…",
+  "Generating PDF…": "Création du PDF…",
+  "Saving file…": "Enregistrement du fichier…",
+  "Exporting…": "Exportation en cours…",
+  "The first PDF export may take longer while fonts download. You can cancel and try again later.": "Le premier export PDF peut prendre plus de temps pendant le téléchargement des polices. Vous pouvez annuler et réessayer plus tard.",
   "You have unsaved changes.": "Vous avez des modifications non enregistrées.",
   "Discard changes": "Abandonner les modifications",
   "Cancel": "Annuler",

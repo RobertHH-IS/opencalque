@@ -2345,6 +2345,9 @@ body.scrubbing .quick-field input[title] {
 }
 
 .export-options {
+  border: 0;
+  margin: 0;
+  min-width: 0;
   min-height: 96px;
   padding: 10px 20px 4px;
 }
@@ -2369,6 +2372,45 @@ body.scrubbing .quick-field input[title] {
 
 .dialog.export footer .pill {
   padding: 6px 18px;
+}
+
+.dialog.export button:disabled {
+  cursor: default;
+}
+
+.dialog.export .text-button:disabled {
+  opacity: 0.45;
+}
+
+.export-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 20px 0;
+  padding: 14px;
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.export-progress p {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.export-spinner {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--accent);
+  animation: export-spin 1s linear infinite;
+}
+
+@keyframes export-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .export-spinner { animation: none; }
 }
 
 .pill:disabled {

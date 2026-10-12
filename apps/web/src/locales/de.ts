@@ -1,5 +1,10 @@
 /** German. Keys are the English texts used in the source; see i18n.ts. */
 export const de: Record<string, string> = {
+  "Preparing PDF fonts…": "PDF-Schriften werden vorbereitet…",
+  "Generating PDF…": "PDF wird erstellt…",
+  "Saving file…": "Datei wird gespeichert…",
+  "Exporting…": "Export wird erstellt…",
+  "The first PDF export may take longer while fonts download. You can cancel and try again later.": "Der erste PDF-Export kann beim Herunterladen der Schriften länger dauern. Sie können abbrechen und es später erneut versuchen.",
   "You have unsaved changes.": "Es gibt ungespeicherte Änderungen.",
   "Discard changes": "Änderungen verwerfen",
   "Cancel": "Abbrechen",

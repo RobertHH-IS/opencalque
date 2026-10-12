@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { FileText, PenTool, Ruler, Table2, type LucideIcon } from 'lucide-react'
+import { FileText, LoaderCircle, PenTool, Ruler, Table2, type LucideIcon } from 'lucide-react'
 import { pagesOf, pdfFontCharacters } from '@opencalque/core'
-import { exportDxf, exportPdf, exportQuantities, exportSvg } from './actions'
+import { exportDxf, exportPdf, exportQuantities, exportSvg, type PdfExportStage } from './actions'
 import { language, msg, t } from './i18n'
 import { preparePdfFonts } from './pdfFonts'
 import { apply, registry, useStore } from './store'
@@ -10,6 +10,11 @@ import { Field, labelOf } from './ui'
 const close = () => useStore.setState({ exportOpen: false })
 
 type Format = 'pdf' | 'svg' | 'dxf' | 'csv'
+const PROGRESS: Record<PdfExportStage, string> = {
+  fonts: msg('Preparing PDF fonts…'),
+  rendering: msg('Generating PDF…'),
+  saving: msg('Saving file…'),
+}
 
 /** What a drawing can be exported as: a name, what it is for, and what it takes. */
 const FORMATS: [Format, string, string, LucideIcon][] = [
@@ -31,6 +36,8 @@ export function ExportDialog() {
   const [format, setFormat] = useState<Format>('pdf')
   const [chosen, setChosen] = useState<string[]>([])
   const [from, setFrom] = useState(page)
+  const [progress, setProgress] = useState<PdfExportStage | null>(null)
+  const running = useRef<AbortController | null>(null)
   const box = useRef<HTMLDivElement>(null)
 
   const pages = pagesOf(doc)
@@ -47,38 +54,72 @@ export function ExportDialog() {
   useEffect(() => {
     if (open && format === 'pdf' && papers.length > 0) preparePdfFonts(pdfFontCharacters(doc, registry), language() === 'ja')
   }, [open, format])
+  useEffect(() => () => running.current?.abort(), [])
 
   if (!open) return null
   const ready = format !== 'pdf' || chosen.length > 0
   const exported = doc.nodes[from]
   const height = exported?.type === 'page' ? exported.wallHeight : undefined
-  const run = async () => {
+  const exporting = progress !== null
+  const dismiss = () => {
+    running.current?.abort()
+    running.current = null
+    setProgress(null)
     close()
-    if (format === 'pdf') await exportPdf(papers.filter((paper) => chosen.includes(paper.id)).map((paper) => paper.id))
-    else if (format === 'svg') await exportSvg(from)
-    else if (format === 'dxf') await exportDxf(from)
-    else await exportQuantities(from)
+  }
+  const run = async () => {
+    if (running.current || !ready) return
+    if (format !== 'pdf') {
+      close()
+      if (format === 'svg') await exportSvg(from)
+      else if (format === 'dxf') await exportDxf(from)
+      else await exportQuantities(from)
+      return
+    }
+    const job = new AbortController()
+    running.current = job
+    // The clicked button becomes disabled; keep keyboard focus in the dialog so Esc still works.
+    box.current?.focus()
+    const reportProgress = async (stage: PdfExportStage) => {
+      if (job.signal.aborted) return
+      setProgress(stage)
+      // Let the status paint and process queued Cancel clicks before generating or saving.
+      await new Promise<void>((resolve) => setTimeout(resolve, 0))
+    }
+    try {
+      const saved = await exportPdf(papers.filter((paper) => chosen.includes(paper.id)).map((paper) => paper.id), reportProgress, job.signal)
+      if (saved && !job.signal.aborted) close()
+    } finally {
+      // An older canceled job must not reset a newly started export.
+      if (running.current === job) {
+        running.current = null
+        setProgress(null)
+      }
+    }
   }
 
   return (
-    <div className="palette-backdrop" onMouseDown={close} onKeyDown={(e) => e.key === 'Escape' && close()}>
+    <div className="palette-backdrop" onMouseDown={dismiss} onKeyDown={(e) => {
+      if (running.current || e.key === 'Escape') e.stopPropagation()
+      if (e.key === 'Escape') dismiss()
+    }}>
       <div className="dialog export" role="dialog" aria-label={t('Export')} tabIndex={-1} ref={box} onMouseDown={(e) => e.stopPropagation()}>
         <header>
           <h2>{t('Export')}</h2>
-          <button className="text-button" onClick={close}>
+          <button className="text-button" onClick={dismiss}>
             {t('Cancel')}
           </button>
         </header>
         <div className="export-formats" role="radiogroup" aria-label={t('Format')}>
           {FORMATS.map(([id, name, note, Icon]) => (
-            <button key={id} type="button" role="radio" aria-checked={id === format} className={`welcome-choice${id === format ? ' active' : ''}`} onClick={() => setFormat(id)}>
+            <button key={id} type="button" role="radio" aria-checked={id === format} disabled={exporting} className={`welcome-choice${id === format ? ' active' : ''}`} onClick={() => setFormat(id)}>
               <Icon size={20} strokeWidth={1.6} />
               <strong>{name}</strong>
               <span>{t(note)}</span>
             </button>
           ))}
         </div>
-        <div className="export-options">
+        <fieldset className="export-options" disabled={exporting}>
           {format === 'pdf' ? (
             papers.length === 0 ? (
               <p className="hint">{t('Add a paper first (F): it sets the size and the scale of the printed sheet.')}</p>
@@ -135,10 +176,19 @@ export function ExportDialog() {
               </p>
             </>
           )}
-        </div>
+        </fieldset>
+        {progress && (
+          <div className="export-progress" role="status" aria-live="polite" aria-atomic="true">
+            <span className="export-spinner" aria-hidden="true"><LoaderCircle size={20} /></span>
+            <div>
+              <strong>{t(PROGRESS[progress])}</strong>
+              {format === 'pdf' && <p>{t('The first PDF export may take longer while fonts download. You can cancel and try again later.')}</p>}
+            </div>
+          </div>
+        )}
         <footer>
-          <button className="pill active" disabled={!ready} onClick={run}>
-            {t('Export…')}
+          <button className="pill active" disabled={!ready || exporting} onClick={run}>
+            {exporting ? t('Exporting…') : t('Export…')}
           </button>
         </footer>
       </div>

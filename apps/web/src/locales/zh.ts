@@ -1,5 +1,10 @@
 /** Chinese (Simplified). Keys are the English texts used in the source; see i18n.ts. */
 export const zh: Record<string, string> = {
+  "Preparing PDF fonts…": "正在准备 PDF 字体…",
+  "Generating PDF…": "正在生成 PDF…",
+  "Saving file…": "正在保存文件…",
+  "Exporting…": "正在导出…",
+  "The first PDF export may take longer while fonts download. You can cancel and try again later.": "首次导出 PDF 可能需要等待字体下载。你可以取消，稍后重试。",
   "You have unsaved changes.": "你有未保存的更改。",
   "Discard changes": "放弃更改",
   "Cancel": "取消",

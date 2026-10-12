@@ -52,6 +52,7 @@ import { gridStep } from './canvas/draw'
 import { language, t, tn } from './i18n'
 import { imperialUnit } from './units'
 import { pdfFonts } from './pdfFonts'
+import { abortable } from './abortable'
 import { platform } from './platform'
 import { usePrefs } from './prefs'
 import { apply, cancel, commit, editComponent, isDirty, loadDocument, registry, replaceDoc, select, selectCorner, setTool, toast, useStore, showPage } from './store'
@@ -141,19 +142,37 @@ export const saveDocument = (saveAs = false) =>
  * drawing, one page each.
  * `only` gives the papers to take, in order; without it, the selected ones, or every paper.
  */
-export const exportPdf = (only?: string[]) =>
-  guarded(async () => {
-    const { doc, selection } = get()
-    const papers = Object.values(doc.nodes).filter((node) => node.type === 'paper')
-    if (papers.length === 0) return toast(t('Add a paper first (F): it sets the size and the scale of the printed sheet.'))
-    const chosen = only ?? papers.filter((paper) => selection.includes(paper.id)).map((paper) => paper.id)
-    const ids = chosen.length > 0 ? chosen : undefined
-    // Letters the standard PDF fonts lack (Chinese, Greek, Polish…) need a font, loaded the first time.
-    const fonts = await pdfFonts(pdfFontCharacters(doc, registry, ids), language() === 'ja')
-    const pdf = toPDF(doc, registry, ids, { fonts })
-    const stored = await platform.save(pdf, `${baseName()}.pdf`)
-    if (stored) toast(tn(chosen.length || papers.length, 'Exported {n} sheet as PDF, to scale', 'Exported {n} sheets as PDF, to scale'))
+export type PdfExportStage = 'fonts' | 'rendering' | 'saving'
+
+export const exportPdf = async (only?: string[], onProgress?: (stage: PdfExportStage) => Promise<void>, signal?: AbortSignal): Promise<boolean> => {
+  let exported = false
+  await guarded(async () => {
+    try {
+      signal?.throwIfAborted()
+      const { doc, selection } = get()
+      const papers = Object.values(doc.nodes).filter((node) => node.type === 'paper')
+      if (papers.length === 0) return toast(t('Add a paper first (F): it sets the size and the scale of the printed sheet.'))
+      const chosen = only ?? papers.filter((paper) => selection.includes(paper.id)).map((paper) => paper.id)
+      const ids = chosen.length > 0 ? chosen : undefined
+      // Letters the standard PDF fonts lack (Chinese, Greek, Polish…) need a font, loaded the first time.
+      await onProgress?.('fonts')
+      signal?.throwIfAborted()
+      const fonts = await abortable(pdfFonts(pdfFontCharacters(doc, registry, ids), language() === 'ja'), signal)
+      await onProgress?.('rendering')
+      signal?.throwIfAborted()
+      const pdf = toPDF(doc, registry, ids, { fonts })
+      await onProgress?.('saving')
+      signal?.throwIfAborted()
+      const stored = await platform.save(pdf, `${baseName()}.pdf`)
+      signal?.throwIfAborted()
+      exported = stored !== null
+      if (stored) toast(tn(chosen.length || papers.length, 'Exported {n} sheet as PDF, to scale', 'Exported {n} sheets as PDF, to scale'))
+    } catch (error) {
+      if (!signal?.aborted) throw error
+    }
   })
+  return exported
+}
 
 /** Exports one page (or, without one given, what is being edited) for other CAD programs. */
 export const exportDxf = (container?: string) =>

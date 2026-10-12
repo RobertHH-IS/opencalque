@@ -1,5 +1,10 @@
 /** Japanese. Keys are the English texts used in the source; see i18n.ts. */
 export const ja: Record<string, string> = {
+  "Preparing PDF fonts…": "PDF のフォントを準備中…",
+  "Generating PDF…": "PDF を生成中…",
+  "Saving file…": "ファイルを保存中…",
+  "Exporting…": "エクスポート中…",
+  "The first PDF export may take longer while fonts download. You can cancel and try again later.": "初回の PDF エクスポートではフォントのダウンロードに時間がかかる場合があります。キャンセルして後で再試行できます。",
   "You have unsaved changes.": "保存されていない変更があります。",
   "Discard changes": "変更を破棄",
   "Cancel": "キャンセル",
