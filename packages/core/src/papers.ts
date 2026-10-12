@@ -63,11 +63,16 @@ export function paperScaleTo(paper: { x: number; y: number; width: number; heigh
   return { x: Math.min(fixed.x, fixed.x + d.x * k), y: Math.min(fixed.y, fixed.y + d.y * k), width: paper.width * k, height: paper.height * k, scale }
 }
 
+/** What a paper says of itself to the fields of what is drawn on every sheet: its name, its scale, and its format or its size in millimetres. */
+export function paperSheet(paper: { name?: string; width: number; height: number; scale?: number }): { name: string; scale: number; format: string } {
+  const scale = paper.scale ?? DEFAULT_PAPER_SCALE
+  return { name: paper.name ?? '', scale, format: paperFormat(paper)?.name ?? `${Math.round(paper.width / scale)} × ${Math.round(paper.height / scale)}` }
+}
+
 /** Ids of everything lying entirely on a paper: what moves, and is copied, with it. */
 export function paperContents(scene: SceneItem[], paperId: string): string[] {
   const paper = scene.find((item) => item.id === paperId)?.node
   if (paper?.type !== 'paper') return []
   const sheet = { minX: paper.x, minY: paper.y, maxX: paper.x + paper.width, maxY: paper.y + paper.height }
-  // Not what only shows here from another page's shared layer: that is not this paper's to carry.
-  return scene.filter((item) => item.id !== paperId && !item.foreign && item.bounds && boundsContain(sheet, item.bounds)).map((item) => item.id)
+  return scene.filter((item) => item.id !== paperId && item.bounds && boundsContain(sheet, item.bounds)).map((item) => item.id)
 }

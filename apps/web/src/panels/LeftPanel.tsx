@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, ArrowDown, ArrowUp, Copy, Files } from 'lucide-react'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, ArrowDown, ArrowUp, Copy } from 'lucide-react'
 import { childrenOf, layersOf, pagesOf, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
 import { moveInOrder, duplicatePage, movePage } from '../actions'
 import { ColorChoice } from '../ColorChoice'
@@ -94,9 +94,6 @@ export function Layers() {
               <Trash2 size={13} />
             </IconButton>
           )}
-          <IconButton title={layer.shared ? t('Shown on every page. Click to show it only on the page it is drawn on') : t('Show what is on this layer on every page')} onClick={() => update(layer.id, { shared: !layer.shared })}>
-            <Files size={13} className={layer.shared ? 'on' : 'faint'} />
-          </IconButton>
           <IconButton title={layer.locked ? t('Unlock layer') : t('Lock layer')} onClick={() => update(layer.id, { locked: !layer.locked })}>
             {layer.locked ? <Lock size={13} /> : <LockOpen size={13} className="faint" />}
           </IconButton>

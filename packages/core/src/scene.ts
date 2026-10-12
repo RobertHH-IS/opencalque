@@ -1,6 +1,6 @@
-import { childrenOf, isLocked, isVisible, pagesOf } from './document'
+import { childrenOf, isLocked, isVisible } from './document'
 import { boundsContain, boundsContainPoint, unionBounds, type Bounds, type Vec2 } from './geometry'
-import { kindOf, nodePrimitives } from './kinds'
+import { kindOf, nodePrimitives, PAPER_EDGE, PAPER_FILL } from './kinds'
 import { distToPrimitive, insidePrimitive, primitiveBounds, type Primitive } from './primitives'
 import type { Registry } from './registry'
 import type { Document, Node } from './schema'
@@ -12,27 +12,38 @@ export interface SceneItem {
   prims: Primitive[]
   bounds: Bounds | null
   locked: boolean
-  /** Drawn here because its layer is shared, but belonging to another page, where it is edited. */
-  foreign?: boolean
 }
 
 /** Everything visible in a page or component, bottom to top. */
 export function buildScene(doc: Document, containerId: string, registry: Registry): SceneItem[] {
   const ctx = { doc, registry, depth: 0 }
-  const item = (node: Node, foreign: boolean): SceneItem => {
-    // A title kept on one page and shown on all says the name and number of the page it is seen on.
-    const prims = nodePrimitives(node, foreign ? { ...ctx, page: containerId } : ctx)
-    // What comes from another page cannot be picked up here: it is that page's to change.
-    return { id: node.id, node, prims, bounds: boundsOf(prims), locked: foreign || isLocked(doc, node), ...(foreign ? { foreign } : {}) }
-  }
-  // What other pages put on a shared layer shows on this one too, beneath what is drawn here.
-  const shared =
-    doc.nodes[containerId]?.type === 'page'
-      ? pagesOf(doc)
-          .filter((page) => page.id !== containerId)
-          .flatMap((page) => childrenOf(doc, page.id).filter((node) => node.layer !== undefined && doc.layers[node.layer]?.shared && isVisible(doc, node)))
-      : []
-  return [...shared.map((node) => item(node, true)), ...childrenOf(doc, containerId).filter((node) => isVisible(doc, node)).map((node) => item(node, false))]
+  const items = childrenOf(doc, containerId)
+    .filter((node) => isVisible(doc, node))
+    .map((node): SceneItem => {
+      const prims = nodePrimitives(node, ctx)
+      return { id: node.id, node, prims, bounds: boundsOf(prims), locked: isLocked(doc, node) }
+    })
+  const sheet = templateSheet(doc, containerId)
+  return sheet ? [sheet, ...items] : items
+}
+
+/**
+ * The sheet that what is on every sheet was drawn on, as it is in the hand, in millimetres, its
+ * corner at the origin. It lies under that component while it is being edited, to show where
+ * things fall on the sheet; it cannot be picked up.
+ */
+function templateSheet(doc: Document, componentId: string): SceneItem | null {
+  const component = doc.nodes[componentId]
+  if (component?.type !== 'component' || !component.sheet) return null
+  const { width, height } = component.sheet
+  const corners = [
+    { x: 0, y: 0 },
+    { x: width, y: 0 },
+    { x: width, y: height },
+    { x: 0, y: height },
+  ]
+  const prims: Primitive[] = [{ kind: 'path', points: corners, closed: true, fill: PAPER_FILL, stroke: PAPER_EDGE, backdrop: true }]
+  return { id: `${componentId}:sheet`, node: component, prims, bounds: boundsOf(prims), locked: true }
 }
 
 export function boundsOf(prims: Primitive[]): Bounds | null {

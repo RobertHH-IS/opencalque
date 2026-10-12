@@ -87,7 +87,7 @@ pnpm dist         # build the installer for the system you are on, into apps/des
 **Organise**
 - Rooms that follow their walls, with name and area; dividers to split an open space.
 - Papers: sheets at a standard format and drawing scale (A5 to A0) that carry what is drawn on them.
-- Pages you can duplicate and reorder; layers, with shared layers that show on every page (a frame, a logo); groups and reusable components.
+- Pages you can duplicate and reorder; layers; groups and reusable components. What is drawn "on every sheet" (a title, a logo, a north arrow) shows on every paper, following each sheet and its scale.
 - Shared colours: link objects to a named colour and recolour them all at once.
 - Rotate, flip, scale and nudge any selection, from handles, the keyboard or exact values; align and space evenly.
 - Repeat an object in rows and columns without multiplying objects.

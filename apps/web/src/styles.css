@@ -343,6 +343,16 @@ select {
   color: var(--muted);
 }
 
+/* Something that is not as it should be, and what to do about it. */
+.hint.warning {
+  color: var(--danger-text);
+}
+
+.hint.warning .text-button {
+  margin: 0;
+  padding: 0;
+}
+
 .faint {
   color: var(--faint);
   font-style: normal;

@@ -41,7 +41,6 @@ export const LayerSchema = z
     visible: z.boolean().optional().describe('Defaults to true.'),
     locked: z.boolean().optional().describe('Defaults to false.'),
     color: z.string().optional().describe('Default stroke color of nodes on this layer.'),
-    shared: z.boolean().optional().describe('When true, what is on this layer shows on every page, not only the page it was drawn on: a title, a legend, a frame. It is edited on its own page.'),
   })
   .describe('A drawing layer: a named set of nodes that can be hidden, locked and colored together.')
 
@@ -152,7 +151,17 @@ export const NodeSchema = z
       .object({ ...base, type: z.literal('page'), wallHeight: z.number().positive().optional().describe('How high the walls of this page stand, in mm, unless a wall gives its own. Used to measure wall faces; nothing is drawn with it.') })
       .describe('A drawing sheet. Top-level container.'),
     z
-      .object({ ...base, type: z.literal('component'), description: z.string().optional() })
+      .object({
+        ...base,
+        type: z.literal('component'),
+        description: z.string().optional(),
+        sheet: z
+          .object({ width: z.number().positive(), height: z.number().positive() })
+          .optional()
+          .describe(
+            'Makes the component what is on every sheet of the drawing: a title, a logo, a north arrow. It is the size, in millimetres of real paper, of the sheet its children are drawn on (297 × 210 for an A4 lying), from that sheet\'s top-left corner. Every paper draws them over itself at its own scale, each kept at its distance from the corner of the sheet it is nearest to, so a sheet of another size has them in its own corners. In their texts, {sheet}, {scale}, {format}, {page}, {project} and the other fields are filled in for each sheet. A drawing has one such component; a paper that is "plain" leaves it out.',
+          ),
+      })
       .describe('A reusable definition. Its children are drawn wherever an instance references it.'),
     z
       .object({ ...base, type: z.literal('group') })
@@ -209,6 +218,7 @@ export const NodeSchema = z
         width: z.number().nonnegative(),
         height: z.number().nonnegative(),
         scale: z.number().positive().optional().describe('The drawing scale of the sheet, as the N of 1:N. Default 100. An A3 sheet (420 × 297 mm of paper) at 1:100 is 42000 × 29700 here.'),
+        plain: z.boolean().optional().describe('When true, this sheet leaves out what the drawing puts on every sheet (the component that has a "sheet" size).'),
         titleBlock: z
           .object({
             project: z.string().optional().describe('Overrides the project of the drawing on this sheet.'),

@@ -13,6 +13,7 @@ import {
   createDocument,
   groupNodes,
   importComponents,
+  rootOf,
   isClipboard,
   orderAfter,
   orderBefore,
@@ -53,7 +54,7 @@ import { imperialUnit } from './units'
 import { pdfFonts } from './pdfFonts'
 import { platform } from './platform'
 import { usePrefs } from './prefs'
-import { apply, cancel, commit, isDirty, loadDocument, registry, replaceDoc, select, selectCorner, setTool, toast, useStore, showPage } from './store'
+import { apply, cancel, commit, editComponent, isDirty, loadDocument, registry, replaceDoc, select, selectCorner, setTool, toast, useStore, showPage } from './store'
 
 const get = useStore.getState
 /** What a drawing file may be called: the current extension, the one from before the project was renamed, and plain JSON. */
@@ -292,6 +293,28 @@ export function importLibraryFrom(name: string, content: string): void {
   if (count === 0) return toast(t('{file} has no components to import. To work on that drawing, open it instead (File → Open).', { file: name }))
   toast(tn(count, 'Imported {n} component from {file}', 'Imported {n} components from {file}', { file: name }))
 }
+
+/** Where the view was when what is on every sheet was opened to be edited, to come back to. */
+let before: { template: string; view: { zoom: number; x: number; y: number }; selection: string[] } | null = null
+
+/**
+ * Goes inside what is on every sheet to draw it, its sheet filling the view. Leaving it, by
+ * whatever way, brings back the view the drawing was looked at with, and the paper that was selected.
+ */
+export function editSheetContent(id: string): void {
+  const { view, scope, doc, selection } = get()
+  if (rootOf(doc, scope)?.id !== id) before = { template: id, view, selection }
+  editComponent(id)
+  zoomToFit()
+}
+
+useStore.subscribe((state) => {
+  // Still inside it while a group of it is being edited.
+  if (!before || rootOf(state.doc, state.scope)?.id === before.template) return
+  const { view, selection } = before
+  before = null
+  useStore.setState({ view, selection: selection.filter((id) => state.doc.nodes[id]?.parent === state.scope) })
+})
 
 export const importLibrary = () =>
   guarded(async () => {

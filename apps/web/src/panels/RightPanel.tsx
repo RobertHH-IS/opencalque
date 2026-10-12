@@ -1,8 +1,8 @@
-import { childrenOf, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
+import { childrenOf, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
 import { executeById } from '../commands'
 import { useEffect, useRef, useState, useLayoutEffect, type ReactNode } from 'react'
 import { Pipette, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Undo2, SquareSplitHorizontal } from 'lucide-react'
-import { reorderSelection, addModifier, alignSelection, distributeSelection } from '../actions'
+import { reorderSelection, addModifier, alignSelection, distributeSelection, editSheetContent } from '../actions'
 import { showPanel } from '../dock'
 import { applyCalibration } from '../floorplan'
 import { language, msg, t } from '../i18n'
@@ -169,6 +169,9 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
   parametric: PLACEMENT,
 }
 
+/** The fields only a sheet can fill in: offered for the texts of what is on every sheet, and not elsewhere, where they would stay as written. */
+const SHEET_FIELDS: string[] = ['sheet', 'scale', 'format']
+
 /** What each field of a text is called. */
 const FIELD_NAMES: Record<(typeof TEXT_FIELDS)[number], string> = {
   date: msg('Today’s date'),
@@ -176,6 +179,13 @@ const FIELD_NAMES: Record<(typeof TEXT_FIELDS)[number], string> = {
   'page-number': msg('Number of the page'),
   pages: msg('Number of pages'),
   document: msg('Name of the drawing'),
+  project: msg('Project'),
+  client: msg('Client'),
+  address: msg('Address'),
+  author: msg('Author'),
+  sheet: msg('Name of the sheet'),
+  scale: msg('Scale of the sheet'),
+  format: msg('Format of the sheet'),
 }
 
 /** The properties several objects all have, to be set on all of them at once. */
@@ -725,6 +735,13 @@ function TitleBlockEntries({ node }: { node: Extract<Node, { type: 'paper' }> })
 /** The sheet a paper stands for: a standard format or a custom size, which way up, and at what drawing scale. */
 function PaperSheet({ node, update }: { node: Extract<Node, { type: 'paper' }>; update: Update }) {
   const doc = useStore((s) => s.doc)
+  const common = sheetContentOf(doc)
+  // What is on every sheet starts empty, on a sheet the size of this one, and is opened to be drawn.
+  const start = () => {
+    const at = node.scale ?? DEFAULT_PAPER_SCALE
+    const { ops, id } = sheetContentOps({ width: node.width / at, height: node.height / at }, t('On every sheet'))
+    if (apply(ops)) editSheetContent(id)
+  }
   const scale = node.scale ?? DEFAULT_PAPER_SCALE
   const format = paperFormat(node)
   const landscape = node.width > node.height
@@ -761,6 +778,23 @@ function PaperSheet({ node, update }: { node: Extract<Node, { type: 'paper' }>; 
         <input type="checkbox" checked={node.titleBlock !== undefined} onChange={(e) => update(() => ({ titleBlock: e.target.checked ? {} : null }))} />
       </label>
       {node.titleBlock && <TitleBlockEntries node={node} />}
+      <h4 className="title-heading">{t('On every sheet')}</h4>
+      {common ? (
+        <>
+          <label className="field">
+            <span>{t('Show it here')}</span>
+            <input type="checkbox" checked={!node.plain} onChange={(e) => update(() => ({ plain: e.target.checked ? null : true }))} />
+          </label>
+          <button className="text-button" onClick={() => editSheetContent(common.id)}>
+            {t('Edit what is on every sheet…')}
+          </button>
+        </>
+      ) : (
+        <button className="text-button" onClick={start}>
+          {t('Draw something for every sheet…')}
+        </button>
+      )}
+      <p className="hint">{t('What is drawn there shows on every sheet of the drawing: a title, a logo, a north arrow. It is drawn once, in millimetres of paper, and each sheet shows it at its own scale, each thing in the corner of the sheet it was drawn nearest to. In its texts, fields such as {sheet}, {scale} or {page} say each sheet’s own.')}</p>
       <button className="text-button" onClick={() => executeById('file.exportPdf')}>
         {t('Export this sheet as PDF…')}
       </button>
@@ -769,6 +803,7 @@ function PaperSheet({ node, update }: { node: Extract<Node, { type: 'paper' }>; 
 }
 
 function Selection({ nodes }: { nodes: Node[] }) {
+  const inTemplate = useStore((state) => { const inside = rootOf(state.doc, state.scope); return inside?.type === 'component' && inside.sheet !== undefined })
   const doc = useStore((s) => s.doc)
   const update: Update = (patch) => apply(nodes.map((node): Op => ({ op: 'update_node', id: node.id, patch: patch(node) })))
   const node = nodes[0]
@@ -836,7 +871,7 @@ function Selection({ nodes }: { nodes: Node[] }) {
             <span>{t('Insert')}</span>
             <select value="" onChange={(e) => e.target.value && update((n) => ({ text: `${'text' in n ? n.text : ''}{${e.target.value}}` }))}>
               <option value="">{t('A field…')}</option>
-              {TEXT_FIELDS.map((field) => (
+              {TEXT_FIELDS.filter((field) => inTemplate || !SHEET_FIELDS.includes(field)).map((field) => (
                 <option key={field} value={field}>
                   {t(FIELD_NAMES[field])}
                 </option>

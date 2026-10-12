@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { annotationCurve, applyOps, buildScene, childrenOf, createDocument, duplicatePageOps, fillFields, hitTest, kindOf, movePageOps, pagesOf, Registry, type Document, type Op } from '../src'
+import { annotationCurve, applyOps, buildScene, childrenOf, createDocument, sheetContentOf, sheetContentOps, duplicatePageOps, fillFields, hitTest, kindOf, movePageOps, pagesOf, Registry, type Document, type Op } from '../src'
 
 const registry = new Registry()
 const add = (node: Record<string, unknown>): Op => ({ op: 'add_node', node: { parent: 'page_1', ...node } }) as Op
@@ -8,11 +8,10 @@ const prims = (doc: Document, page: string, id: string) => buildScene(doc, page,
 describe('pages', () => {
   const doc = applyOps(createDocument('House'), [
     { op: 'update_node', id: 'page_1', patch: { name: 'Ground floor' } },
-    { op: 'add_layer', layer: { id: 'frame', name: 'Frame', shared: true } },
     add({ type: 'wall', id: 'w', a: { x: 0, y: 0 }, b: { x: 4000, y: 0 }, thickness: 200 }),
     add({ type: 'group', id: 'g' }),
     add({ type: 'line', id: 'in', parent: 'g', a: { x: 0, y: 0 }, b: { x: 1, y: 1 } }),
-    add({ type: 'text', id: 'title', layer: 'frame', x: 0, y: -500, text: 'Sheet {page-number} of {pages}: {page}', size: 200 }),
+    add({ type: 'text', id: 'title', x: 0, y: -500, text: 'Sheet {page-number} of {pages}: {page}', size: 200 }),
   ])
 
   it('are duplicated with everything on them, groups included, right after the original', () => {
@@ -20,26 +19,37 @@ describe('pages', () => {
     const next = applyOps(doc, [...copy.ops, { op: 'add_node', node: { type: 'page', id: 'last', name: 'Roof' } }])
     expect(pagesOf(next).map((p) => p.name)).toEqual(['Ground floor', 'First floor', 'Roof'])
     const copied = childrenOf(next, copy.id)
-    expect(copied.map((n) => n.type).sort()).toEqual(['group', 'wall'])
+    expect(copied.map((n) => n.type).sort()).toEqual(['group', 'text', 'wall'])
     // New objects, not the same ones: changing a copy leaves the original alone.
     expect(copied.every((n) => !doc.nodes[n.id])).toBe(true)
     expect(childrenOf(next, copied.find((n) => n.type === 'group')!.id)).toHaveLength(1)
   })
 
-  it('show what is on a shared layer on every page, where it cannot be picked up', () => {
-    const copy = duplicatePageOps(doc, 'page_1', 'First floor')
-    const next = applyOps(doc, copy.ops)
-    // The title was not copied: it shows on the new page because its layer is shared.
-    expect(childrenOf(next, copy.id).some((n) => n.type === 'text')).toBe(false)
-    const there = buildScene(next, copy.id, registry).find((item) => item.id === 'title')!
-    expect(there).toMatchObject({ foreign: true, locked: true })
-    // Its fields say the page it is seen on, not the one it is kept on.
-    expect((there.prims[0] as any).text).toBe('Sheet 2 of 2: First floor')
-    expect(hitTest(buildScene(next, copy.id, registry), { x: 300, y: -550 }, 20)).toBeNull()
-    expect(hitTest(buildScene(next, 'page_1', registry), { x: 300, y: -550 }, 20)?.id).toBe('title')
-    // Unshared, it is only on its own page again.
-    const unshared = applyOps(next, [{ op: 'update_layer', id: 'frame', patch: { shared: false } }])
-    expect(buildScene(unshared, copy.id, registry).some((item) => item.id === 'title')).toBe(false)
+  it('draw on every sheet what the drawing says goes on all of them, in millimetres of paper', () => {
+    const made = sheetContentOps({ width: 297, height: 210 }, 'On every sheet')
+    const sheet = { type: 'paper', id: 'sheet', name: 'Plan', x: 1000, y: 2000, width: 14850, height: 10500, scale: 50 }
+    const next = applyOps(doc, [
+      ...made.ops,
+      { op: 'add_node', node: { type: 'text', parent: made.id, id: 'top', x: 10, y: 20, text: '{sheet}, {scale}, {format}, {page}, {project}', size: 4 } },
+      { op: 'add_node', node: { type: 'text', parent: made.id, id: 'low', x: 280, y: 200, text: 'N', size: 4 } },
+      add(sheet),
+      add({ ...sheet, id: 'big', name: 'Site', x: 40000, y: 0, width: 42000, height: 29700, scale: 100 }),
+      add({ ...sheet, id: 'bare', x: 0, y: 30000, plain: true }),
+    ])
+    expect(sheetContentOf(next)?.id).toBe(made.id)
+    const texts = (id: string) => prims(next, 'page_1', id).filter((p) => p.kind === 'text')
+    // 10 mm and 20 mm from the corner of the sheet, at fifty times their size since the sheet is at 1:50.
+    expect(texts('sheet')[0]).toMatchObject({ text: 'Plan, 1:50, A4, Ground floor, House', x: 1500, y: 3000, size: 200 })
+    // On a larger sheet at another scale, what was near the bottom right corner is as near to it there.
+    expect(texts('big')[0]).toMatchObject({ text: 'Site, 1:100, A3, Ground floor, House', x: 41000, y: 2000, size: 400 })
+    expect(texts('big')[1]).toMatchObject({ text: 'N', x: 40000 + 42000 - 1700, y: 29700 - 1000 })
+    // A sheet that asks to be plain has none of it; off a sheet, the fields of a sheet stay as written.
+    expect(texts('bare')).toEqual([])
+    expect(fillFields('{sheet} {scale}', next, 'page_1')).toBe('{sheet} {scale}')
+    // While it is edited the sheet it was drawn on lies under it, and cannot be picked up.
+    expect(buildScene(next, made.id, registry)[0]).toMatchObject({ locked: true, bounds: { minX: 0, minY: 0, maxX: 297, maxY: 210 } })
+    // Removing it takes it off every sheet, with nothing left to mend on the papers.
+    expect(prims(applyOps(next, [{ op: 'remove_node', id: made.id }]), 'page_1', 'sheet').filter((p) => p.kind === 'text')).toEqual([])
   })
 
   it('can be reordered', () => {

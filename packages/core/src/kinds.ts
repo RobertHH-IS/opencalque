@@ -1,14 +1,15 @@
-import { childrenOf, isVisible } from './document'
-import { add, dist, len, mid, norm, perp, rotate, scale, sub, type Vec2, ellipseArc, smoothPoints } from './geometry'
+import { childrenOf, isVisible, rootOf } from './document'
+import { add, dist, len, mid, norm, perp, rotate, scale, sub, type Bounds, type Vec2, ellipseArc, smoothPoints, unionBounds } from './geometry'
 import { resolveColor } from './colors'
 import { fillFields } from './fields'
 import { formatFeetInches } from './imperial'
 import { applyModifiers, movedModifiers, segmentsInside, HATCH_INK, patternStrokes } from './modifiers'
-import { transformPrimitive, type Primitive } from './primitives'
+import { primitiveBounds, transformPrimitive, type Primitive } from './primitives'
+import { sheetContentOf } from './templates'
 import type { Op } from './ops'
 import type { Registry } from './registry'
 import type { Asset, Document, Node, NodeOf, NodeType, WallEdge } from './schema'
-import { DEFAULT_PAPER_SCALE, paperFormat } from './papers'
+import { DEFAULT_PAPER_SCALE, paperFormat, paperSheet } from './papers'
 import { roomAt } from './rooms'
 import { bulgeThrough, hostWall, wallMiddle, wallParallel, wallPoints, wallPolygons, wallSeams, wallOutlineRuns } from './walls'
 
@@ -28,9 +29,12 @@ export interface KindContext {
   doc: Document
   registry: Registry
   depth: number
-  /** The page being drawn, for what shows there from another page's shared layer: its text fields say that page, not the one it is kept on. */
-  page?: string
+  /** The paper being drawn on, for what the drawing puts on every sheet: text fields are filled in for that sheet and the page it lies on. */
+  sheet?: { name: string; scale: number; format: string; page: string | null }
 }
+
+/** What a text says once its fields are filled in for where it is being drawn. */
+const said = (text: string, parent: string | null, ctx: KindContext) => fillFields(text, ctx.doc, ctx.sheet ? ctx.sheet.page : parent, ctx.sheet)
 
 /** How one node type draws itself and responds to direct manipulation. */
 export interface NodeKind<N> {
@@ -235,6 +239,32 @@ function titleBlock(node: NodeOf<'paper'>, doc: Document): Primitive[] {
   return out
 }
 
+/**
+ * What the drawing puts on every sheet, as this paper shows it. It was drawn in millimetres of
+ * real paper on a sheet of a given size, so it is multiplied by the paper's scale to stand on the
+ * drawing: it keeps its printed size wherever the paper lies and whatever its scale. On a sheet
+ * of another size each thing keeps its distance from the corner it was nearest to, so what was in
+ * the bottom right corner still is. Text fields are filled in for this sheet.
+ */
+function sheetContent(node: NodeOf<'paper'>, ctx: KindContext): Primitive[] {
+  const component = node.plain ? undefined : sheetContentOf(ctx.doc)
+  // A sheet lying inside that component would draw itself.
+  if (!component?.sheet || ctx.depth >= MAX_INSTANCE_DEPTH || rootOf(ctx.doc, node.parent)?.id === component.id) return []
+  const scale = node.scale ?? DEFAULT_PAPER_SCALE
+  const inner: KindContext = { ...ctx, depth: ctx.depth + 1, sheet: { ...paperSheet(node), page: node.parent } }
+  const [wider, taller] = [node.width / scale - component.sheet.width, node.height / scale - component.sheet.height]
+  const [midX, midY] = [component.sheet.width / 2, component.sheet.height / 2]
+  return childrenOf(ctx.doc, component.id)
+    .filter((child) => child.type !== 'paper' && isVisible(ctx.doc, child))
+    .flatMap((child) => {
+      const prims = nodePrimitives(child, inner)
+      const reach = prims.map(primitiveBounds).reduce<Bounds | null>(unionBounds, null)
+      if (!reach) return []
+      const [right, low] = [(reach.minX + reach.maxX) / 2 > midX, (reach.minY + reach.maxY) / 2 > midY]
+      return prims.map((prim) => transformPrimitive(prim, { x: node.x + (right ? wider * scale : 0), y: node.y + (low ? taller * scale : 0), scale }))
+    })
+}
+
 /** Text size of an annotation that does not give one, and how much its leader curves by default. */
 export const ANNOTATION_TEXT_SIZE = 200
 export const ANNOTATION_BEND = 0.2
@@ -297,7 +327,7 @@ export function annotationText(node: { a: Vec2; b: Vec2; size?: number }): { x: 
 function annotationPrimitives(node: NodeOf<'annotation'>, ctx: KindContext): Primitive[] {
   const curve = annotationCurve(node)
   const words = annotationText(node)
-  const text = textLines(fillFields(node.text, ctx.doc, ctx.page ?? node.parent), words, words.size, { align: words.right ? 'right' : 'left', font: node.font })
+  const text = textLines(said(node.text, node.parent, ctx), words, words.size, { align: words.right ? 'right' : 'left', font: node.font })
   if (curve.length < 2 || dist(node.a, node.b) < 1e-6) return text
   const markerSize = node.markerSize ?? words.size * 0.75
   // Each end symbol points the way the leader is heading as it arrives there.
@@ -456,7 +486,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     moveHandle: moveHandleAB,
   },
   paper: {
-    primitives: (node, ctx) => [{ kind: 'path', points: boxCorners(node), closed: true, fill: PAPER_FILL, stroke: PAPER_EDGE, backdrop: true }, ...titleBlock(node, ctx.doc)],
+    primitives: (node, ctx) => [{ kind: 'path', points: boxCorners(node), closed: true, fill: PAPER_FILL, stroke: PAPER_EDGE, backdrop: true }, ...titleBlock(node, ctx.doc), ...sheetContent(node, ctx)],
     move: moveXY,
     handles: boxCorners,
     moveHandle: (node, index, p) => {
@@ -480,7 +510,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     },
   },
   text: {
-    primitives: (node, ctx) => textLines(fillFields(node.text, ctx.doc, ctx.page ?? node.parent), node, node.size, { rotation: node.rotation, font: node.font, align: node.align, bold: node.bold }),
+    primitives: (node, ctx) => textLines(said(node.text, node.parent, ctx), node, node.size, { rotation: node.rotation, font: node.font, align: node.align, bold: node.bold }),
     move: moveXY,
     snapPoints: (node) => [{ x: node.x, y: node.y }],
   },

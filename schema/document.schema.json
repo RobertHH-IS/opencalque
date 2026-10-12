@@ -52,10 +52,6 @@
           "color": {
             "description": "Default stroke color of nodes on this layer.",
             "type": "string"
-          },
-          "shared": {
-            "description": "When true, what is on this layer shows on every page, not only the page it was drawn on: a title, a legend, a frame. It is edited on its own page.",
-            "type": "boolean"
           }
         },
         "required": [
@@ -593,6 +589,25 @@
               },
               "description": {
                 "type": "string"
+              },
+              "sheet": {
+                "description": "Makes the component what is on every sheet of the drawing: a title, a logo, a north arrow. It is the size, in millimetres of real paper, of the sheet its children are drawn on (297 × 210 for an A4 lying), from that sheet's top-left corner. Every paper draws them over itself at its own scale, each kept at its distance from the corner of the sheet it is nearest to, so a sheet of another size has them in its own corners. In their texts, {sheet}, {scale}, {format}, {page}, {project} and the other fields are filled in for each sheet. A drawing has one such component; a paper that is \"plain\" leaves it out.",
+                "type": "object",
+                "properties": {
+                  "width": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "height": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": [
+                  "width",
+                  "height"
+                ],
+                "additionalProperties": false
               }
             },
             "required": [
@@ -2005,6 +2020,10 @@
                 "description": "The drawing scale of the sheet, as the N of 1:N. Default 100. An A3 sheet (420 × 297 mm of paper) at 1:100 is 42000 × 29700 here.",
                 "type": "number",
                 "exclusiveMinimum": 0
+              },
+              "plain": {
+                "description": "When true, this sheet leaves out what the drawing puts on every sheet (the component that has a \"sheet\" size).",
+                "type": "boolean"
               },
               "titleBlock": {
                 "description": "When present (even empty), the sheet gets a border and a title block in its bottom right corner. The block is made of the entries that have something to say and are not hidden: the project, client and address (from the document's \"info\"; the project falls back on the document name), the name of the paper and of its page, the author, the scale and format, and the date and sheet number given here. An entry with nothing in it takes no room. Texts may hold fields such as {date} or {page-number}.",

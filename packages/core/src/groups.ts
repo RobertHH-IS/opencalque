@@ -55,8 +55,7 @@ export function cloneOps(doc: Document, id: string, offset: Vec2, into?: string)
 }
 
 /**
- * The operations that make a copy of a page, with everything on it, placed right after it. What is
- * on a shared layer is left out: it already shows on every page, the copy included.
+ * The operations that make a copy of a page, with everything on it, placed right after it.
  */
 export function duplicatePageOps(doc: Document, pageId: string, name: string): { ops: Op[]; id: string } {
   const page = doc.nodes[pageId]
@@ -66,7 +65,6 @@ export function duplicatePageOps(doc: Document, pageId: string, name: string): {
   const id = newId('page')
   const ops: Op[] = [{ op: 'add_node', node: { type: 'page', id, name, order: orderBetween(page.order, next?.order ?? null) } }]
   for (const child of childrenOf(doc, pageId)) {
-    if (child.layer !== undefined && doc.layers[child.layer]?.shared) continue
     ops.push(...cloneOps(doc, child.id, { x: 0, y: 0 }, id).ops)
   }
   return { ops, id }

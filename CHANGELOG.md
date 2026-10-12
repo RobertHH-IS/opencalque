@@ -4,6 +4,15 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 0.8.3 — 2026-10-12
+
+### New
+- "On every sheet": draw a title, a logo or a north arrow once and it shows on every paper of the drawing. It is drawn in millimetres of real paper, so it keeps its place and its printed size when a paper is moved or its scale changed, and on a sheet of another format each thing stays in the corner it was drawn nearest to. Open it from the panel of any paper; a paper can leave it out. Leaving it brings back the view and the paper one came from.
+- New text fields: `{sheet}`, `{scale}` and `{format}` say the name, the scale and the format of each sheet in what is drawn on every sheet, and `{project}`, `{client}`, `{address}` and `{author}` what the drawing says about itself.
+
+### Improved
+- Layers no longer have "show on every page": what it put on every page stood at one place in the drawing and did not follow a paper or its scale. "On every sheet" does that job. In a drawing that used it, what was on such a layer now shows only on the page it was drawn on.
+
 ## 0.8.2 — 2026-10-12
 
 ### New

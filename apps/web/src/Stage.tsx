@@ -333,7 +333,9 @@ export function Stage() {
         <div className="banner">
           {doc.nodes[scope]?.type === 'group'
             ? t('Editing inside the group “{name}”.', { name: labelOf(doc, doc.nodes[scope]) })
-            : t('Editing component “{name}”. The red and green axes cross at its insertion point.', { name: labelOf(doc, doc.nodes[scope]) })}
+            : ((inside) => inside?.type === 'component' && inside.sheet !== undefined)(doc.nodes[scope])
+              ? t('Editing what is on every sheet, on a sheet as it prints, in millimetres of paper.')
+              : t('Editing component “{name}”. The red and green axes cross at its insertion point.', { name: labelOf(doc, doc.nodes[scope]) })}
           <button onClick={() => editComponent(null)}>{t('Done')}</button>
         </div>
       )}
