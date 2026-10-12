@@ -56,6 +56,7 @@ packages/core/src
   clipboard.ts    copyNodes, pasteNodes: the clipboard is a small document.
   declarative.ts  Extensions written as data: the format, the expression language, the loader.
   dxf.ts          DXF export.
+  truetype.ts     Reads a TrueType font and cuts it down to the glyphs a PDF uses.
   walls.ts        Wall outlines: mitred joints, gaps for openings, snapping openings onto walls.
   scene.ts        buildScene, hitTest, marquee selection, snap points, paint order.
   snap.ts         snapTo (points, middles, crossings, perpendiculars, lines) and alignMove / moveGuides (smart guides).
@@ -230,9 +231,11 @@ In the editor, `transformSelection` and `nudgeSelection` (`actions.ts`) are behi
 
 ### PDF export (`pdf.ts`)
 
-`toPDF(doc, registry, paperIds?)` writes one page per paper, at the paper's real size and scale: a page is the paper's width and height divided by its scale, in points, and everything on it goes through the same `paintOrder` steps the canvas and the SVG export use. The file is written from scratch (objects, cross-reference table) with no library, so the CLI has it too (`opencalque pdf`).
+`toPDF(doc, registry, paperIds?, { fonts })` writes one page per paper, at the paper's real size and scale: a page is the paper's width and height divided by its scale, in points, and everything on it goes through the same `paintOrder` steps the canvas and the SVG export use. The file is written from scratch (objects, cross-reference table) with no library, so the CLI has it too (`opencalque pdf`).
 
-- Text is Helvetica, a font every reader has, so nothing is embedded; `WIDTHS` gives its character widths for centred and right-aligned text. Characters outside Latin-1 print as "?".
+- Text whose every character the standard encoding has (Latin-1 and a few more) is set in Helvetica, Times or Courier, fonts every reader has, so nothing is embedded; `WIDTHS` gives Helvetica's character widths for centred and right-aligned text.
+- Any other text (Chinese, Greek, Polish…) is set in the TrueType fonts passed as `fonts`, each character from the first that has it, the runs of one font after another in one `BT`/`ET`. Each font used becomes a Type0 font with Identity-H encoding, a ToUnicode map (so the text can be searched and copied) and a subset holding only the glyphs used: `truetype.ts` reads the font and writes that subset, glyphs renumbered in the order first used, composite glyphs with their parts. Bold is the regular font outlined in its own colour. Without fonts, those characters print as "?"; a character no font has prints as the font's empty box.
+- The fonts are in `fonts/` at the root, with their licences and how they were made (`fonts/README.md`): Noto Sans (280 KB) then Noto Sans SC (10 MB, Chinese and kana; no Korean). `pdfFontCharacters` says which characters need them, so a caller loads only what is needed: `apps/web/src/pdfFonts.ts` loads Noto Sans SC only when Noto Sans falls short. They reach the web app as lazily imported chunks holding a data URL (`?inline`), because the desktop app loads from `file://`, where `fetch` does not work, and the CSP keeps `data:` out of `connect-src`. The export window starts loading them when it opens, and the browser's save picker, which needs a recent click, falls back to a download when loading took too long. The CLI reads them from disk.
 - Fills with an alpha and pictures with an opacity use graphics states; clip outlines become clipping paths; JPEG pictures are embedded as they are (imported plans are always stored as JPEG). Other picture formats are left out.
 - Line weights are screen pixels on the canvas; on paper one pixel is `WEIGHT` points.
 - A paper's **title block** is part of what the paper draws (`titleBlock` in `kinds.ts`), so the screen, the SVG and the PDF agree. It is language-neutral: values only, no captions.
@@ -263,7 +266,7 @@ The warehouse's content is imported through Vite (`import.meta.glob`), not fetch
 
 ### DXF import (`dxf-import.ts`)
 
-`dxfOps(doc, parent, text)` reads an ASCII DXF into `add_layer` and `add_node` operations: LINE, LWPOLYLINE and POLYLINE, CIRCLE and ARC (an ellipse, with `from`/`to` for an arc), ELLIPSE, TEXT and MTEXT. Y is flipped, `$INSUNITS` scales to millimetres, layers are matched by name. Everything else is counted in `skipped`. The editor calls it from `placeDxf` (`actions.ts`), for the File menu and for a dropped `.dxf`.
+`dxfOps(doc, parent, text)` reads an ASCII DXF into `add_layer` and `add_node` operations: LINE, LWPOLYLINE and POLYLINE, CIRCLE and ARC (an ellipse, with `from`/`to` for an arc), ELLIPSE, TEXT and MTEXT. Y is flipped, `$INSUNITS` scales to millimetres, layers are matched by name. Everything else is counted in `skipped`. Text written `\U+XXXX` is decoded; the export writes every character beyond ASCII that way (`dxfText` in `dxf.ts`), since a DXF of that age has no encoding of its own and would otherwise be read in the code page of the computer that opens it. The editor calls it from `placeDxf` (`actions.ts`), for the File menu and for a dropped `.dxf`.
 
 ### Arcs, curves, repeats
 
@@ -271,7 +274,7 @@ An arc is not a node type: an `ellipse` with `from` and/or `to` (degrees, clockw
 
 ### PNG in PDF (`png.ts`)
 
-The PDF writer takes JPEGs as they are. A PNG is decoded by `decodePng`, which carries its own small `inflate` so that the core still needs nothing from a browser or from Node, and goes into the file as uncompressed RGB with transparency laid on white. Interlaced PNGs and other formats are left out. Text picks one of six standard fonts from the primitive's `font` and `bold` (`fontFor`); only Helvetica's widths are known, the others are estimated for centring.
+The PDF writer takes JPEGs as they are. A PNG is decoded by `decodePng`, which carries its own small `inflate` so that the core still needs nothing from a browser or from Node, and goes into the file as uncompressed RGB with transparency laid on white. Interlaced PNGs and other formats are left out. Text picks one of six standard fonts from the primitive's `font` and `bold` (`fontFor`); only Helvetica's widths are known, the others are estimated for centring. Text the standard fonts cannot print goes to the embedded fonts instead (see PDF export).
 
 ### DXF export (`dxf.ts`)
 
@@ -557,6 +560,8 @@ Verified at the end of the first session:
 - Annotations (94 tests): drawn in two clicks and typed in place, ends changed from the panel, the middle of the leader dragged to bend it the other way, one with no words kept as an arrow, the tool's own settings applied to the next one, double-click to change the words.
 - Rooms (88 tests): a room placed in a 6 × 4 m house reads 22.04 m²; a divider splits it into 14.82 and 7.22; dragging a wall out by 1 m grows the room beside it to 11.02; deleting a wall leaves that room with a name and no floor, and undo restores it; a Planks hatch on a room.
 
+- Chinese, and letters beyond Western Europe in PDF and DXF (197 tests): a sheet with Chinese, Greek, Cyrillic, Polish, Vietnamese and kana text (plain, bold, centred, right-aligned, turned) exported with the two fonts, then rendered by MuPDF and by pdf.js: both draw every letter, line up the centred and right-aligned texts on their marks, and give the text back when it is extracted; fontTools reads the embedded subset and finds its checksums right. A production build puts each font in a chunk of its own, loaded on demand. Not verified: the export through the real app's window and save dialog, in the browser or the desktop app (a scripted run in Electron got stuck before its first screenshot and was stopped), Adobe Reader and macOS Preview, a DXF with Chinese text opened in AutoCAD, and the Chinese interface itself, which no native speaker has reviewed.
+
 - Dropped files, with drag events made by script: a PNG and a PDF become plans to trace, a text file is refused with a message, an extension JSON is installed, a drawing is opened, and a picture dropped on the assistant's message box is attached there and not added to the drawing.
 
 - Curved walls and snapping (169 tests): a loop of four walls whose top wall was bent by dragging its middle handle (joints at both ends, the panel's radius and length, the length written on the curve), a door placed on the curve and cutting it, a room inside reading its area under the curve; with the line tool, the Middle mark on a wall and the Perpendicular mark from a started line; three boxes, the third dragged level with the first two, showing the lines it lines up on and two equal gaps of 300 mm.
@@ -604,6 +609,7 @@ Tool versions are unusually new (TypeScript 7, Vite 7 for the apps, Vitest 5, El
 - Imported plans cannot be straightened, one PDF page is read at a time (asked with a plain prompt), and each plan adds up to a few megabytes of base64 to the file.
 - The assistant edits without asking first (undo is the safety net), keeps its conversation only in memory, and shows replies as plain text. The whole drawing is resent with every request up to 40 000 characters, which costs tokens on large drawings.
 - API keys are stored unencrypted in localStorage. The desktop app should move them to the OS keychain (Electron `safeStorage`) through the platform seam.
+- PDFs have no Korean (neither shipped font has Hangul): it prints as empty boxes. Bold in the embedded fonts is the regular font outlined, and every family (serif, monospace) uses the same sans-serif face. The web app downloads 13.7 MB the first time a PDF needs Chinese.
 - Translation covers the interface only; see Languages above for what stays in English. Right-to-left languages are not supported by the layout.
 - Panel content is not responsive to very narrow panels. Pages and Layers keep a heading under their tab because it carries the add button; Structure has none.
 - Shortcuts are single key presses with modifiers: no chords (`G` then `P`), and no import/export of a shortcut set. Extensions cannot declare default shortcuts yet.

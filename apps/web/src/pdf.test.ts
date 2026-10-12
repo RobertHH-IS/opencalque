@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { applyOps, createDocument, Registry, toPDF, type Op } from '@opencalque/core'
 import { architecture } from '@opencalque/ext-architecture'
@@ -62,6 +64,19 @@ describe('PDF export', () => {
     expect(text).toContain('/ca 0.13')
     expect(text).toContain('W n')
     expect(text).toMatch(/ c /)
+  })
+
+  it('prints letters the standard fonts lack in the fonts the app ships, and keeps them as text', async () => {
+    const font = (name: string) => new Uint8Array(readFileSync(resolve(__dirname, '../../../fonts', name)))
+    const sheet = applyOps(createDocument('房子'), [
+      add({ type: 'paper', id: 'p', name: '一层平面图', x: 0, y: 0, width: 21000, height: 14850, scale: 50, titleBlock: { author: '李明' } }),
+      add({ type: 'text', x: 3000, y: 5000, text: '客厅 Łódź', size: 220, bold: true }),
+    ])
+    const pdf = await open(toPDF(sheet, registry, undefined, { fonts: [font('NotoSans-Regular.ttf'), font('NotoSansSC-Regular.ttf')] }))
+    const page = await pdf.getPage(1)
+    const words = (await page.getTextContent()).items.map((item: any) => item.str).join('|')
+    for (const expected of ['客厅', 'Łódź', '房子', '一层平面图', '李明']) expect(words).toContain(expected)
+    expect((await page.getOperatorList()).fnArray.length).toBeGreaterThan(5)
   })
 
   it('exports only the papers asked for, and says so when there is none', () => {

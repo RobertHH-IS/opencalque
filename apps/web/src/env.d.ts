@@ -6,3 +6,9 @@ declare module '*?raw' {
   const text: string
   export default text
 }
+
+// A file brought in as a data URL (the fonts PDFs embed).
+declare module '*?inline' {
+  const url: string
+  export default url
+}

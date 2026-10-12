@@ -92,10 +92,12 @@ export function dxfOps(doc: Document, parent: string, text: string): { ops: Op[]
       const rx = Math.hypot(major.x, major.y)
       if (rx > 0) node = { type: 'ellipse', cx: centre.x, cy: centre.y, rx, ry: rx * number(entity, 40, 1), rotation: turn((Math.atan2(major.y, major.x) * 180) / Math.PI) }
     } else if (entity.type === 'TEXT' || entity.type === 'MTEXT') {
-      // Formatting codes of a multi-line text are dropped; "\P" is its line break.
+      // Formatting codes of a multi-line text are dropped; "\P" is its line break. A character
+      // beyond ASCII may be written "\U+XXXX", as AutoCAD and this app write them.
       const words = (entity.codes.get(3) ?? [])
         .concat(entity.codes.get(1) ?? [])
         .join('')
+        .replace(/\\U\+([0-9A-Fa-f]{4})/g, (_, code: string) => String.fromCharCode(parseInt(code, 16)))
         .replace(/\\P/g, '\n')
         .replace(/\\[A-Za-z][^;\\]*;|[{}]/g, '')
       // A text that is centred or ends at its point gives that point second.

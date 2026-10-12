@@ -41,6 +41,7 @@ import {
   modifierKind,
   type Modifier,
   toPDF,
+  pdfFontCharacters,
   duplicatePageOps,
   movePageOps,
   pagesOf,
@@ -49,6 +50,7 @@ import {
 import { gridStep } from './canvas/draw'
 import { language, t, tn } from './i18n'
 import { imperialUnit } from './units'
+import { pdfFonts } from './pdfFonts'
 import { platform } from './platform'
 import { usePrefs } from './prefs'
 import { apply, cancel, commit, isDirty, loadDocument, registry, replaceDoc, select, selectCorner, setTool, toast, useStore, showPage } from './store'
@@ -144,7 +146,10 @@ export const exportPdf = (only?: string[]) =>
     const papers = Object.values(doc.nodes).filter((node) => node.type === 'paper')
     if (papers.length === 0) return toast(t('Add a paper first (F): it sets the size and the scale of the printed sheet.'))
     const chosen = only ?? papers.filter((paper) => selection.includes(paper.id)).map((paper) => paper.id)
-    const pdf = toPDF(doc, registry, chosen.length > 0 ? chosen : undefined)
+    const ids = chosen.length > 0 ? chosen : undefined
+    // Letters the standard PDF fonts lack (Chinese, Greek, Polish…) need a font, loaded the first time.
+    const fonts = await pdfFonts(pdfFontCharacters(doc, registry, ids))
+    const pdf = toPDF(doc, registry, ids, { fonts })
     const stored = await platform.save(pdf, `${baseName()}.pdf`)
     if (stored) toast(tn(chosen.length || papers.length, 'Exported {n} sheet as PDF, to scale', 'Exported {n} sheets as PDF, to scale'))
   })

@@ -47,6 +47,20 @@
         "Desk with chair": "Schreibtisch mit Stuhl",
         "Wardrobe": "Kleiderschrank",
         "Coffee table, round": "Couchtisch, rund"
+      },
+      "zh": {
+        "Furniture": "家具",
+        "Beds, seating, tables and storage for furnishing a plan.": "床、座椅、桌子和储物家具，用于平面布置。",
+        "Double bed": "双人床",
+        "Single bed": "单人床",
+        "Sofa, two seats": "双人沙发",
+        "Armchair": "扶手椅",
+        "Chair": "椅子",
+        "Dining table, six chairs": "餐桌，六把椅子",
+        "1800 × 900 table": "1800 × 900 桌",
+        "Desk with chair": "书桌和椅子",
+        "Wardrobe": "衣柜",
+        "Coffee table, round": "圆形茶几"
       }
     }
   },
@@ -80,6 +94,14 @@
         "Washbasin": "Waschbecken",
         "Bathtub": "Badewanne",
         "Shower tray": "Duschwanne"
+      },
+      "zh": {
+        "Bathroom": "卫生间",
+        "Sanitary fittings.": "卫生洁具。",
+        "Toilet": "坐便器",
+        "Washbasin": "洗手盆",
+        "Bathtub": "浴缸",
+        "Shower tray": "淋浴底盘"
       }
     }
   },
@@ -116,6 +138,15 @@
         "Hob": "Kochfeld",
         "Fridge": "Kühlschrank",
         "Washing machine": "Waschmaschine"
+      },
+      "zh": {
+        "Kitchen": "厨房",
+        "Units and appliances on a 600 mm module.": "按 600 mm 模数排布的橱柜和电器。",
+        "Base unit": "地柜",
+        "Sink unit": "水槽柜",
+        "Hob": "灶台",
+        "Fridge": "冰箱",
+        "Washing machine": "洗衣机"
       }
     }
   },
@@ -215,6 +246,36 @@
         "Smoke detector": "Rauchmelder",
         "Extractor fan": "Abluftventilator",
         "Electric radiator": "Elektroheizkörper"
+      },
+      "zh": {
+        "Electrical": "电气",
+        "Lights, wall lights, sockets, switches and other symbols for an electrical plan.": "灯具、壁灯、插座、开关及其他电气平面图符号。",
+        "Ceiling light": "吸顶灯",
+        "Pendant light": "吊灯",
+        "Wall light": "壁灯",
+        "Top edge on the wall": "上边靠墙",
+        "Recessed spotlight": "嵌入式射灯",
+        "Light strip": "灯带",
+        "Socket": "插座",
+        "Double socket": "双联插座",
+        "Socket, 32 A": "32 A 插座",
+        "For a cooker. Top edge on the wall": "用于电灶。上边靠墙",
+        "TV socket": "电视插座",
+        "Network socket": "网络插座",
+        "Switch": "开关",
+        "One-way": "单控",
+        "Double switch": "双联开关",
+        "Two circuits": "两路",
+        "Two-way switch": "双控开关",
+        "One of two controlling the same light": "两个开关之一，共同控制同一盏灯",
+        "Push button": "按钮开关",
+        "Dimmer": "调光器",
+        "Switch with a dimmer": "带调光的开关",
+        "Consumer unit": "配电箱",
+        "Junction box": "接线盒",
+        "Smoke detector": "烟雾探测器",
+        "Extractor fan": "排气扇",
+        "Electric radiator": "电暖器"
       }
     }
   }

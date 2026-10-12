@@ -4,6 +4,15 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 0.8.0 — 2026-10-12
+
+### New
+- The interface in Chinese (Simplified), chosen under Preferences › Language or followed from the system. The component library, doors, windows and stairs are named in Chinese too.
+
+### Fixed
+- Exported PDFs print Chinese, Japanese kana, Greek, Cyrillic and the letters of Central and Eastern Europe and Vietnam, which came out as "?". The fonts ship with the app and a PDF carries only the letters it uses; the text can still be searched and copied. Korean is not covered yet.
+- A DXF export writes letters beyond plain ASCII (accents included) in the form CAD programs read whatever the language of the computer, instead of letting them turn into other characters; a DXF written that way also imports with its letters intact.
+
 ## 0.7.0 — 2026-10-11
 
 ### New

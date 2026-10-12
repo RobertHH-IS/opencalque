@@ -1,6 +1,7 @@
 import { de } from './locales/de'
 import { es } from './locales/es'
 import { fr } from './locales/fr'
+import { zh } from './locales/zh'
 
 /**
  * Translation. The English text is the key: `t('Save as…')` returns the text in the active
@@ -13,9 +14,10 @@ export const LANGUAGES: [code: string, name: string][] = [
   ['fr', 'Français'],
   ['es', 'Español'],
   ['de', 'Deutsch'],
+  ['zh', '中文'],
 ]
 
-export const LOCALES: Record<string, Record<string, string>> = { fr, es, de }
+export const LOCALES: Record<string, Record<string, string>> = { fr, es, de, zh }
 
 let app: Record<string, string> = {}
 let extensions: Record<string, string> = {}

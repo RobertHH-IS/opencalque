@@ -19,6 +19,7 @@ import {
   toSVG,
   type Document,
   toPDF,
+  pdfFontCharacters,
 } from '@opencalque/core'
 import { architecture } from '@opencalque/ext-architecture'
 
@@ -93,7 +94,9 @@ function main(): void {
     }
     case 'pdf': {
       const doc = read(file)
-      const pdf = toPDF(doc, registry)
+      // Letters the standard PDF fonts lack are printed in the fonts the app ships.
+      const fonts = pdfFontCharacters(doc, registry).length === 0 ? [] : ['NotoSans-Regular.ttf', 'NotoSansSC-Regular.ttf'].map((name) => new Uint8Array(readFileSync(new URL(`../../../fonts/${name}`, import.meta.url))))
+      const pdf = toPDF(doc, registry, undefined, { fonts })
       if (out) writeFileSync(out, pdf)
       else process.stdout.write(pdf)
       return

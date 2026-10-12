@@ -42,6 +42,18 @@
       "Depth": "Tiefe",
       "Seats": "Plätze",
       "Bays": "Felder"
+    },
+    "zh": {
+      "Adjustable furniture": "可调家具",
+      "Tables, beds and shelving whose size and number of seats or bays you set.": "可设置尺寸及座位数或格数的桌子、床和置物架。",
+      "Table with chairs": "桌椅",
+      "Bed": "床",
+      "Shelving unit": "置物架",
+      "Length": "长度",
+      "Width": "宽度",
+      "Depth": "深度",
+      "Seats": "座位数",
+      "Bays": "格数"
     }
   },
   "objects": [

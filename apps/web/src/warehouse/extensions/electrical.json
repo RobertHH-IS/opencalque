@@ -42,6 +42,18 @@
       "Two-way": "Wechselschalter",
       "Size": "Größe",
       "Place the flat side against the wall.": "Die flache Seite an die Wand setzen."
+    },
+    "zh": {
+      "Electrical symbols": "电气符号",
+      "Sockets, switches and light points for electrical layouts.": "用于电气布置的插座、开关和灯位。",
+      "Socket": "插座",
+      "Switch": "开关",
+      "Ceiling light": "吸顶灯",
+      "Wall light": "壁灯",
+      "Count": "数量",
+      "Two-way": "双控",
+      "Size": "大小",
+      "Place the flat side against the wall.": "将平直的一边靠墙放置。"
     }
   },
   "objects": [

@@ -85,7 +85,8 @@ function createBrowserPlatform(): Platform {
           return { name: handle.name, token: handle }
         } catch (error) {
           if ((error as Error).name === 'AbortError') return null
-          throw error
+          // The picker only opens soon after a click; a save that had to wait (for a font to load) is downloaded instead.
+          if ((error as Error).name !== 'SecurityError' && (error as Error).name !== 'NotAllowedError') throw error
         }
       }
       const link = document.createElement('a')

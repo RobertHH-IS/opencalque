@@ -42,6 +42,18 @@
       "Divisions": "Teilungen",
       "Level": "Höhe",
       "Text size": "Textgröße"
+    },
+    "zh": {
+      "Plan annotations": "平面图标注",
+      "North arrow, scale bar and level marker.": "指北针、比例尺和标高符号。",
+      "North arrow": "指北针",
+      "Scale bar": "比例尺",
+      "Level marker": "标高符号",
+      "Size": "大小",
+      "Length": "长度",
+      "Divisions": "分段数",
+      "Level": "标高",
+      "Text size": "文字大小"
     }
   },
   "objects": [

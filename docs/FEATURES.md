@@ -50,7 +50,7 @@ Last updated: 2026-10-10.
 
 ### Reusing and extending
 - **Component library**: one searchable, illustrated grid of everything that can be placed: doors, windows, stairs and other parametric objects, the drawing's own components, and the warehouse libraries. Door and window also have their own toolbar buttons.
-- **Component warehouse**: browse libraries of ready-made symbols (furniture, bathroom, kitchen and electrical ship with the app, named in the app's four languages), search, and click to place. More libraries can come from a catalog published on the web.
+- **Component warehouse**: browse libraries of ready-made symbols (furniture, bathroom, kitchen and electrical ship with the app, named in the app's five languages), search, and click to place. More libraries can come from a catalog published on the web.
 - **Extension warehouse**: install extensions that add new parametric objects (electrical symbols, plan annotations and adjustable furniture ship with the app), from the catalog, a web catalog or a file. These extensions are data, not programs, so installing one cannot run code.
 - Any drawing can be imported as a component library.
 
@@ -72,7 +72,7 @@ Last updated: 2026-10-10.
 - Autosave to the drawing's file, which can be switched off.
 - English, French, Spanish and German.
 - Files are readable JSON with a published schema; a command-line tool creates, validates, edits and exports drawings.
-- Export to PDF at true scale (one page per paper, with a title block), to SVG and to DXF.
+- Export to PDF at true scale (one page per paper, with a title block), to SVG and to DXF. Text in any script but Korean prints in the PDF: Chinese, Greek, Cyrillic and Central European letters come from fonts shipped with the app, only the glyphs used embedded.
 
 ## 2. The next ten big features
 

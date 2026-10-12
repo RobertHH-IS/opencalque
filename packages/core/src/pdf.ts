@@ -4,6 +4,7 @@ import { PRINT_MM_PER_PIXEL, type Primitive } from './primitives'
 import type { Registry } from './registry'
 import { buildScene, paintOrder, type PaintStep } from './scene'
 import type { Document, NodeOf } from './schema'
+import { readTrueType, type TrueTypeFont } from './truetype'
 
 /**
  * Exports papers as PDF pages at their true size: an A3 at 1:50 comes out as an A3 on which one
@@ -12,7 +13,9 @@ import type { Document, NodeOf } from './schema'
  * The file is written here from scratch, with no library: a PDF is a list of numbered objects
  * followed by a table of where each one starts. Text uses the fonts every PDF reader has, so
  * nothing needs embedding: Helvetica, Times or Courier, each plain or bold, chosen from the
- * text's own font. JPEG pictures are taken as they are; PNG ones are read into plain pixels.
+ * text's own font. Those know only Western European letters; a text with any other (Chinese,
+ * Greek, Polish…) is printed in TrueType fonts given to `toPDF`, of which only the glyphs used are
+ * embedded. JPEG pictures are taken as they are; PNG ones are read into plain pixels.
  */
 
 /** The fonts a text can print in, in the order they are numbered (F1 to F6): a family, plain then bold. */
@@ -41,6 +44,9 @@ const WIDTHS = [
 ]
 /** Characters outside Latin-1 that the standard encoding has all the same, and where. */
 const SPECIAL: Record<string, number> = { '€': 0x80, '…': 0x85, 'Œ': 0x8c, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '–': 0x96, '—': 0x97, 'œ': 0x9c }
+
+/** Whether the standard fonts have a sign for every character of a text. */
+const printable = (text: string) => [...text].every((char) => SPECIAL[char] || (char >= ' ' && char <= '~') || (char >= ' ' && char <= 'ÿ'))
 
 /** A text as the bytes Helvetica's standard encoding uses, with "?" for what it has no sign for. */
 function encode(text: string): number[] {
@@ -108,6 +114,41 @@ function jpegInfo(bytes: Uint8Array): { width: number; height: number; channels:
 
 type Paper = NodeOf<'paper'>
 
+/** A font embedded for texts the standard fonts cannot print, and the glyphs used from it so far. */
+interface Embedded {
+  font: TrueTypeFont
+  /** Each glyph used, by its number in the font; it is numbered in the PDF by its place here. Glyph 0, the "missing" one, is first. */
+  glyphs: number[]
+  numbers: Map<number, number>
+  /** The character each glyph stands for, so the text can be searched and copied. */
+  characters: string[]
+}
+
+/**
+ * A text cut into runs, each drawn by the first of the fonts that has its characters: the font's
+ * place in the list and the numbers its glyphs have in the PDF, which are added to those embedded
+ * the first time. A character none of them has is the first font's "missing" glyph.
+ */
+function runsOf(fonts: Embedded[], text: string): { font: number; numbers: number[] }[] {
+  const runs: { font: number; numbers: number[] }[] = []
+  for (const char of text) {
+    const code = char.codePointAt(0)!
+    const font = Math.max(0, fonts.findIndex((embedded) => embedded.font.glyph(code) !== 0))
+    const embedded = fonts[font]
+    const glyph = embedded.font.glyph(code)
+    let number = embedded.numbers.get(glyph)
+    if (number === undefined) {
+      number = embedded.glyphs.push(glyph) - 1
+      embedded.numbers.set(glyph, number)
+      embedded.characters.push(char)
+    }
+    const last = runs[runs.length - 1]
+    if (last?.font === font) last.numbers.push(number)
+    else runs.push({ font, numbers: [number] })
+  }
+  return runs
+}
+
 /** Everything a page's drawing commands refer to by name. Shared by all the pages of a file. */
 interface Resources {
   /** Opacities in use, as "fill stroke" keys, in the order they were first needed. */
@@ -116,6 +157,8 @@ interface Resources {
   images: { bytes: Uint8Array; width: number; height: number; channels: number; jpeg: boolean }[]
   /** The picture already added for a data URL, so one used on several pages is stored once. */
   imageByHref: Map<string, number>
+  /** The fonts given for what the standard ones cannot print, in the order they are tried. */
+  fonts: Embedded[]
 }
 
 /** The drawing commands for one paper: what lies on it, brought to the page's own measure. */
@@ -141,11 +184,30 @@ function pageContent(doc: Document, paper: Paper, registry: Registry, resources:
     if (prim.kind === 'text') {
       const ink = parseColor(prim.stroke) ?? { r: 0, g: 0, b: 0, a: 1 }
       const size = prim.size * perMm
-      const bytes = encode(prim.text)
-      const font = fontFor(prim.font, prim.bold)
-      const wide = font.fixed ? bytes.length * 0.6 * size : textWidth(bytes, size) * font.widen
       // A condensed face has no standard font: Helvetica is squeezed sideways instead.
-      const squeeze = /narrow|condensed/i.test(prim.font ?? '') ? ' 82 Tz' : ''
+      const narrow = /narrow|condensed/i.test(prim.font ?? '')
+      const squeeze = narrow ? ' 82 Tz' : ''
+      // How the text is set, then shown, and how wide it comes out.
+      let setting = squeeze
+      let shown: string
+      let wide: number
+      if (!printable(prim.text) && resources.fonts.length > 0) {
+        // The given fonts stand for every family. Bold is made by outlining the letters in their own colour.
+        const runs = runsOf(resources.fonts, prim.text)
+        const advance = runs.reduce((sum, { font, numbers }) => {
+          const embedded = resources.fonts[font]
+          return sum + numbers.reduce((width, number) => width + embedded.font.advance(embedded.glyphs[number]), 0) / embedded.font.unitsPerEm
+        }, 0)
+        wide = advance * size * (narrow ? 0.82 : 1)
+        if (prim.bold) setting += ` 2 Tr ${n(size * 0.035)} w ${n(ink.r)} ${n(ink.g)} ${n(ink.b)} RG`
+        shown = runs.map(({ font, numbers }) => `/F${FONTS.length + font + 1} ${n(size)} Tf <${numbers.map((number) => number.toString(16).padStart(4, '0')).join('')}> Tj`).join(' ')
+      } else {
+        const bytes = encode(prim.text)
+        const font = fontFor(prim.font, prim.bold)
+        wide = font.fixed ? bytes.length * 0.6 * size : textWidth(bytes, size) * font.widen
+        setting += ` /F${font.index + 1} ${n(size)} Tf`
+        shown = `(${bytes.map((b) => (b === 40 || b === 41 || b === 92 ? `\\${String.fromCharCode(b)}` : b < 127 ? String.fromCharCode(b) : `\\${b.toString(8)}`)).join('')}) Tj`
+      }
       const turn = ((prim.rotation ?? 0) * Math.PI) / 180
       // The page's Y runs up where the drawing's runs down, so a clockwise turn there is the opposite one here.
       const [cos, sin] = [Math.cos(turn), Math.sin(turn)]
@@ -153,8 +215,7 @@ function pageContent(doc: Document, paper: Paper, registry: Registry, resources:
       const x = (prim.x - paper.x) * perMm - back * cos
       const y = height - (prim.y - paper.y) * perMm + back * sin
       alpha(ink.a, 1)
-      const literal = bytes.map((b) => (b === 40 || b === 41 || b === 92 ? `\\${String.fromCharCode(b)}` : b < 127 ? String.fromCharCode(b) : `\\${b.toString(8)}`)).join('')
-      out.push(`BT /F${font.index + 1} ${n(size)} Tf${squeeze} ${n(ink.r)} ${n(ink.g)} ${n(ink.b)} rg ${n(cos)} ${n(-sin)} ${n(sin)} ${n(cos)} ${n(x)} ${n(y)} Tm (${literal}) Tj ET`)
+      out.push(`BT${setting} ${n(ink.r)} ${n(ink.g)} ${n(ink.b)} rg ${n(cos)} ${n(-sin)} ${n(sin)} ${n(cos)} ${n(x)} ${n(y)} Tm ${shown} ET`)
     } else if (prim.kind === 'image') {
       const [, format, data] = /^data:image\/(jpeg|png);base64,(.*)$/s.exec(prim.href) ?? []
       let index = resources.imageByHref.get(prim.href)
@@ -212,36 +273,67 @@ function pageContent(doc: Document, paper: Paper, registry: Registry, resources:
     out.push('Q')
   }
 
-  // What is on the sheet, without the sheets themselves: the page is the paper.
-  const prims: Primitive[] = buildScene(doc, paper.parent!, registry).flatMap((item) => (item.node.type === 'paper' && item.id !== paper.id ? [] : item.prims.filter((p) => p.backdrop !== true)))
-  for (const step of paintOrder(prims)) paint(step)
+  for (const step of paintOrder(sheetPrimitives(doc, paper, registry))) paint(step)
   return { width: paper.width * perMm, height, commands: out.join('\n') }
+}
+
+/** What is on a sheet, without the sheets themselves: the page is the paper. */
+const sheetPrimitives = (doc: Document, paper: Paper, registry: Registry): Primitive[] =>
+  buildScene(doc, paper.parent!, registry).flatMap((item) => (item.node.type === 'paper' && item.id !== paper.id ? [] : item.prims.filter((p) => p.backdrop !== true)))
+
+/** The papers to export: those given, in that order, or every paper of the document, page by page. */
+function papersOf(doc: Document, paperIds?: string[]): Paper[] {
+  const all = Object.values(doc.nodes).filter((node): node is Paper => node.type === 'paper')
+  return paperIds ? paperIds.flatMap((id) => all.filter((paper) => paper.id === id)) : all.sort((a, b) => (a.parent === b.parent ? (a.order < b.order ? -1 : 1) : 0))
+}
+
+/**
+ * The characters, each once, of the texts on these papers that the standard fonts cannot print:
+ * what the fonts given to `toPDF` should have. None means no font is needed. Fonts can be large:
+ * this tells which to load, if any.
+ */
+export function pdfFontCharacters(doc: Document, registry: Registry, paperIds?: string[]): string[] {
+  const texts = papersOf(doc, paperIds).flatMap((paper) => sheetPrimitives(doc, paper, registry).flatMap((prim) => (prim.kind === 'text' && !printable(prim.text) ? [prim.text] : [])))
+  return [...new Set(texts.flatMap((text) => [...text]))].filter((char) => !printable(char))
+}
+
+export interface PdfOptions {
+  /**
+   * TrueType fonts (the bytes of `.ttf` files) for texts the standard fonts cannot print: Chinese,
+   * Greek, Polish… Each character is taken from the first that has it, and only the glyphs used are
+   * embedded. Without them, those characters print as "?".
+   */
+  fonts?: Uint8Array[]
 }
 
 /**
  * A PDF with one page per paper, each at the paper's real size and scale. Papers are taken in the
  * order given; with none given, every paper of the document, page by page.
  */
-export function toPDF(doc: Document, registry: Registry, paperIds?: string[]): Uint8Array {
-  const all = Object.values(doc.nodes).filter((node): node is Paper => node.type === 'paper')
-  const papers = paperIds ? paperIds.flatMap((id) => all.filter((paper) => paper.id === id)) : all.sort((a, b) => (a.parent === b.parent ? (a.order < b.order ? -1 : 1) : 0))
+export function toPDF(doc: Document, registry: Registry, paperIds?: string[], options: PdfOptions = {}): Uint8Array {
+  const papers = papersOf(doc, paperIds)
   if (papers.length === 0) throw new Error('There is no paper to export. A paper sets the size and the scale of a printed sheet.')
 
-  const resources: Resources = { alphas: [], images: [], imageByHref: new Map() }
+  const given = (options.fonts ?? []).map((bytes): Embedded => ({ font: readTrueType(bytes), glyphs: [0], numbers: new Map([[0, 0]]), characters: [''] }))
+  const resources: Resources = { alphas: [], images: [], imageByHref: new Map(), fonts: given }
   const pages = papers.map((paper) => pageContent(doc, paper, registry, resources))
+  // A given font none of whose glyphs was used is left out; the others take five objects each.
+  const used = given.flatMap((embedded, i) => (embedded.glyphs.length > 1 ? [{ embedded, name: `F${FONTS.length + i + 1}` }] : []))
+  const fonts = used.flatMap(({ embedded }, i) => embeddedFont(embedded, 3 + FONTS.length + 5 * i))
 
   // Objects, in the order they are numbered: the catalog, the list of pages, the fonts, the
   // opacities, the pictures, then a page and its drawing commands for each paper.
   const chunks: (string | Uint8Array)[] = []
-  const firstAlpha = 3 + FONTS.length
+  const firstAlpha = 3 + FONTS.length + fonts.length
   const firstImage = firstAlpha + resources.alphas.length
   const firstPage = firstImage + resources.images.length
   const names = (prefix: string, first: number, count: number) => Array.from({ length: count }, (_, i) => `/${prefix}${i + 1} ${first + i} 0 R`).join(' ')
-  const shared = `<< /Font << ${names('F', 3, FONTS.length)} >> /ExtGState << ${names('GS', firstAlpha, resources.alphas.length)} >> /XObject << ${names('Im', firstImage, resources.images.length)} >> >>`
+  const shared = `<< /Font << ${[names('F', 3, FONTS.length), ...used.map(({ name }, i) => `/${name} ${3 + FONTS.length + 5 * i} 0 R`)].join(' ')} >> /ExtGState << ${names('GS', firstAlpha, resources.alphas.length)} >> /XObject << ${names('Im', firstImage, resources.images.length)} >> >>`
   const objects: (string | [string, Uint8Array])[] = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     `<< /Type /Pages /Count ${pages.length} /Kids [${pages.map((_, i) => `${firstPage + i * 2} 0 R`).join(' ')}] >>`,
     ...FONTS.map((name) => `<< /Type /Font /Subtype /Type1 /BaseFont /${name} /Encoding /WinAnsiEncoding >>`),
+    ...fonts,
     ...resources.alphas.map((key) => `<< /Type /ExtGState /ca ${key.split(' ')[0]} /CA ${key.split(' ')[1]} >>`),
     ...resources.images.map((image): [string, Uint8Array] => [
       `<< /Type /XObject /Subtype /Image /Width ${image.width} /Height ${image.height} /ColorSpace ${image.channels === 1 ? '/DeviceGray' : '/DeviceRGB'} /BitsPerComponent 8${image.jpeg ? ' /Filter /DCTDecode' : ''} /Length ${image.bytes.length} >>`,
@@ -285,4 +377,41 @@ export function toPDF(doc: Document, registry: Registry, paperIds?: string[]): U
     }
   }
   return file
+}
+
+/** The bytes of a text that is only ASCII, as a PDF stream holds them. */
+const ascii = (text: string) => Uint8Array.from([...text].map((char) => char.charCodeAt(0)))
+
+/**
+ * The objects of the embedded font, numbered from `first`: the font a page refers to, the glyphs
+ * it is made of, their description, the font file cut down to them, and what each one stands for.
+ */
+function embeddedFont({ font, glyphs, characters }: Embedded, first: number): (string | [string, Uint8Array])[] {
+  const file = font.subset(glyphs.slice(1))
+  // A subset is named after its glyphs, behind six capitals, so two different ones are not taken for each other.
+  let hash = 0
+  for (const glyph of glyphs) hash = (Math.imul(hash, 31) + glyph) >>> 0
+  const tag = Array.from({ length: 6 }, (_, i) => String.fromCharCode(65 + (Math.floor(hash / 26 ** i) % 26))).join('')
+  const name = `${tag}+${font.name}`
+  const scale = (value: number) => Math.round((value * 1000) / font.unitsPerEm)
+  const widths = glyphs.map((glyph) => scale(font.advance(glyph))).join(' ')
+  const utf16 = (text: string) => [...text].flatMap((char) => (char.length === 2 ? [char.charCodeAt(0), char.charCodeAt(1)] : [char.charCodeAt(0)])).map((unit) => unit.toString(16).padStart(4, '0')).join('')
+  const pairs = characters.flatMap((char, number) => (number === 0 ? [] : [`<${number.toString(16).padStart(4, '0')}> <${utf16(char)}>`]))
+  const blocks = Array.from({ length: Math.ceil(pairs.length / 100) }, (_, i) => pairs.slice(i * 100, i * 100 + 100))
+  const unicode = ascii(
+    [
+      '/CIDInit /ProcSet findresource begin 12 dict begin begincmap',
+      '/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def /CMapName /Adobe-Identity-UCS def /CMapType 2 def',
+      '1 begincodespacerange <0000> <FFFF> endcodespacerange',
+      ...blocks.map((block) => `${block.length} beginbfchar\n${block.join('\n')}\nendbfchar`),
+      'endcmap CMapName currentdict /CMap defineresource pop end end',
+    ].join('\n'),
+  )
+  return [
+    `<< /Type /Font /Subtype /Type0 /BaseFont /${name} /Encoding /Identity-H /DescendantFonts [${first + 1} 0 R] /ToUnicode ${first + 4} 0 R >>`,
+    `<< /Type /Font /Subtype /CIDFontType2 /BaseFont /${name} /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor ${first + 2} 0 R /CIDToGIDMap /Identity /W [0 [${widths}]] >>`,
+    `<< /Type /FontDescriptor /FontName /${name} /Flags 4 /FontBBox [${font.bbox.map(scale).join(' ')}] /ItalicAngle 0 /Ascent ${scale(font.ascent)} /Descent ${scale(font.descent)} /CapHeight ${scale(font.capHeight)} /StemV 80 /FontFile2 ${first + 3} 0 R >>`,
+    [`<< /Length ${file.length} /Length1 ${file.length} >>`, file],
+    [`<< /Length ${unicode.length} >>`, unicode],
+  ]
 }
