@@ -7,13 +7,21 @@ const desktop: Platform = {
   claudeCli: (input) => ipcRenderer.invoke('claude:run', input),
   cancelClaudeCli: () => ipcRenderer.send('claude:cancel'),
   setTheme: (dark, followsSystem) => ipcRenderer.send('app:theme', dark, followsSystem),
-  setCloseWarning: (labels) => ipcRenderer.send('doc:closeWarning', labels),
+  setDialogLabels: (labels) => ipcRenderer.send('app:labels', labels),
   open: (extensions) => ipcRenderer.invoke('file:open', extensions),
   openBytes: (extensions) => ipcRenderer.invoke('file:openBytes', extensions),
   save: (content, suggestedName, token) => ipcRenderer.invoke('file:save', content, suggestedName, token),
   recent: () => ipcRenderer.invoke('file:recent'),
   openRecent: (path) => ipcRenderer.invoke('file:openRecent', path),
   initial: () => ipcRenderer.invoke('file:initial'),
+  onOpenFile: (listener) => {
+    ipcRenderer.on('file:openRequest', async (_, path: string) => {
+      const file = await ipcRenderer.invoke('file:openRequested', path)
+      if (file) listener(file)
+    })
+    ipcRenderer.send('file:listen')
+  },
+  showBackups: () => ipcRenderer.send('file:showBackups'),
   setDirty: (dirty) => ipcRenderer.send('doc:dirty', dirty),
 }
 

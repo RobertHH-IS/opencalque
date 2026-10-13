@@ -1,6 +1,6 @@
 {
   "name": "opencalque",
-  "version": "0.8.5",
+  "version": "1.0.0-rc.1",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@9.14.2",
@@ -15,11 +15,13 @@
     "opencalque": "tsx packages/cli/src/cli.ts",
     "schema": "tsx packages/cli/src/cli.ts schema --out schema",
     "smoke": "pnpm --filter @opencalque/desktop smoke",
+    "e2e": "pnpm build:web && playwright test",
     "warehouse": "tsx packages/cli/src/build-warehouse.ts",
     "example": "tsx packages/cli/src/build-example.ts",
     "dist": "pnpm build && pnpm --filter @opencalque/desktop dist"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@types/node": "^26.6.4",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

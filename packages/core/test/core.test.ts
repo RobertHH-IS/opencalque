@@ -6,6 +6,7 @@ import {
   componentsOf,
   createComponent,
   createDocument,
+  detachInstance,
   hitTest,
   groupNodes,
   importComponents,
@@ -117,10 +118,10 @@ describe('documents', () => {
     expect(parseDocument(JSON.parse(serializeDocument(doc)))).toEqual(doc)
   })
 
-  it('rejects a node whose parent is missing', () => {
+  it('puts a node whose parent is missing on the first page', () => {
     const doc = applyOps(createDocument(), [wall('w1', 0, 0, 1000, 0)])
     const broken = { ...doc, nodes: { ...doc.nodes, w1: { ...doc.nodes.w1, parent: 'nope' } } }
-    expect(() => parseDocument(broken)).toThrow(/parent must be/)
+    expect(parseDocument(broken).nodes.w1.parent).toBe('page_1')
   })
 })
 
@@ -259,6 +260,35 @@ describe('groups', () => {
     const imported = importComponents(createDocument(), made.doc)
     expect(Object.values(imported.doc.nodes).filter((n) => n.type === 'wall')).toHaveLength(3)
     expect(Object.values(imported.doc.nodes).filter((n) => n.type === 'group')).toHaveLength(1)
+  })
+
+  it('detaches an instance into copies drawn where it drew them, in its place in the order', () => {
+    const made = createComponent(two(), registry, ['w1', 'w2'], 'Corner')
+    const placed = applyOps(made.doc, [
+      { op: 'update_node', id: made.instanceId, patch: { x: 3000, y: 2000, rotation: 90, flipX: true, scale: 2 } },
+      { op: 'add_node', node: { type: 'line', id: 'top', parent: 'page_1', a: { x: 0, y: 0 }, b: { x: 1, y: 0 } } },
+    ])
+    const before = buildScene(placed, 'page_1', registry).find((item) => item.id === made.instanceId)!.bounds!
+    const { doc, ids: copies } = detachInstance(placed, made.instanceId, registry)
+    expect(ids(doc)).toEqual([...copies, 'w3', 'top'])
+    expect(doc.nodes[made.instanceId]).toBeUndefined()
+    expect(componentsOf(doc)).toHaveLength(1)
+    // Mirrored, doubled, then turned a quarter clockwise about the insertion point.
+    expect(doc.nodes[copies[0]]).toMatchObject({ type: 'wall', a: { x: 2800, y: 2000 }, b: { x: 2800, y: 0 }, thickness: 400 })
+    const after = buildScene(doc, 'page_1', registry).filter((item) => copies.includes(item.id)).map((item) => item.bounds!)
+    expect(Math.min(...after.map((b) => b.minX))).toBeCloseTo(before.minX)
+    expect(Math.min(...after.map((b) => b.minY))).toBeCloseTo(before.minY)
+    expect(Math.max(...after.map((b) => b.maxX))).toBeCloseTo(before.maxX)
+    expect(Math.max(...after.map((b) => b.maxY))).toBeCloseTo(before.maxY)
+  })
+
+  it('keeps the style of a detached instance on a group in its place', () => {
+    const made = createComponent(two(), registry, ['w1', 'w2'], 'Corner')
+    const styled = applyOps(made.doc, [{ op: 'update_node', id: made.instanceId, patch: { style: { stroke: '#ff0000' } } }])
+    const { doc, ids: [groupId] } = detachInstance(styled, made.instanceId, registry)
+    expect(doc.nodes[groupId]).toMatchObject({ type: 'group', name: 'Corner', style: { stroke: '#ff0000' } })
+    expect(childrenOf(doc, groupId).map((n) => n.type)).toEqual(['wall', 'wall'])
+    expect(parseDocument(JSON.parse(serializeDocument(doc)))).toEqual(doc)
   })
 })
 

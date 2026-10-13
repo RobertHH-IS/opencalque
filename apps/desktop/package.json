@@ -1,7 +1,7 @@
 {
   "name": "@opencalque/desktop",
   "productName": "OpenCalque",
-  "version": "0.8.5",
+  "version": "1.0.0-rc.1",
   "private": true,
   "license": "MIT",
   "main": "./out/main/index.js",
@@ -77,6 +77,6 @@
       "executableName": "opencalque",
       "artifactName": "OpenCalque-${version}-linux-${arch}.${ext}"
     },
-    "afterPack": "scripts/adhoc-sign.cjs"
+    "afterPack": "scripts/after-pack.cjs"
   }
 }

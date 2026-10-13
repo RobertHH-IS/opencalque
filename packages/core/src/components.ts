@@ -1,10 +1,13 @@
+import { generateNKeysBetween } from 'fractional-indexing'
 import { colorRefsIn } from './colors'
 import { childrenOf, componentsOf, layersOf, leavesOf, newId } from './document'
+import { cloneOps } from './groups'
 import { moveOps, nodePrimitives } from './kinds'
 import { applyOps, OpError, type NodeInput, type Op } from './ops'
 import type { Registry } from './registry'
 import { boundsOf } from './scene'
 import type { Document, Node } from './schema'
+import { transformOps } from './transform'
 
 /**
  * Turns nodes into a component and leaves an instance in their place. The component's origin
@@ -50,8 +53,48 @@ export function createComponent(
 }
 
 /**
+ * Puts copies of what a component holds in the place of one of its instances, where the instance
+ * drew them: they become objects of the drawing, which editing the component no longer changes.
+ * They take the instance's place in the stacking order. An instance with a style or modifiers of
+ * its own leaves a group that keeps them, so that the drawing looks the same. Returns the ids of
+ * what took its place.
+ */
+export function detachInstance(doc: Document, instanceId: string, registry: Registry): { doc: Document; ids: string[] } {
+  const instance = doc.nodes[instanceId]
+  if (instance?.type !== 'instance' || instance.parent === null) throw new OpError('Select a component to detach')
+  const component = doc.nodes[instance.component]
+  if (component?.type !== 'component') throw new OpError(`Component "${instance.component}" does not exist`)
+  const parts = childrenOf(doc, component.id)
+  const kept = instance.style !== undefined || (instance.modifiers?.length ?? 0) > 0
+  const ops: Op[] = []
+  let into = instance.parent
+  if (kept) {
+    into = newId('group')
+    const { name = component.name, layer, style, modifiers } = instance
+    const own = { ...(name ? { name } : {}), ...(layer ? { layer } : {}), ...(style ? { style } : {}), ...(modifiers ? { modifiers } : {}) }
+    ops.push({ op: 'add_node', node: { type: 'group', id: into, parent: instance.parent, order: instance.order, ...own } })
+  }
+  // Loose, the copies go where the instance was among its siblings; in a group they keep the component's order.
+  const siblings = childrenOf(doc, instance.parent)
+  const at = siblings.findIndex((n) => n.id === instanceId)
+  const orders = kept ? [] : generateNKeysBetween(siblings[at - 1]?.order ?? null, siblings[at + 1]?.order ?? null, parts.length)
+  const placement = { x: instance.x, y: instance.y }
+  const copies = parts.map((part, i) => {
+    const copy = cloneOps(doc, part.id, placement, into)
+    ops.push(...copy.ops, ...(kept ? [] : [{ op: 'update_node', id: copy.id, patch: { order: orders[i] } } as Op]))
+    return copy.id
+  })
+  ops.push({ op: 'remove_node', id: instanceId })
+  const moved = applyOps(doc, ops)
+  // Moved by the insertion point, they are then turned, mirrored and sized about it, as the instance drew them.
+  const turn = transformOps(moved, copies.map((id) => moved.nodes[id]), { pivot: placement, mirror: instance.flipX, rotation: instance.rotation, scale: instance.scale }, registry)
+  return { doc: applyOps(moved, turn), ids: kept ? [into] : copies }
+}
+
+/**
  * The operations that copy what is inside `from` (a page, component or group of `source`) into
- * `to` in `target`, with new ids, however deeply grouped. Pictures bring their files; nodes go to
+ * `to` in `target`, with new ids, however deeply grouped. Pictures bring their files, and walls
+ * and dimensions their type or style, unless the target has one of that id already; nodes go to
  * the target layer with the same name as theirs, else to `fallbackLayer`, else to none.
  * `components` maps the source's component ids to the target's, for the instances among them.
  * Returns the ids given to the nodes copied directly into `to`.
@@ -74,10 +117,17 @@ export function transplantOps(
       if (asset && !target.assets?.[asset.id] && !ops.some((o) => o.op === 'add_asset' && o.asset.id === asset.id)) {
         ops.push({ op: 'add_asset', asset })
       }
-      // So does a shared colour it refers to, which also keeps its id.
-      for (const id of colorRefsIn(child)) {
+      // So does the wall type or dimension style it is drawn in, which keeps its id as well.
+      const wallType = child.type === 'wall' && child.wallType ? source.wallTypes?.[child.wallType] : undefined
+      const dimensionStyle = child.type === 'dimension' && child.dimensionStyle ? source.dimensionStyles?.[child.dimensionStyle] : undefined
+      // So does a shared colour it or its type refers to, which also keeps its id.
+      for (const id of colorRefsIn([child, wallType, dimensionStyle])) {
         const color = source.colors?.[id]
         if (color && !target.colors?.[id] && !ops.some((o) => o.op === 'add_color' && o.color.id === id)) ops.push({ op: 'add_color', color })
+      }
+      if (wallType && !target.wallTypes?.[wallType.id] && !ops.some((o) => o.op === 'add_wall_type' && o.wallType.id === wallType.id)) ops.push({ op: 'add_wall_type', wallType })
+      if (dimensionStyle && !target.dimensionStyles?.[dimensionStyle.id] && !ops.some((o) => o.op === 'add_dimension_style' && o.dimensionStyle.id === dimensionStyle.id)) {
+        ops.push({ op: 'add_dimension_style', dimensionStyle })
       }
       const sourceLayer = child.layer === undefined ? undefined : source.layers[child.layer]
       const layer = (sourceLayer && layerByName.get(sourceLayer.name)) ?? options.fallbackLayer

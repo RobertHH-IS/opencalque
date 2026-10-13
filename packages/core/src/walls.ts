@@ -29,7 +29,146 @@ const drawnWith = (doc: Document, parentId: string | null): Node[] => {
 }
 
 // Grouping is only a way of organising: walls join, and openings cut, across group boundaries.
-const wallsIn = (doc: Document, parentId: string | null): Wall[] => drawnWith(doc, parentId).filter((n): n is Wall => n.type === 'wall')
+const wallsIn = (doc: Document, parentId: string | null): Wall[] => wallIndex(doc, parentId).walls
+
+/*
+ * Every wall looks at the walls whose ends meet its own and at the doors and windows set in it.
+ * Asked of the whole drawing, wall by wall, that is a search through everything for each wall,
+ * which made a plan of two thousand walls take more than a second to draw, on every movement of
+ * a drag. So what is on a page is indexed once for each state of the drawing: wall ends by the
+ * square millimetre they fall in, walls by the square metres they cover. Documents never change,
+ * so an index is good for as long as the `nodes` it was made from is the drawing's.
+ */
+
+/** The walls of one page or component, in the order of the drawing, and where their ends are. */
+interface WallIndex {
+  walls: Wall[]
+  /** Each wall's place in `walls`. */
+  rank: Map<string, number>
+  /** The walls with an end in each square millimetre, by `cellKey`. */
+  ends: Map<string, Wall[]>
+}
+
+const cellKey = (x: number, y: number) => `${x},${y}`
+const wallIndexes = new WeakMap<Document['nodes'], Map<string, WallIndex>>()
+
+function wallIndex(doc: Document, parentId: string | null): WallIndex {
+  const root = rootOf(doc, parentId)
+  let byRoot = wallIndexes.get(doc.nodes)
+  if (!byRoot) wallIndexes.set(doc.nodes, (byRoot = new Map()))
+  const key = root?.id ?? ''
+  let index = byRoot.get(key)
+  if (!index) {
+    const walls = root ? leavesOf(doc, root.id).filter((n): n is Wall => n.type === 'wall') : []
+    const ends = new Map<string, Wall[]>()
+    for (const wall of walls) {
+      for (const at of new Set([cellKey(Math.floor(wall.a.x), Math.floor(wall.a.y)), cellKey(Math.floor(wall.b.x), Math.floor(wall.b.y))])) {
+        const list = ends.get(at)
+        if (list) list.push(wall)
+        else ends.set(at, [wall])
+      }
+    }
+    index = { walls, rank: new Map(walls.map((wall, i) => [wall.id, i])), ends }
+    byRoot.set(key, index)
+  }
+  return index
+}
+
+/**
+ * The walls that may have an end within `JOIN_TOLERANCE` of `p`, in the order of the drawing:
+ * those with an end in its square millimetre or one of the eight around it.
+ */
+function wallsNear(index: WallIndex, p: Vec2): Wall[] {
+  const x = Math.floor(p.x)
+  const y = Math.floor(p.y)
+  const found = new Set<Wall>()
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const wall of index.ends.get(cellKey(x + i, y + j)) ?? []) found.add(wall)
+  return found.size < 2 ? [...found] : [...found].sort((u, v) => index.rank.get(u.id)! - index.rank.get(v.id)!)
+}
+
+/** A door or window set in a wall, with the stretch of the wall's middle line it takes (distances from `a`). */
+interface Cut {
+  node: NodeOf<'parametric'>
+  from: number
+  to: number
+  visible: boolean
+}
+
+/** The doors and windows of one page or component and the walls they are set in. */
+interface OpeningIndex {
+  /** For each wall, what is set in it, in order along it. */
+  cuts: Map<string, Cut[]>
+  /** For each door or window, the wall it sits in (the first in the drawing's order, where two overlap), or null. */
+  hosts: Map<string, Wall | null>
+}
+
+/** Walls are filed by the squares of this many millimetres that their outline covers. */
+const OPENING_GRID = 1000
+/** A wall covering more squares than this is looked at for every opening instead. */
+const OPENING_GRID_CELLS = 4096
+const openingIndexes = new WeakMap<Registry, WeakMap<Document['nodes'], { version: number; layers: Document['layers']; byRoot: Map<string, OpeningIndex> }>>()
+
+function openingIndex(doc: Document, parentId: string | null, registry: Registry): OpeningIndex {
+  let byNodes = openingIndexes.get(registry)
+  if (!byNodes) openingIndexes.set(registry, (byNodes = new WeakMap()))
+  let entry = byNodes.get(doc.nodes)
+  // What an opening cuts depends on the extensions in use, and whether it is shown, on the layers.
+  if (!entry || entry.version !== registry.version || entry.layers !== doc.layers) byNodes.set(doc.nodes, (entry = { version: registry.version, layers: doc.layers, byRoot: new Map() }))
+  const root = rootOf(doc, parentId)
+  const key = root?.id ?? ''
+  const known = entry.byRoot.get(key)
+  if (known) return known
+
+  const { walls, rank } = wallIndex(doc, parentId)
+  const grid = new Map<string, Wall[]>()
+  // Curved walls, and walls too large for the grid, are tried for every opening.
+  const always: Wall[] = []
+  const square = (v: number) => Math.floor(v / OPENING_GRID)
+  for (const wall of walls) {
+    const pad = wall.thickness / 2 + 1
+    const [x0, x1, y0, y1] = [square(Math.min(wall.a.x, wall.b.x) - pad), square(Math.max(wall.a.x, wall.b.x) + pad), square(Math.min(wall.a.y, wall.b.y) - pad), square(Math.max(wall.a.y, wall.b.y) + pad)]
+    const cells = (x1 - x0 + 1) * (y1 - y0 + 1)
+    if (wallArc(wall) || !(cells <= OPENING_GRID_CELLS)) {
+      always.push(wall)
+      continue
+    }
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        const list = grid.get(cellKey(x, y))
+        if (list) list.push(wall)
+        else grid.set(cellKey(x, y), [wall])
+      }
+    }
+  }
+
+  const index: OpeningIndex = { cuts: new Map(), hosts: new Map() }
+  for (const node of root ? leavesOf(doc, root.id) : []) {
+    const span = node.type === 'parametric' ? openingSpan(node, registry) : null
+    if (!span || node.type !== 'parametric') continue
+    // A straight wall that a span lies in shares a stretch of it, which is in some square the span covers.
+    const candidates = new Set(always)
+    for (let x = square(Math.min(span[0].x, span[1].x)); x <= square(Math.max(span[0].x, span[1].x)); x++) {
+      for (let y = square(Math.min(span[0].y, span[1].y)); y <= square(Math.max(span[0].y, span[1].y)); y++) for (const wall of grid.get(cellKey(x, y)) ?? []) candidates.add(wall)
+    }
+    let host: Wall | null = null
+    for (const wall of [...candidates].sort((u, v) => rank.get(u.id)! - rank.get(v.id)!)) {
+      const taken = overlap(wall, span)
+      if (!taken) continue
+      host ??= wall
+      const list = index.cuts.get(wall.id)
+      const cut = { node, from: taken[0], to: taken[1], visible: isVisible(doc, node) }
+      if (list) list.push(cut)
+      else index.cuts.set(wall.id, [cut])
+    }
+    index.hosts.set(node.id, host)
+  }
+  for (const list of index.cuts.values()) list.sort((p, q) => p.from - q.from)
+  entry.byRoot.set(key, index)
+  return index
+}
+
+/** Whether `node` is the drawing's own, as it is now, which is what the indexes were made from. */
+const current = (doc: Document, node: Node) => doc.nodes[node.id] === node
 
 /** The circle a curved wall follows: its middle line runs from angle `from` through `sweep` radians, signed, about `centre`. */
 export interface WallArc {
@@ -74,7 +213,17 @@ interface Course {
   stops: number[]
 }
 
+// A wall node never changes, so the line it follows is worked out once.
+const courses = new WeakMap<object, Course>()
+
 function courseOf(wall: { a: Vec2; b: Vec2; bulge?: number }): Course {
+  if (!('id' in wall)) return makeCourse(wall)
+  let course = courses.get(wall)
+  if (!course) courses.set(wall, (course = makeCourse(wall)))
+  return course
+}
+
+function makeCourse(wall: { a: Vec2; b: Vec2; bulge?: number }): Course {
   const arc = wallArc(wall)
   if (!arc) {
     const length = dist(wall.a, wall.b)
@@ -287,8 +436,9 @@ function meet(p: Vec2, a: Ray, b: Ray, style: 'auto' | 'miter' | 'round' | 'beve
  * square. Where other walls end at the same point, the faces are mitred with their neighbours and
  * the outline passes through `p`, so the walls around a joint tile it exactly.
  */
-function cap(p: Vec2, wall: Wall, away: Vec2, walls: Wall[], seams?: [Vec2, Vec2][]): Vec2[] {
+function cap(p: Vec2, wall: Wall, away: Vec2, doc: Document, seams?: [Vec2, Vec2][]): Vec2[] {
   const rays: Ray[] = []
+  const walls = [wall, ...wallsNear(wallIndex(doc, wall.parent), p).filter((w) => w.id !== wall.id)]
   for (const w of walls) {
     if (dist(w.a, w.b) < 1e-6) continue
     for (const side of ['a', 'b'] as const) {
@@ -400,6 +550,7 @@ function overlap(wall: Wall, span: [Vec2, Vec2]): [number, number] | null {
 
 /** The doors and windows set in a wall, each with the stretch of the wall's middle line it takes (distances from `a`), in order along it. */
 export function wallOpenings(doc: Document, wall: Wall, registry: Registry): { node: Extract<Node, { type: 'parametric' }>; from: number; to: number }[] {
+  if (current(doc, wall)) return (openingIndex(doc, wall.parent, registry).cuts.get(wall.id) ?? []).map(({ node, from, to }) => ({ node, from, to }))
   return drawnWith(doc, wall.parent)
     .flatMap((node) => {
       const span = openingSpan(node, registry)
@@ -411,6 +562,7 @@ export function wallOpenings(doc: Document, wall: Wall, registry: Registry): { n
 
 /** The wall an opening sits in, if any. */
 export function hostWall(doc: Document, node: Node, registry: Registry): Wall | null {
+  if (current(doc, node)) return openingIndex(doc, node.parent, registry).hosts.get(node.id) ?? null
   const span = openingSpan(node, registry)
   if (!span) return null
   return wallsIn(doc, node.parent).find((wall) => overlap(wall, span)) ?? null
@@ -425,15 +577,18 @@ export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec
   const course = courseOf(wall)
   const length = course.length
   const h = wall.thickness / 2
-  const walls = wallsIn(doc, wall.parent)
-  const capA = cap(wall.a, wall, course.dir(0), walls)
-  const capB = cap(wall.b, wall, scale(course.dir(length), -1), walls)
+  const capA = cap(wall.a, wall, course.dir(0), doc)
+  const capB = cap(wall.b, wall, scale(course.dir(length), -1), doc)
 
   const cuts: [number, number][] = []
-  for (const node of drawnWith(doc, wall.parent)) {
-    const span = isVisible(doc, node) ? openingSpan(node, registry) : null
-    const cut = span && overlap(wall, span)
-    if (cut) cuts.push(cut)
+  if (current(doc, wall)) {
+    for (const cut of openingIndex(doc, wall.parent, registry).cuts.get(wall.id) ?? []) if (cut.visible) cuts.push([cut.from, cut.to])
+  } else {
+    for (const node of drawnWith(doc, wall.parent)) {
+      const span = isVisible(doc, node) ? openingSpan(node, registry) : null
+      const cut = span && overlap(wall, span)
+      if (cut) cuts.push(cut)
+    }
   }
   cuts.sort((x, y) => x[0] - y[0])
 
@@ -468,11 +623,10 @@ export function wallSeams(wall: Wall, doc: Document): { points: [Vec2, Vec2]; en
   // Asked of every wall: the line at a joint may be wanted by the other wall alone.
   if (dist(wall.a, wall.b) < 1e-6) return []
   const course = courseOf(wall)
-  const walls = wallsIn(doc, wall.parent)
   const atA: [Vec2, Vec2][] = []
   const atB: [Vec2, Vec2][] = []
-  cap(wall.a, wall, course.dir(0), walls, atA)
-  cap(wall.b, wall, scale(course.dir(course.length), -1), walls, atB)
+  cap(wall.a, wall, course.dir(0), doc, atA)
+  cap(wall.b, wall, scale(course.dir(course.length), -1), doc, atB)
   return [...atA.map((points) => ({ points, end: 'a' as const })), ...atB.map((points) => ({ points, end: 'b' as const }))]
 }
 
@@ -539,8 +693,7 @@ export function wallEdgeLines(wall: Wall, doc: Document, registry: Registry, edg
   if (dist(wall.a, wall.b) < 1e-6) return []
   const course = courseOf(wall)
   if (edge === 'a' || edge === 'b') {
-    const walls = wallsIn(doc, wall.parent)
-    return [edge === 'a' ? cap(wall.a, wall, course.dir(0), walls) : cap(wall.b, wall, scale(course.dir(course.length), -1), walls)]
+    return [edge === 'a' ? cap(wall.a, wall, course.dir(0), doc) : cap(wall.b, wall, scale(course.dir(course.length), -1), doc)]
   }
   // A face: the outline of the wall drawn edge by edge, as if every edge had a look of its own, keeping this face's runs.
   const marked = { ...wall, edges: { ...wall.edges, [edge]: { ...wall.edges?.[edge], show: true, strokeWidth: 1 } } }
@@ -646,18 +799,19 @@ export function wallFollowOps(doc: Document, moved: Node[], d: Vec2, registry: R
   const ends = new Map<string, { a?: Vec2; b?: Vec2 }>()
   const ops: Op[] = []
   for (const parent of new Set(walls.map((w) => w.parent))) {
-    const here = walls.filter((w) => w.parent === parent)
-    const joints = here.flatMap((w) => [w.a, w.b])
+    const index = wallIndex(doc, parent)
+    const joints = walls.filter((w) => w.parent === parent).flatMap((w) => [w.a, w.b])
     const meets = (p: Vec2) => joints.some((q) => dist(p, q) < JOIN_TOLERANCE)
-    for (const other of drawnWith(doc, parent)) {
-      if (going.has(other.id)) continue
-      if (other.type === 'wall') {
-        const patch = { ...(meets(other.a) ? { a: add(other.a, d) } : {}), ...(meets(other.b) ? { b: add(other.b, d) } : {}) }
-        if (patch.a || patch.b) ends.set(other.id, { ...ends.get(other.id), ...patch })
-      } else if (other.type === 'parametric') {
-        const host = hostWall(doc, other, registry)
-        if (host && going.has(host.id)) ops.push({ op: 'update_node', id: other.id, patch: { x: other.x + d.x, y: other.y + d.y } })
-      }
+    // The walls that may meet a moved one, in the order of the drawing.
+    const near = new Set(joints.flatMap((p) => wallsNear(index, p)))
+    for (const other of index.walls) {
+      if (!near.has(other) || going.has(other.id)) continue
+      const patch = { ...(meets(other.a) ? { a: add(other.a, d) } : {}), ...(meets(other.b) ? { b: add(other.b, d) } : {}) }
+      if (patch.a || patch.b) ends.set(other.id, { ...ends.get(other.id), ...patch })
+    }
+    for (const [id, host] of openingIndex(doc, parent, registry).hosts) {
+      const other = doc.nodes[id]
+      if (host && going.has(host.id) && !going.has(id) && other?.type === 'parametric') ops.push({ op: 'update_node', id, patch: { x: other.x + d.x, y: other.y + d.y } })
     }
   }
   return [...[...ends].map(([id, patch]): Op => ({ op: 'update_node', id, patch })), ...ops]
@@ -671,7 +825,7 @@ export function wallEndFollowOps(doc: Document, wall: Node, index: number, p: Ve
   // A wall's third handle bends it, which moves neither end.
   if (wall.type !== 'wall' || index > 1) return []
   const joint = index === 0 ? wall.a : wall.b
-  return wallsIn(doc, wall.parent)
+  return wallsNear(wallIndex(doc, wall.parent), joint)
     .filter((other) => other.id !== wall.id)
     .flatMap((other): Op[] => {
       const patch = { ...(dist(other.a, joint) < JOIN_TOLERANCE ? { a: p } : {}), ...(dist(other.b, joint) < JOIN_TOLERANCE ? { b: p } : {}) }
@@ -687,7 +841,7 @@ export interface WallEnd {
 
 /** The wall ends that are at a point: a corner of the plan, or the free end of one wall. */
 export function wallEndsAt(doc: Document, parentId: string | null, p: Vec2): WallEnd[] {
-  return wallsIn(doc, parentId).flatMap((wall): WallEnd[] => [
+  return wallsNear(wallIndex(doc, parentId), p).flatMap((wall): WallEnd[] => [
     ...(dist(wall.a, p) < JOIN_TOLERANCE ? [{ wall, end: 'a' as const }] : []),
     ...(dist(wall.b, p) < JOIN_TOLERANCE ? [{ wall, end: 'b' as const }] : []),
   ])

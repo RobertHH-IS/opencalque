@@ -77,8 +77,11 @@ export class Registry {
   readonly modifiers = new Map<string, ModifierKind>()
   /** The translations of every extension in use, merged, by language code. */
   readonly translations: Record<string, Record<string, string>> = {}
+  /** Goes up whenever the set of extensions changes, so that what was worked out with the old set is not reused. */
+  version = 0
 
   use(extension: Extension): this {
+    this.version++
     extension.activate({
       registerParametric: (kind) => this.parametric.set(kind.kind, kind),
       registerCommand: (command) => this.commands.set(command.id, command),
@@ -93,6 +96,7 @@ export class Registry {
 
   /** Forgets every extension, so a different set can be put in use. The registry object stays the same. */
   clear(): this {
+    this.version++
     this.extensions.length = 0
     this.parametric.clear()
     this.commands.clear()

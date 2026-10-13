@@ -1,5 +1,5 @@
-import { declarativeExtension, parseDocument, type Vec2 } from '@opencalque/core'
-import { DRAWING_EXTENSIONS, guarded, importLibraryFrom, placeDxf } from './actions'
+import { declarativeExtension, type Vec2 } from '@opencalque/core'
+import { DRAWING_EXTENSIONS, guarded, importLibraryFrom, placeDxf, readDrawing } from './actions'
 import { platform } from './platform'
 import { PLAN_EXTENSIONS, placeFloorPlan } from './floorplan'
 import { t } from './i18n'
@@ -63,15 +63,23 @@ export async function openDropped(files: File[], at?: Vec2): Promise<void> {
       } else if (kind === 'dxf') {
         placeDxf(file.name, await file.text())
       } else if (DRAWING_EXTENSIONS.includes(kind)) {
-        const content = JSON.parse(await file.text())
+        const text = await file.text()
+        const content = (() => {
+          try {
+            return JSON.parse(text)
+          } catch {
+            return null
+          }
+        })()
         // An extension describes objects; a drawing holds nodes.
         if (kind === 'json' && isExtension(content)) installExtension(content)
         else {
-          const doc = parseDocument(content)
+          const { doc, then } = readDrawing(file.name, text)
           if (isDirty() && !window.confirm(t('Discard unsaved changes?'))) return
           // A dropped file gives the app no place to write back to: saving will ask where.
           loadDocument(doc, null)
           useStore.setState({ status: file.name })
+          then()
         }
       } else refused.push(file.name)
     })

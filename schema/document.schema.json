@@ -39,7 +39,7 @@
           },
           "order": {
             "type": "string",
-            "description": "Fractional index; layers sort by plain string comparison of this key."
+            "description": "Fractional index such as \"a0\"; layers sort by plain string comparison of this key."
           },
           "visible": {
             "description": "Defaults to true.",
@@ -198,6 +198,178 @@
         "description": "A way of building walls that belongs to the drawing. It defines whichever properties it gives a value to, and only those: one type may be no more than a material, another a thickness, a fill and an outline. A wall refers to it by \"wallType\" and takes what it defines; what it leaves out stays the wall's own. A wall may still differ from its type on a property: by its own \"height\" or \"style\" for those, and by listing \"thickness\" in its \"overrides\" for that one."
       }
     },
+    "dimensionStyles": {
+      "description": "Dimension styles by id, referred to from dimensions by \"dimensionStyle\".",
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "style": {
+            "description": "The dimension line and its end markers, as the \"style\" of a dimension.",
+            "type": "object",
+            "properties": {
+              "stroke": {
+                "description": "CSS color of lines and text, or 'none'.",
+                "type": "string"
+              },
+              "strokeWidth": {
+                "description": "Line weight in screen pixels (does not scale with zoom). On paper one pixel prints as 0.25 mm, so 2 is a 0.5 mm line.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "dash": {
+                "description": "Dash pattern in screen pixels.",
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "startMarker": {
+            "description": "Symbol at this end of the dimension line. Defaults to 'tick'.",
+            "type": "string",
+            "enum": [
+              "tick",
+              "arrow",
+              "open-arrow",
+              "dot",
+              "none"
+            ]
+          },
+          "endMarker": {
+            "description": "Symbol at this end of the dimension line. Defaults to 'tick'.",
+            "type": "string",
+            "enum": [
+              "tick",
+              "arrow",
+              "open-arrow",
+              "dot",
+              "none"
+            ]
+          },
+          "markerSize": {
+            "description": "Length of the end markers in mm. Defaults to 100.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "extension": {
+            "description": "Look of the two extension lines. Unset values follow the dimension line.",
+            "type": "object",
+            "properties": {
+              "stroke": {
+                "description": "CSS color of lines and text, or 'none'.",
+                "type": "string"
+              },
+              "strokeWidth": {
+                "description": "Line weight in screen pixels (does not scale with zoom). On paper one pixel prints as 0.25 mm, so 2 is a 0.5 mm line.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "dash": {
+                "description": "Dash pattern in screen pixels.",
+                "type": "array",
+                "items": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
+            },
+            "additionalProperties": false
+          },
+          "extensionGap": {
+            "description": "Gap in mm between a measured point and its extension line. Defaults to 0.",
+            "type": "number",
+            "minimum": 0
+          },
+          "size": {
+            "description": "Text size in mm. Defaults to 150.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "font": {
+            "description": "CSS font family, e.g. 'serif'. Defaults to the system sans-serif.",
+            "type": "string"
+          },
+          "textColor": {
+            "description": "Defaults to the color of the dimension line.",
+            "type": "string"
+          },
+          "textPosition": {
+            "description": "Where the text sits relative to the dimension line. Defaults to 'above'.",
+            "type": "string",
+            "enum": [
+              "above",
+              "center",
+              "below"
+            ]
+          },
+          "textRotation": {
+            "description": "Defaults to 'aligned' (along the dimension line).",
+            "type": "string",
+            "enum": [
+              "aligned",
+              "horizontal"
+            ]
+          },
+          "verticalText": {
+            "description": "Which way text along a vertical dimension line reads: 'up', from bottom to top, read with the head turned to the left or from the right-hand side of the sheet (as ISO 129 asks); 'down' (the default), from top to bottom, read with the head turned to the right. A line within a degree of vertical counts as vertical; text along any other line reads from below.",
+            "type": "string",
+            "enum": [
+              "up",
+              "down"
+            ]
+          },
+          "unit": {
+            "description": "Unit the measured value is shown in. Defaults to 'mm'. 'ft-in' writes feet and inches with a fraction, as 7' 6 1/2\". Coordinates stay in mm whatever this is.",
+            "type": "string",
+            "enum": [
+              "mm",
+              "cm",
+              "m",
+              "in",
+              "ft",
+              "ft-in"
+            ]
+          },
+          "fraction": {
+            "description": "With unit 'ft-in': the fraction of an inch the value is rounded to, as its lower number (2, 4, 8, 16, 32). Defaults to 16.",
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "decimals": {
+            "description": "Decimal places. Defaults to 0 for mm, 1 for cm and in, 2 for m and ft.",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "showUnit": {
+            "description": "Append the unit to the value.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "additionalProperties": false,
+        "description": "A way of drawing dimensions that belongs to the drawing. It holds the properties of a dimension that it gives a value to, under the same names, and only those. A dimension refers to it by \"dimensionStyle\" and takes what it defines; a value the dimension gives itself wins, and what the style leaves out stays the dimension's own."
+      }
+    },
     "assets": {
       "description": "Embedded files by id. Large; tools that only need the drawing can ignore it.",
       "type": "object",
@@ -272,7 +444,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -449,7 +621,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -643,7 +815,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -815,7 +987,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -1048,7 +1220,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -1275,7 +1447,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -1469,7 +1641,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -1658,7 +1830,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -1864,7 +2036,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -2091,7 +2263,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -2292,7 +2464,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -2501,7 +2673,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -2763,7 +2935,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -3137,7 +3309,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -3311,6 +3483,15 @@
                 "type": "number",
                 "description": "Signed distance from the measured points to the dimension line."
               },
+              "text": {
+                "description": "Replaces the measured value when set.",
+                "type": "string"
+              },
+              "dimensionStyle": {
+                "description": "The id of the dimension style it is drawn in, among the document's \"dimensionStyles\". It takes what the style defines, except where it gives itself a value.",
+                "type": "string",
+                "minLength": 1
+              },
               "startMarker": {
                 "description": "Symbol at this end of the dimension line. Defaults to 'tick'.",
                 "type": "string",
@@ -3367,10 +3548,6 @@
                 "type": "number",
                 "minimum": 0
               },
-              "text": {
-                "description": "Replaces the measured value when set.",
-                "type": "string"
-              },
               "size": {
                 "description": "Text size in mm. Defaults to 150.",
                 "type": "number",
@@ -3399,6 +3576,14 @@
                 "enum": [
                   "aligned",
                   "horizontal"
+                ]
+              },
+              "verticalText": {
+                "description": "Which way text along a vertical dimension line reads: 'up', from bottom to top, read with the head turned to the left or from the right-hand side of the sheet (as ISO 129 asks); 'down' (the default), from top to bottom, read with the head turned to the right. A line within a degree of vertical counts as vertical; text along any other line reads from below.",
+                "type": "string",
+                "enum": [
+                  "up",
+                  "down"
                 ]
               },
               "unit": {
@@ -3466,7 +3651,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -3673,7 +3858,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",
@@ -3871,7 +4056,7 @@
               },
               "order": {
                 "type": "string",
-                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top)."
+                "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
                 "type": "string",

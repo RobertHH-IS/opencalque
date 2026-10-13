@@ -1,5 +1,6 @@
-# Every push to main and every pull request is type-checked, tested and built. A push to main
-# that passes is then published as the web editor, on Cloudflare (see wrangler.jsonc).
+# Every push to main and every pull request is type-checked, tested, built, and driven in a
+# browser (e2e/). A push to main that passes is then published as the web editor, on Cloudflare
+# (see wrangler.jsonc).
 name: CI
 
 on:
@@ -24,6 +25,13 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build:web
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e-traces
+          path: test-results
       - uses: actions/upload-artifact@v4
         with:
           name: web

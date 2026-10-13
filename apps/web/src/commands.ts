@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { platform } from './platform'
 import { buildScene, componentsOf, pagesOf } from '@opencalque/core'
 import {
   deleteSelection,
@@ -76,6 +77,7 @@ export interface Command {
 const get = useStore.getState
 const prefs = usePrefs.getState
 const selected = () => get().selection.length > 0
+const onlyInstance = () => get().selection.length === 1 && get().doc.nodes[get().selection[0]]?.type === 'instance'
 /** A line, a wall or a divider has its first point and is waiting for the next. */
 const drawingLine = () => get().drawStep > 0 && ['line', 'wall', 'divider'].includes(get().tool)
 /** Something is being dragged with the select tool: moved, or reshaped by one of its points. */
@@ -209,11 +211,13 @@ const STATIC: Command[] = [
     category: 'Edit',
     keys: ['Mod+Shift+G'],
     interrupts: true,
-    when: () => get().selection.some((id) => get().doc.nodes[id]?.type === 'group'),
+    // A group, or a component, whose contents then become objects of the drawing.
+    when: () => get().selection.some((id) => ['group', 'instance'].includes(get().doc.nodes[id]?.type ?? '')),
     run: ungroupSelection,
   },
 
-  { id: 'component.create', title: msg('Create component from selection'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: selected, run: makeComponent },
+  // A component alone is one already: making another from it would only wrap it.
+  { id: 'component.create', title: msg('Create component from selection'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: () => selected() && !onlyInstance(), run: makeComponent },
   { id: 'component.finish', title: msg('Finish editing this group or component'), category: 'Components', when: () => get().scope !== get().page, run: () => editComponent(null) },
 
   { id: 'view.zoomToFit', title: msg('Zoom to fit'), category: 'View', keys: ['Shift+1'], run: zoomToFit },
@@ -234,6 +238,7 @@ const STATIC: Command[] = [
   panel('objects'),
   panel('colors'),
   panel('wallTypes'),
+  panel('dimensionStyles'),
   panel('properties'),
   panel('assistant', ['Mod+J']),
   { id: 'view.resetLayout', title: msg('Reset the panel layout'), category: 'View', run: resetLayout },
@@ -281,6 +286,8 @@ export function allCommands(): Command[] {
   const { doc } = get()
   return [
     ...STATIC,
+    // The desktop app copies a drawing before it first writes over it; the web app has no such folder.
+    ...(platform.showBackups ? [{ id: 'file.backups', title: msg('Show backups of drawings'), category: 'File', run: () => platform.showBackups?.() }] : []),
     ...[...registry.parametric.values()].map((kind): Command => ({
       id: `place.${kind.kind}`,
       title: t('Place: {name}', { name: t(kind.label) }),

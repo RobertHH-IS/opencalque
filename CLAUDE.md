@@ -11,6 +11,7 @@ pnpm dev          # desktop app
 pnpm dev:web      # editor in a browser
 pnpm test         # core tests
 pnpm typecheck
+pnpm e2e          # builds the web app and drives it in Chromium (Playwright, e2e/*.e2e.ts); runs in CI
 pnpm build && pnpm smoke   # scripted interaction test; prints a folder of screenshots to inspect
 pnpm dist         # package the installer for this system (apps/desktop/dist)
 pnpm schema       # regenerate schema/*.json after changing packages/core/src/schema.ts
@@ -32,6 +33,11 @@ Agent terminals have `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. Prefix Ele
 - Every user-triggerable action is a command in `apps/web/src/commands.ts`. Do not add keyboard handling elsewhere (the canvas keeps only Escape, Enter and Space).
 - New object types should be parametric objects in an extension unless they need custom editing behaviour. Prefer a declarative (JSON) extension in `apps/web/src/warehouse/extensions` when expressions can describe the geometry; never make the app download and run extension code.
 - Read a drawing for AI or tooling purposes with `withoutAssets(doc)`: assets are megabytes of base64.
+- From 1.0 drawings must stay readable (ARCHITECTURE §4, "The file format and its versions"). Read untrusted JSON with `readDocument` / `parseDocument` (`packages/core/src/read.ts`), which keeps unknown properties and repairs what it can; never strip what the schema does not know. An optional property needs nothing more; a new node type or a changed meaning bumps `FORMAT_VERSION` with a step in `MIGRATIONS`.
+- `order` is a fractional-indexing key (`isOrderKey`); ops refuse anything else. Leave it out to put a node on top.
+- Keep `applyOps` linear: no scan of every node inside one op. Per-drawing indexes (tree, walls, openings, rooms) are cached on `doc.nodes`, which every `applyOps` replaces.
+- Values that come from a file, an extension or the assistant (counts, repeats, steps) must be capped where they drive a loop.
+- The assistant gets the selection as context (`describeSelection` in `apps/web/src/ai/agent.ts`); keep what the composer's label says and what is sent the same.
 - The assistant's agent loop (`apps/web/src/ai/agent.ts`) must stay free of store and DOM imports so it remains unit-testable. Claude is called through the official `@anthropic-ai/sdk`; other providers go through `compatible.ts`.
 - Lengths are millimetres in documents and in the store. Convert only at the edge, with `apps/web/src/units.ts` (`formatLength`, `parseLength`, `Field`'s `length` prop); mark length parameters of parametric objects with `unit: 'length'`.
 - A provider's `ChatSession` must implement `snapshot()` and accept it back as `history`, without picture data, so conversations can be stored and resumed.
@@ -54,5 +60,5 @@ Agent terminals have `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. Prefix Ele
 
 ## Open questions for the owner
 
-- Licence: published as MIT. The owner has not said so in as many words; ask before changing anything that depends on it.
+- Licence: MIT, confirmed by the owner for 1.0. Installers stay unsigned, also the owner's choice.
 - The owner wants a hosted, collaborative version to stay possible. Do not introduce designs that block it (see ARCHITECTURE §10).

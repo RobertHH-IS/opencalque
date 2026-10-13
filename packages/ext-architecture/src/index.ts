@@ -31,7 +31,9 @@ const pt = (x: number, y: number): Vec2 => ({ x, y })
 const line = (points: Vec2[], style: { strokeWidth?: number; dash?: number[] } = {}): Primitive => ({ kind: 'path', points, ...style })
 const outline = (points: Vec2[], style: { strokeWidth?: number } = {}): Primitive => ({ kind: 'path', points, closed: true, ...style })
 const atLeast = (min: number, value: number) => Math.max(min, value)
-const count = (value: number) => Math.max(1, Math.round(value))
+/** The most steps a stair draws: a value typed by mistake, or written in a file, must not freeze the app drawing a million treads. */
+const MAX_STEPS = 500
+const count = (value: number) => (Number.isFinite(value) ? Math.min(MAX_STEPS, Math.max(1, Math.round(value))) : 1)
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
 
 /** Mirrors left and right within a span of `width`. */

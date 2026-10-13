@@ -3,6 +3,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { blankDocument } from './actions'
 import { App } from './App'
+import { Guard } from './Guard'
 import { setLanguage } from './i18n'
 import { usePrefs } from './prefs'
 import { loadDocument, registry, useStore } from './store'
@@ -28,6 +29,8 @@ function Root() {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <Root />
+    <Guard>
+      <Root />
+    </Guard>
   </StrictMode>,
 )

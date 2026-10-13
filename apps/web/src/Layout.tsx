@@ -2,10 +2,12 @@ import { useEffect, type FunctionComponent } from 'react'
 import { DockviewReact, themeLight, type DockviewApi, type DockviewReadyEvent, type DockviewTheme } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { PANELS, registerDock, useDock, type PanelId } from './dock'
+import { Guard } from './Guard'
 import { t } from './i18n'
 import { AssistantPanel } from './panels/AssistantPanel'
 import { Colors, Layers, Objects, Pages } from './panels/LeftPanel'
 import { WallTypes } from './panels/WallTypesPanel'
+import { DimensionStyles } from './panels/DimensionStylesPanel'
 import { Properties } from './panels/RightPanel'
 import { Stage } from './Stage'
 
@@ -30,25 +32,35 @@ const THEME: DockviewTheme = {
 
 const scrolling = (id: PanelId, Panel: FunctionComponent) => () => (
   <div className="dock-panel" data-panel={id}>
-    <Panel />
+    <Guard area={title(id)}>
+      <Panel />
+    </Guard>
   </div>
 )
 
+/** A panel that fails shows a note in its place; the others, and the drawing, carry on. */
+const guarded = (area: () => string, Panel: FunctionComponent) => () => (
+  <Guard area={area()}>
+    <Panel />
+  </Guard>
+)
+
 const COMPONENTS: Record<PanelId | typeof CANVAS, FunctionComponent> = {
-  canvas: Stage,
+  canvas: guarded(() => t('The drawing area'), Stage),
   pages: scrolling('pages', Pages),
   layers: scrolling('layers', Layers),
   objects: scrolling('objects', Objects),
   colors: scrolling('colors', Colors),
   wallTypes: scrolling('wallTypes', WallTypes),
+  dimensionStyles: scrolling('dimensionStyles', DimensionStyles),
   properties: scrolling('properties', Properties),
-  assistant: AssistantPanel,
+  assistant: guarded(() => title('assistant'), AssistantPanel),
 }
 
 /** Where a panel goes when it is opened and its usual neighbours are closed too. */
-const SIDE: Record<PanelId, 'left' | 'right'> = { pages: 'left', layers: 'left', objects: 'left', colors: 'left', wallTypes: 'left', properties: 'right', assistant: 'right' }
+const SIDE: Record<PanelId, 'left' | 'right'> = { pages: 'left', layers: 'left', objects: 'left', colors: 'left', wallTypes: 'left', dimensionStyles: 'left', properties: 'right', assistant: 'right' }
 /** The panel each one shares tabs with by default. */
-const PARTNER: Record<PanelId, PanelId> = { pages: 'layers', layers: 'pages', objects: 'colors', colors: 'objects', wallTypes: 'colors', properties: 'assistant', assistant: 'properties' }
+const PARTNER: Record<PanelId, PanelId> = { pages: 'layers', layers: 'pages', objects: 'colors', colors: 'objects', wallTypes: 'colors', dimensionStyles: 'wallTypes', properties: 'assistant', assistant: 'properties' }
 
 const title = (id: PanelId) => t(PANELS[id])
 
@@ -86,6 +98,7 @@ function arrange(api: DockviewApi): void {
   add('objects', { referencePanel: 'layers', direction: 'below' })
   add('colors', { referencePanel: 'objects', direction: 'within' })
   add('wallTypes', { referencePanel: 'objects', direction: 'within' })
+  add('dimensionStyles', { referencePanel: 'objects', direction: 'within' })
   add('properties', { referencePanel: CANVAS, direction: 'right' }, 290)
   add('assistant', { referencePanel: 'properties', direction: 'within' })
   for (const front of ['layers', 'objects', 'properties']) api.getPanel(front)?.api.setActive()

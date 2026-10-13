@@ -1,7 +1,10 @@
+import { generateKeyBetween } from 'fractional-indexing'
 import * as z from 'zod'
 import { withoutColorRef } from './colors'
-import { componentUses, holdsChildren, isContainer, layersOf, newId, orderAfter, rootOf } from './document'
-import { AssetSchema, LayerSchema, NodeSchema, type Asset, type ContainerNode, type Document, type Node, SharedColorSchema, type SharedColor, WallTypeSchema, type WallType } from './schema'
+import { withDimensionStyle } from './dimensions'
+import { componentUses, holdsChildren, isContainer, isOrderKey, layersOf, newId, orderAfter, rootOf } from './document'
+import { AssetSchema, DimensionStyleSchema, type DimensionStyle, LayerSchema, NodeSchema, type Asset, type ContainerNode, type Document, type Node, SharedColorSchema, type SharedColor, WallTypeSchema, type WallType } from './schema'
+import { keepUnknown, unknownKeys } from './unknown'
 
 /**
  * Operations are the only way a document changes. Each one touches a single node or layer and is
@@ -37,6 +40,9 @@ export type Op =
   | { op: 'add_wall_type'; wallType: Omit<WallType, 'id'> & { id?: string } }
   | { op: 'update_wall_type'; id: string; patch: Record<string, unknown> }
   | { op: 'remove_wall_type'; id: string }
+  | { op: 'add_dimension_style'; dimensionStyle: Omit<DimensionStyle, 'id'> & { id?: string } }
+  | { op: 'update_dimension_style'; id: string; patch: Record<string, unknown> }
+  | { op: 'remove_dimension_style'; id: string }
   | { op: 'add_asset'; asset: Omit<Asset, 'id'> & { id?: string } }
   | { op: 'set_document'; name?: string; info?: Record<string, string | null> }
 
@@ -70,6 +76,11 @@ export const OpSchema = z.discriminatedUnion('op', [
     .describe('Adds a wall type: a name and whichever of thickness, height, fill, stroke, strokeWidth, dash and layers it defines. Walls take it with "wallType": "<id>".'),
   z.object({ op: z.literal('update_wall_type'), id: z.string(), patch }).describe('Changes a wall type; every wall of that type follows, except where it has a value of its own. A null in the patch makes the type stop defining that property.'),
   z.object({ op: z.literal('remove_wall_type'), id: z.string() }).describe('Removes a wall type. Its walls stay as they are, of no type.'),
+  z
+    .object({ op: z.literal('add_dimension_style'), dimensionStyle: z.looseObject({ name: z.string() }) })
+    .describe('Adds a dimension style: a name and whichever properties of a dimension it defines, under the same names (style, startMarker, size, unit…). Dimensions take it with "dimensionStyle": "<id>".'),
+  z.object({ op: z.literal('update_dimension_style'), id: z.string(), patch }).describe('Changes a dimension style; every dimension in it follows, except where it has a value of its own. A null in the patch makes the style stop defining that property.'),
+  z.object({ op: z.literal('remove_dimension_style'), id: z.string() }).describe('Removes a dimension style. Its dimensions keep how they look: what the style gave them becomes their own.'),
   z.object({ op: z.literal('update_color'), id: z.string(), patch }).describe('Changes a shared colour; everything that refers to it changes with it.'),
   z.object({ op: z.literal('remove_color'), id: z.string() }).describe('Removes a shared colour. What referred to it keeps the colour it had, as a plain colour.'),
   z
@@ -89,6 +100,20 @@ export function parseOps(json: unknown): Op[] {
   return result.data as Op[]
 }
 
+/**
+ * What one call of `applyOps` remembers between its operations, so that a long list (a DXF of
+ * twenty thousand lines, a large selection deleted) costs in proportion to its length rather than
+ * to its length times the size of the drawing.
+ */
+interface Batch {
+  /**
+   * For each parent, an order key at or above the highest of its children's: a node added on top
+   * goes after it. It may stay above a child that has since moved away, which only means the next
+   * key is a little longer.
+   */
+  top?: Map<string | null, string>
+}
+
 /** Applies operations in order and returns the new document. All or nothing: on error the input is untouched. */
 export function applyOps(doc: Document, ops: Op[]): Document {
   if (ops.length === 0) return doc
@@ -96,9 +121,71 @@ export function applyOps(doc: Document, ops: Op[]): Document {
   if (doc.assets) next.assets = { ...doc.assets }
   if (doc.colors) next.colors = { ...doc.colors }
   if (doc.wallTypes) next.wallTypes = { ...doc.wallTypes }
-  for (const op of ops) applyOp(next, op)
+  if (doc.dimensionStyles) next.dimensionStyles = { ...doc.dimensionStyles }
+  const batch: Batch = {}
+  for (let i = 0; i < ops.length; ) {
+    // Removals that follow one another are done together, finding what each takes along in one pass.
+    if (ops[i].op === 'remove_node') {
+      let end = i
+      while (end < ops.length && ops[end].op === 'remove_node') end++
+      removeNodes(next, ops.slice(i, end).map((op) => (op as { id: string }).id))
+      i = end
+    } else applyOp(next, ops[i++], batch)
+  }
   followWallTypes(next)
   return next
+}
+
+/** The highest order key among the children of `parent`, or one above it; null when it has none. */
+function topOrder(d: Document, batch: Batch, parent: string | null): string | null {
+  if (!batch.top) {
+    batch.top = new Map()
+    for (const node of Object.values(d.nodes)) raise(batch, node.parent, node.order)
+  }
+  return batch.top.get(parent) ?? null
+}
+
+function raise(batch: Batch, parent: string | null, order: string): void {
+  const top = batch.top?.get(parent)
+  if (batch.top && (top === undefined || order > top)) batch.top.set(parent, order)
+}
+
+/**
+ * Removes nodes as `remove_node` operations one after the other would: each with everything
+ * inside it however deeply, and a component with its instances. Naming a node that an earlier one
+ * of them took along is an error, as it would be one at a time.
+ */
+function removeNodes(d: Document, ids: string[]): void {
+  const children = new Map<string, string[]>()
+  const instances = new Map<string, string[]>()
+  let pages = 0
+  for (const node of Object.values(d.nodes)) {
+    if (node.parent !== null) {
+      const list = children.get(node.parent)
+      if (list) list.push(node.id)
+      else children.set(node.parent, [node.id])
+    }
+    if (node.type === 'instance') {
+      const list = instances.get(node.component)
+      if (list) list.push(node.id)
+      else instances.set(node.component, [node.id])
+    }
+    if (node.type === 'page') pages++
+  }
+  const doomed = new Set<string>()
+  for (const id of ids) {
+    const node = d.nodes[id]
+    if (!node || doomed.has(id)) throw new OpError(`Unknown node "${id}"`)
+    if (node.type === 'page' && pages-- === 1) throw new OpError('Cannot remove the last page')
+    for (const queue = [id]; queue.length > 0; ) {
+      const next = queue.pop()!
+      if (doomed.has(next)) continue
+      doomed.add(next)
+      queue.push(...(children.get(next) ?? []))
+      if (d.nodes[next]?.type === 'component') queue.push(...(instances.get(next) ?? []))
+    }
+  }
+  for (const id of doomed) delete d.nodes[id]
 }
 
 /** A wall type as it is kept: when every one of its layers has a thickness, its own is theirs added up. */
@@ -130,11 +217,15 @@ function followWallTypes(d: Document): void {
   }
 }
 
+/** Validates what an operation makes, keeping the properties the format does not know (see unknown.ts). */
 function parse<T>(schema: z.ZodType<T>, value: unknown, what: string): T {
   const result = schema.safeParse(value)
   if (!result.success) throw new OpError(`Invalid ${what}:\n${z.prettifyError(result.error)}`)
-  return result.data
+  return keepUnknown(value, result.data)
 }
+
+/** What a node or layer is told when its order is not one. */
+const badOrder = (order: string) => `"${order}" is not an order key. Use a fractional-indexing key such as "a0" or "a1V", which sorts by plain string comparison, or leave "order" out to put it on top.`
 
 function merge(target: object, changes: Record<string, unknown>, fixed: string[]): Record<string, unknown> {
   const out: Record<string, unknown> = { ...target }
@@ -146,13 +237,8 @@ function merge(target: object, changes: Record<string, unknown>, fixed: string[]
   return out
 }
 
-function siblingOrders(d: Document, parent: unknown): string[] {
-  const orders: string[] = []
-  for (const n of Object.values(d.nodes)) if (n.parent === parent) orders.push(n.order)
-  return orders
-}
-
 function checkNode(d: Document, node: Node): void {
+  if (!isOrderKey(node.order)) throw new OpError(`Node ${node.id}: ${badOrder(node.order)}`)
   if (node.layer !== undefined && !d.layers[node.layer]) throw new OpError(`Unknown layer "${node.layer}"`)
   if (isContainer(node)) {
     if (node.parent !== null) throw new OpError(`A ${node.type} cannot have a parent`)
@@ -167,6 +253,7 @@ function checkNode(d: Document, node: Node): void {
   const root = rootOf(d, node.parent)
   if (!root) throw new OpError(`Node ${node.id}: is not inside any page or component`)
   if (node.type === 'image' && !d.assets?.[node.asset]) throw new OpError(`Unknown asset "${node.asset}"`)
+  if (node.type === 'dimension' && node.dimensionStyle !== undefined && !d.dimensionStyles?.[node.dimensionStyle]) throw new OpError(`Unknown dimension style "${node.dimensionStyle}"`)
   if (node.type === 'instance') {
     if (d.nodes[node.component]?.type !== 'component') throw new OpError(`Unknown component "${node.component}"`)
     if (root.type === 'component' && componentUses(d, node.component, root.id)) {
@@ -175,7 +262,7 @@ function checkNode(d: Document, node: Node): void {
   }
 }
 
-function applyOp(d: Document, op: Op): void {
+function applyOp(d: Document, op: Op, batch: Batch): void {
   switch (op.op) {
     case 'add_node': {
       const input = op.node as Record<string, unknown>
@@ -183,10 +270,11 @@ function applyOp(d: Document, op: Op): void {
       const id = (input.id as string | undefined) ?? newId(container ? String(input.type) : 'n')
       if (d.nodes[id]) throw new OpError(`Node "${id}" already exists`)
       const parent = container ? null : input.parent
-      const order = input.order ?? orderAfter(siblingOrders(d, parent))
+      const order = input.order ?? generateKeyBetween(topOrder(d, batch, typeof parent === 'string' ? parent : null), null)
       const node = parse(NodeSchema, { ...input, id, parent, order }, 'node')
       checkNode(d, node)
       d.nodes[id] = node
+      raise(batch, node.parent, node.order)
       return
     }
     case 'update_node': {
@@ -206,41 +294,26 @@ function applyOp(d: Document, op: Op): void {
       }
       checkNode(d, next)
       d.nodes[op.id] = next
+      if (next.parent !== node.parent || next.order !== node.order) raise(batch, next.parent, next.order)
       return
     }
-    case 'remove_node': {
-      const node = d.nodes[op.id]
-      if (!node) throw new OpError(`Unknown node "${op.id}"`)
-      const all = Object.values(d.nodes)
-      if (node.type === 'page' && all.filter((n) => n.type === 'page').length === 1) {
-        throw new OpError('Cannot remove the last page')
-      }
-      // Everything inside goes too, however deeply nested, and so do instances of a removed component.
-      const doomed = new Set([op.id])
-      for (let grew = true; grew; ) {
-        grew = false
-        for (const n of all) {
-          if (doomed.has(n.id)) continue
-          if ((n.parent !== null && doomed.has(n.parent)) || (n.type === 'instance' && doomed.has(n.component))) {
-            doomed.add(n.id)
-            grew = true
-          }
-        }
-      }
-      for (const id of doomed) delete d.nodes[id]
-      return
-    }
+    case 'remove_node':
+      return removeNodes(d, [op.id])
     case 'add_layer': {
       const id = op.layer.id ?? newId('layer')
       if (d.layers[id]) throw new OpError(`Layer "${id}" already exists`)
       const order = op.layer.order ?? orderAfter(Object.values(d.layers).map((l) => l.order))
-      d.layers[id] = parse(LayerSchema, { ...op.layer, id, order }, 'layer')
+      const layer = parse(LayerSchema, { ...op.layer, id, order }, 'layer')
+      if (!isOrderKey(layer.order)) throw new OpError(`Layer ${id}: ${badOrder(layer.order)}`)
+      d.layers[id] = layer
       return
     }
     case 'update_layer': {
       const layer = d.layers[op.id]
       if (!layer) throw new OpError(`Unknown layer "${op.id}"`)
-      d.layers[op.id] = parse(LayerSchema, merge(layer, op.patch, ['id']), 'layer')
+      const next = parse(LayerSchema, merge(layer, op.patch, ['id']), 'layer')
+      if (!isOrderKey(next.order)) throw new OpError(`Layer ${op.id}: ${badOrder(next.order)}`)
+      d.layers[op.id] = next
       return
     }
     case 'remove_layer': {
@@ -297,6 +370,31 @@ function applyOp(d: Document, op: Op): void {
       }
       return
     }
+    case 'add_dimension_style': {
+      const id = op.dimensionStyle.id ?? newId('dimstyle')
+      if (d.dimensionStyles?.[id]) throw new OpError(`Dimension style "${id}" already exists`)
+      d.dimensionStyles = { ...d.dimensionStyles, [id]: parse(DimensionStyleSchema, { ...op.dimensionStyle, id }, 'dimension style') }
+      return
+    }
+    case 'update_dimension_style': {
+      const style = d.dimensionStyles?.[op.id]
+      if (!style) throw new OpError(`Unknown dimension style "${op.id}"`)
+      d.dimensionStyles = { ...d.dimensionStyles, [op.id]: parse(DimensionStyleSchema, merge(style, op.patch, ['id']), 'dimension style') }
+      return
+    }
+    case 'remove_dimension_style': {
+      const style = d.dimensionStyles?.[op.id]
+      if (!style) throw new OpError(`Unknown dimension style "${op.id}"`)
+      const { [op.id]: _, ...rest } = d.dimensionStyles!
+      d.dimensionStyles = rest
+      // Its dimensions keep how they look, as what referred to a removed colour does: what the style gave them becomes their own.
+      for (const n of Object.values(d.nodes)) {
+        if (n.type !== 'dimension' || n.dimensionStyle !== op.id) continue
+        const { dimensionStyle: __, ...plain } = withDimensionStyle(n, style)
+        d.nodes[n.id] = plain
+      }
+      return
+    }
     case 'add_asset': {
       const id = op.asset.id ?? newId('asset')
       if (d.assets?.[id]) throw new OpError(`Asset "${id}" already exists`)
@@ -318,4 +416,68 @@ function applyOp(d: Document, op: Op): void {
       return
     }
   }
+}
+
+/**
+ * The properties written in operations that the format does not know, one line per node or entry,
+ * as a script or an assistant should be told: they are kept (a newer version may know them) but
+ * do nothing here. Usually a misspelling, such as "thicknes", or a property of another type of node.
+ * Operations that are invalid anyway are left to `applyOps` to report.
+ */
+export function unknownProperties(doc: Document, ops: Op[]): string[] {
+  const out: string[] = []
+  const report = (what: string, keys: string[]) => {
+    if (keys.length > 0) out.push(`${what}: ${keys.map((key) => `"${key}"`).join(', ')}`)
+  }
+  /** The nodes added earlier in the list, so that a later update of one is checked too. */
+  const added = new Map<string, Record<string, unknown>>()
+  const check = (schema: z.ZodType, input: Record<string, unknown>, only?: string[]): string[] => {
+    const result = schema.safeParse(input)
+    if (!result.success) return []
+    return unknownKeys(input, result.data).filter((path) => !only || only.includes(path.split(/[.[]/)[0]))
+  }
+  const patched = (target: object, patch: Record<string, unknown>) => Object.fromEntries(Object.entries({ ...target, ...patch }).filter(([, value]) => value !== null))
+  for (const op of ops) {
+    switch (op.op) {
+      case 'add_node': {
+        const node = op.node as Record<string, unknown>
+        const id = typeof node.id === 'string' ? node.id : undefined
+        const container = node.type === 'page' || node.type === 'component'
+        const full = { ...node, id: id ?? 'new', parent: container ? null : (node.parent ?? 'parent'), order: node.order ?? 'a0' }
+        if (id) added.set(id, full)
+        report(`new ${String(node.type)}${id ? ` "${id}"` : ''}`, check(NodeSchema, full))
+        break
+      }
+      case 'update_node': {
+        const node = (doc.nodes[op.id] as Record<string, unknown> | undefined) ?? added.get(op.id)
+        if (node) report(`${String(node.type)} "${op.id}"`, check(NodeSchema, patched(node, op.patch), Object.keys(op.patch)))
+        break
+      }
+      case 'add_layer':
+        report(`new layer "${op.layer.name}"`, check(LayerSchema, { id: 'new', order: 'a0', ...op.layer }))
+        break
+      case 'update_layer':
+        if (doc.layers[op.id]) report(`layer "${op.id}"`, check(LayerSchema, patched(doc.layers[op.id], op.patch), Object.keys(op.patch)))
+        break
+      case 'add_color':
+        report(`new colour "${op.color.name}"`, check(SharedColorSchema, { id: 'new', ...op.color }))
+        break
+      case 'update_color':
+        if (doc.colors?.[op.id]) report(`colour "${op.id}"`, check(SharedColorSchema, patched(doc.colors[op.id], op.patch), Object.keys(op.patch)))
+        break
+      case 'add_wall_type':
+        report(`new wall type "${op.wallType.name}"`, check(WallTypeSchema, { id: 'new', ...op.wallType }))
+        break
+      case 'update_wall_type':
+        if (doc.wallTypes?.[op.id]) report(`wall type "${op.id}"`, check(WallTypeSchema, patched(doc.wallTypes[op.id], op.patch), Object.keys(op.patch)))
+        break
+      case 'add_dimension_style':
+        report(`new dimension style "${op.dimensionStyle.name}"`, check(DimensionStyleSchema, { id: 'new', ...op.dimensionStyle }))
+        break
+      case 'update_dimension_style':
+        if (doc.dimensionStyles?.[op.id]) report(`dimension style "${op.id}"`, check(DimensionStyleSchema, patched(doc.dimensionStyles[op.id], op.patch), Object.keys(op.patch)))
+        break
+    }
+  }
+  return out
 }

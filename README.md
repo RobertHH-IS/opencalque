@@ -18,7 +18,7 @@
 
 *Calque* is French for tracing paper, and for a layer. OpenCalque is a drafting table for buildings: draw walls that join themselves, drop in doors, windows and stairs that know how to behave, name rooms and get their area, then frame it all on a sheet. It is a desktop app and a web app from the same code, and everything it saves is a file you can read.
 
-> **Status: early but usable.** The editor works end to end and is covered by tests. [Download it](#download) or run it from source, and see [what is not there yet](#what-is-not-there-yet) and [what changed lately](CHANGELOG.md).
+> **Status: release candidate for 1.0.** The editor works end to end and is covered by unit tests and browser tests; from 1.0 on, the file format stays readable. [Download it](#download) or run it from source, and see [what is not there yet](#what-is-not-there-yet) and [what changed lately](CHANGELOG.md).
 
 ## Why OpenCalque
 
@@ -67,7 +67,8 @@ The welcome window offers a new drawing, a file, or the example: a furnished fla
 ```sh
 pnpm dev:web      # the same editor in a browser
 pnpm build && pnpm start   # the built desktop app
-pnpm test         # 148 tests
+pnpm test         # unit tests (Vitest)
+pnpm e2e          # build the web app and drive it in a browser (Playwright; first run `pnpm exec playwright install chromium`)
 pnpm dist         # build the installer for the system you are on, into apps/desktop/dist
 ```
 
@@ -108,7 +109,7 @@ The full inventory and roadmap are in [docs/FEATURES.md](docs/FEATURES.md).
 
 ## A local CLI
 
-Everything the editor does to a drawing, a script can do too.
+Everything the editor does to a drawing, a script can do too. The CLI runs from a checkout of this repository (see [Run from source](#run-from-source)); it is not installed with the app.
 
 ```sh
 pnpm opencalque new plan.opencalque "My plan"
@@ -118,7 +119,7 @@ pnpm opencalque pdf plan.opencalque --out plan.pdf               # every paper a
 pnpm opencalque svg plan.opencalque --out plan.svg
 pnpm opencalque dxf plan.opencalque --out plan.dxf
 pnpm opencalque import plan.opencalque ground.dxf first.dxf     # each DXF becomes a page, with its pictures
-pnpm opencalque validate plan.opencalque
+pnpm opencalque validate plan.opencalque                          # exits 1, listing them, if opening it needs repairs
 pnpm opencalque schema --out schema                              # JSON Schemas of documents and operations
 ```
 
@@ -219,7 +220,8 @@ The assistant can use, chosen under Preferences:
 - **Any other service** that accepts the OpenAI chat-completions format and supports tool calling.
 
 - An API key, when one is used, is stored on your computer, unencrypted, and is sent only to the provider you chose.
-- When you send a request, the drawing is sent to that provider as JSON. Imported pictures are left out, unless the assistant asks to look at one (for example to trace a plan), in which case that picture is sent.
+- When you send a request, the drawing is sent to that provider as JSON, with what you have selected (shown above the message box, where you can leave it out). Imported pictures are left out, unless the assistant asks to look at one (for example to trace a plan), in which case that picture is sent.
+- The desktop app asks once before the assistant reaches a service that is not on your computer.
 - Pictures you attach are sent with that message. Conversations are kept on your computer (without the pictures' full data) until you delete them.
 - Nothing is sent anywhere unless you use the assistant. The rest of the app works offline.
 
@@ -265,6 +267,8 @@ A `.opencalque` file is JSON. JSON Schemas for documents and operations are in [
 - **Derived, not stored.** A room keeps a point and a name; its outline and area come from the walls around it. A paper holds whatever lies on it. Nothing in the file can go stale when a wall moves.
 - **Modifiers** are non-destructive: any node can carry a list such as a crop or a floor pattern, applied in order when it is drawn.
 - **Unknown parametric kinds survive.** A file that uses an extension you do not have still opens; those objects show as placeholders and are saved back untouched.
+- **It stays readable.** From 1.0, a drawing says which version of the format it is written in (`"version": 1`). The app reads that version and every older one. Properties it does not know, written by a newer version or by a script, are kept as they are and saved back. A drawing in a newer format than the app reads is refused with a message, never half-read. A drawing with a reference to something missing (a layer, a wall type, a parent) opens with the problem put right and a note saying so.
+- **Order keys** are keys of the [fractional-indexing](https://github.com/rocicorp/fractional-indexing) package, such as `a0` or `a1V`. Leave `order` out when adding a node and it goes on top.
 
 ## Operations
 
@@ -365,11 +369,11 @@ Extensions are currently compiled in: add yours to the registry in [`apps/web/sr
 
 ## What is not there yet
 
-- **Installers** are not signed and do not update themselves: download the next version from the releases page.
+- **Installers** are not signed (see [Download](#download) for the one extra click) and do not update themselves: download the next version from the releases page.
 - **Release notes** and the example drawing are in English only. Recent drawings are listed in the desktop app only.
-- **Printing.** PDF export uses the standard fonts of PDF readers (sans-serif, serif, monospace, plain or bold), so text is close to the screen but not identical, and letters outside Western European alphabets print as "?". Pictures other than JPEG and PNG are left out. A sheet cannot yet show a part of the plan at another scale.
+- **Printing.** PDF export uses the standard fonts of PDF readers for Western European text, and fonts shipped with the app for other scripts, so text is close to the screen but not identical; Korean prints as empty boxes. Pictures other than JPEG and PNG are left out. A sheet cannot yet show a part of the plan at another scale.
 - **Drawing.** Arcs are made by typing angles, not yet drawn with a tool of their own. Scaling is uniform only.
-- **Walls.** No curved walls yet.
+- **Walls.** Curved walls are bent from straight ones; they cannot yet be drawn as arcs directly, extended, trimmed or given a dimension chain.
 - **Import.** One page of a PDF at a time. DXF import does not read binary DXF or DWG, block attributes, or angular and radial dimensions as dimensions; a hatch pattern becomes the nearest of the app's own, and a hatch filled with a picture a plain colour.
 - **Hosted version.** Accounts, cloud storage and realtime collaboration are planned; the data model is prepared for them, nothing is built.
 - **Extensions.** Those installed at runtime can add objects and modifiers as data. Extensions that add tools must be compiled in.
@@ -385,7 +389,7 @@ Good first contributions: a component library for your trade, a translation, a d
 1. Add a `## x.y.z — date` section at the top of [CHANGELOG.md](CHANGELOG.md) and set the same version in the `package.json` files (a test checks they agree).
 2. Commit, then `git tag vx.y.z && git push origin main vx.y.z`.
 
-The [release workflow](.github/workflows/release.yml) builds the Windows, macOS and Linux installers and publishes a GitHub release with them, described by that section of the changelog. The app shows the same notes under About.
+The [release workflow](.github/workflows/release.yml) builds the Windows, macOS and Linux installers and publishes a GitHub release with them, described by that section of the changelog, once all three have built. A version with a hyphen, such as `1.0.0-rc.1`, is published as a pre-release. The app shows the same notes under About.
 
 ## License
 

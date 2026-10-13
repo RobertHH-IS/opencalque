@@ -2645,3 +2645,122 @@ select.faint-choice,
 .end-picker.faint-choice button.active {
   opacity: 0.65;
 }
+
+/* What shows in place of a part of the interface that failed (Guard.tsx) */
+
+.crash {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+  margin: 12vh auto;
+  padding: 24px;
+  color: var(--text);
+}
+
+.crash h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.crash pre {
+  user-select: text;
+  overflow: auto;
+  max-height: 160px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--danger-text);
+  white-space: pre-wrap;
+}
+
+.crash .text-button {
+  margin: 0 12px 0 0;
+  padding: 4px 0;
+}
+
+.crash.compact {
+  max-width: none;
+  margin: 0;
+  padding: 12px;
+}
+
+.crash.compact p {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* Unsaved work offered back at the top of the welcome window (recovery.ts) */
+
+.welcome-recover {
+  padding-top: 12px;
+}
+
+.welcome-recover-row {
+  display: flex;
+  align-items: center;
+}
+
+.welcome-recover-row button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.welcome-recover h3 {
+  color: var(--danger-text);
+}
+
+/* What the next message tells the assistant is selected (AssistantPanel.tsx) */
+
+.assistant-context {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: calc(100% - 16px);
+  margin: 8px 8px 0;
+  padding: 2px 4px 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.assistant-context span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.assistant-context svg {
+  flex: none;
+}
+
+.assistant-context button {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.assistant-context button:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.assistant-context.left-out {
+  background: none;
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
+/* A date, unlike a path, reads from its start. */
+.welcome-recover-row button .faint {
+  direction: ltr;
+}

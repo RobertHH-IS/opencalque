@@ -4,6 +4,39 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 1.0.0-rc.1 — 2026-10-13
+
+The release candidate for 1.0. From this version on, drawings are kept readable: what a newer version adds is kept by older ones, and nothing they cannot read is half-read and saved back.
+
+### New
+- The assistant knows what you have selected. A label above the message box says what will be sent ("Wall", "3 objects selected", "A wall corner"); the assistant gets those objects in full with what they measure (a wall's length, a room's area, where they lie), so "make this thicker" or "put these on a new layer" mean what you point at. Click the × on the label to leave the selection out of one message.
+- Unsaved work survives a crash: a moment after each change the drawing is copied aside, and if the window stops without closing, the next start offers it back in the welcome window.
+- The desktop app keeps a copy of each drawing as it was before the app first writes over it, in a backups folder (File › Show backups of drawings), the newest thirty.
+- On macOS, a drawing double-clicked in the Finder, or dropped on the app in the Dock, opens in the app.
+- A component can be ungrouped (Ctrl+Shift+G, or Ungroup in the right-click menu): it becomes objects of the drawing, where it was and as it was turned, mirrored and sized, that editing the component no longer changes.
+- Dimension styles, as there are wall types: a style defines what is ticked in the new Dimension styles panel (ends, text, unit, colours…), the dimensions in it follow when it changes, and one can still differ from it where it sets a value of its own. Give a style to dimensions in their properties, or to the dimension tool for the next ones; "New style from this dimension…" makes one from how a dimension looks. Deleting a style leaves its dimensions looking the same.
+- The text of a vertical dimension can read from bottom to top (head turned left, as ISO 129 asks) or from top to bottom (head turned right, as before): Vertical text, in the dimension's properties or its style.
+
+### Improved
+- Large drawings are much faster: a DXF of twenty thousand lines is imported in a fraction of a second instead of forty seconds, deleting thousands of objects is immediate, and a plan of two thousand walls with their doors redraws in a few hundredths of a second while it is dragged, instead of more than one.
+- A drawing saved by a newer version keeps what this version does not know when it is opened and saved again, and one in a format this version cannot read is refused with a message that says so.
+- A drawing written by hand or by a script that refers to something missing (a wall type, a layer, a parent) opens with the problem put right and a note saying so, instead of being refused or refusing every change.
+- Saving in the desktop app writes the new drawing beside the old one and then puts it in place, so a crash or a full disk while saving never leaves a half-written file.
+- If one part of the window fails, the rest carries on, and the drawing can still be saved from what shows in its place.
+- The assistant is told more precisely how drawings work: groups, wall types, dimension styles, every operation, and which properties it wrote that mean nothing (a misspelling), so that it corrects them. It can read chosen objects by id in large drawings.
+- Claude Haiku 5.5, faster and much cheaper, replaces Claude Haiku 4.5 among the assistant's models.
+- The desktop app asks once before the assistant reaches an AI service that is not on this computer, and its window can no longer be sent to another page.
+- The installed desktop program can no longer be started as a plain Node program or have scripts loaded into it from outside.
+- The command-line tool: `new` refuses to replace an existing file without `--force`, `validate` lists what opening a file would put right, `apply` warns about properties the format does not know, and `--version` prints the version.
+- The right-click menu shows only what can be done to what was clicked: no Ungroup on a wall, no Create component on a component.
+
+### Fixed
+- A drawing with a wall whose wall type was missing opened, but then refused every change with "Unknown wall type".
+- An order such as "top", written by the assistant or a script, stopped anything more from being added to that page.
+- A stair or a window given a huge number of steps or panes, or an extension object repeated a huge number of times, froze the app.
+- The Claude Code CLI provider now runs the CLI in the same folder every time, which carrying a conversation on relies on, and no longer leaves a new temporary folder behind for each request.
+- Copying a wall that has a wall type failed with "Unknown wall type". A copied wall now brings its type along to the drawing it is pasted into, and a dimension its style.
+
 ## 0.8.5 — 2026-10-12
 
 ### New

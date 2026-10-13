@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import type { WallType } from '@opencalque/core'
 import { ColorChoice, PatternRows } from '../ColorChoice'
-import { t } from '../i18n'
+import { msg, t } from '../i18n'
 import { apply, useStore } from '../store'
 import { penOf, PENS, pixelsOf } from '../strokes'
 import { DashPicker, EditableText, Field, IconButton, Section } from '../ui'
@@ -28,20 +28,24 @@ export function parseLayers(text: string): { name: string; thickness?: number }[
     })
 }
 
-/** One property a type may define: a tick says whether it does, and its value is set beside it. */
-function Defines(props: { label: string; on: boolean; fixed?: string; onToggle: (on: boolean) => void; children: ReactNode }) {
+/** What the tick of a property of a wall type says, on and off, and what stands for its value when it is off. */
+const WALL_TEXTS = { on: msg('Defined by the type: its walls take it. Untick to leave it to each wall'), off: msg('Left to each wall. Tick to have the type define it'), left: msg('each wall its own') }
+
+/** One property a type or a style may define: a tick says whether it does, and its value is set beside it. */
+export function Defines(props: { label: string; on: boolean; fixed?: string; texts?: typeof WALL_TEXTS; onToggle: (on: boolean) => void; children: ReactNode }) {
+  const texts = props.texts ?? WALL_TEXTS
   return (
     <div className={`type-prop${props.on ? '' : ' off'}`}>
       <input
         type="checkbox"
         checked={props.on}
         disabled={props.fixed !== undefined}
-        title={props.fixed ?? (props.on ? t('Defined by the type: its walls take it. Untick to leave it to each wall') : t('Left to each wall. Tick to have the type define it'))}
+        title={props.fixed ?? t(props.on ? texts.on : texts.off)}
         aria-label={props.label}
         onChange={(e) => props.onToggle(e.target.checked)}
       />
       <span>{props.label}</span>
-      {props.on ? props.children : <em className="faint">{t('each wall its own')}</em>}
+      {props.on ? props.children : <em className="faint">{t(texts.left)}</em>}
     </div>
   )
 }

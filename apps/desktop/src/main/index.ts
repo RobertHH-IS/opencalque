@@ -1,9 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, shell } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { cpSync, existsSync, readFileSync } from 'node:fs'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { basename, join, resolve } from 'node:path'
+import { copyFile, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 
 // Settings made while the project was called OpenCAD (preferences, shortcuts, conversations) are
 // carried over the first time the renamed app starts.
@@ -13,21 +12,118 @@ if (!existsSync(app.getPath('userData')) && existsSync(former)) cpSync(former, a
 // Files the user chose in a dialog or launched the app with. The window may only write to these.
 const granted = new Set<string>()
 let dirty = false
-// The window supplies these in the user's language once it has loaded.
-let closeWarning = { message: 'You have unsaved changes.', discard: 'Discard changes', cancel: 'Cancel' }
+// The words of the app's own dialogs. The window supplies them in the user's language once it has loaded.
+let labels = {
+  unsaved: 'You have unsaved changes.',
+  discard: 'Discard changes',
+  cancel: 'Cancel',
+  connect: 'Let the assistant connect to {origin}?',
+  connectDetail: 'OpenCalque reaches an AI service only at an address set in Preferences. Allow it if you entered this address yourself.',
+  allow: 'Allow',
+  deny: 'Do not allow',
+}
 let claude: ChildProcess | null = null
 
 /**
+ * Writes a file so that it is never left half-written, whatever happens while it is being
+ * written (the app stopped, the computer switched off, the disk full): the content goes to a file
+ * beside it, which then takes its place in one step. The file that was there stays whole until then.
+ */
+async function writeSafely(path: string, content: string | Uint8Array): Promise<void> {
+  // A link is followed, so that the file it points to is replaced, not the link.
+  const target = await realpath(path).catch(() => path)
+  const temporary = join(dirname(target), `.${basename(target)}.${process.pid}-${Date.now()}.tmp`)
+  await writeFile(temporary, content)
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await rename(temporary, target)
+    } catch (error) {
+      // On Windows a program that has the file open for a moment (a cloud folder synchronising it, an
+      // antivirus reading it) makes the replacement fail: it is tried again, and in the end the file
+      // is written over in place, which is what saving did before, rather than not saved at all.
+      const code = (error as NodeJS.ErrnoException).code ?? ''
+      if (attempt < 5 && ['EPERM', 'EBUSY', 'EACCES'].includes(code)) {
+        await new Promise((done) => setTimeout(done, 100 * attempt))
+        continue
+      }
+      await unlink(temporary).catch(() => {})
+      if (!['EPERM', 'EBUSY', 'EACCES', 'EXDEV'].includes(code)) throw error
+      return writeFile(target, content)
+    }
+  }
+}
+
+/** Where the drawings are copied before this app first writes over them. */
+const backups = join(app.getPath('userData'), 'backups')
+/** How many of those copies are kept, the newest. */
+const BACKUPS_KEPT = 30
+/** The drawings already copied since the app started. */
+const backedUp = new Set<string>()
+
+/**
+ * Copies a drawing as it was before the app first writes over it, once each time the app runs:
+ * what was saved before can be found again in the backups folder, whatever the app later does to it.
+ */
+async function backUp(path: string): Promise<void> {
+  if (backedUp.has(path) || !/\.(opencalque|opencad)$/i.test(path) || !existsSync(path)) return
+  backedUp.add(path)
+  try {
+    await mkdir(backups, { recursive: true })
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+    await copyFile(path, join(backups, `${stamp} ${basename(path)}`))
+    // Named after the time they were made, they sort oldest first.
+    const kept = (await readdir(backups)).filter((name) => /\.(opencalque|opencad)$/i.test(name)).sort()
+    for (const old of kept.slice(0, Math.max(0, kept.length - BACKUPS_KEPT))) await unlink(join(backups, old)).catch(() => {})
+  } catch {
+    // A backup that cannot be made must not stop the drawing from being saved.
+  }
+}
+
+/**
+ * Addresses the assistant may reach through the main process (see 'net:request'). A model server
+ * on this computer always; any other only once the user has said yes to it, in a dialog the page
+ * cannot fake, so that a page that went wrong could not use the app to reach the network around it.
+ */
+const allowedFile = join(app.getPath('userData'), 'allowed-hosts.json')
+let allowedOrigins: string[] = []
+try {
+  const stored = JSON.parse(readFileSync(allowedFile, 'utf8'))
+  if (Array.isArray(stored)) allowedOrigins = stored.filter((origin) => typeof origin === 'string')
+} catch {
+  // None allowed yet.
+}
+
+async function mayReach(url: URL, win: BrowserWindow | null): Promise<boolean> {
+  if (['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) return true
+  if (allowedOrigins.includes(url.origin)) return true
+  const options = {
+    type: 'question' as const,
+    message: labels.connect.replace('{origin}', url.origin),
+    detail: labels.connectDetail,
+    buttons: [labels.allow, labels.deny],
+    defaultId: 1,
+    cancelId: 1,
+  }
+  const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options)
+  if (response !== 0) return false
+  allowedOrigins = [...allowedOrigins, url.origin]
+  writeFile(allowedFile, JSON.stringify(allowedOrigins)).catch(() => {})
+  return true
+}
+
+/**
  * Sends one prompt to the Claude Code CLI and resolves with its reply. The CLI runs in an empty
- * folder in restricted mode, without MCP servers or skills: it is used here as a model, not as an
- * agent, so it gets nothing to act on. Every argument is fixed or validated, and the prompt goes
- * through stdin, so nothing the user typed reaches a command line.
+ * folder of its own in restricted mode, without MCP servers or skills: it is used here as a model,
+ * not as an agent, so it gets nothing to act on. Every argument is fixed or validated, and the
+ * prompt goes through stdin, so nothing the user typed reaches a command line. The folder is the
+ * same every time, because the CLI keeps its conversations by folder: `--resume` finds one only there.
  */
 async function runClaude(input: { prompt: string; session?: string; model?: string }): Promise<{ text: string; session: string }> {
   const args = ['-p', '--output-format', 'json', '--restricted', '--strict-mcp-config', '--disable-slash-commands']
   if (input.session && /^[\w-]+$/.test(input.session)) args.push('--resume', input.session)
   if (input.model && /^[\w.[\]-]+$/.test(input.model)) args.push('--model', input.model)
-  const cwd = await mkdtemp(join(tmpdir(), 'opencalque-claude-'))
+  const cwd = join(app.getPath('userData'), 'assistant')
+  await mkdir(cwd, { recursive: true })
   return new Promise((done, fail) => {
     // On Windows the CLI is a .cmd or .exe found through the shell's PATH lookup.
     const child = spawn('claude', args, { cwd, shell: process.platform === 'win32', windowsHide: true })
@@ -75,6 +171,22 @@ async function read(path: string) {
 }
 
 /**
+ * Drawings macOS asks the app to open (a double-click in the Finder, a drop on the Dock icon),
+ * which come as events rather than as arguments. The window may read only these, and each once.
+ */
+const requested = new Set<string>()
+/** Those that came before the window was ready to hear of them. */
+const waiting: string[] = []
+let listening: Electron.WebContents | null = null
+
+app.on('open-file', (event, path) => {
+  event.preventDefault()
+  requested.add(path)
+  if (listening && !listening.isDestroyed()) listening.send('file:openRequest', path)
+  else waiting.push(path)
+})
+
+/**
  * How the system's buttons sit over the menu bar on Windows. The strip behind them is see-through,
  * so it is whatever the app shows there: the menu bar, or the veil of an open window. The height
  * is that of `.menubar` in the web app.
@@ -105,6 +217,10 @@ function createWindow(): void {
     if (url.startsWith('https://')) shell.openExternal(url)
     return { action: 'deny' }
   })
+  // Nor does the window ever leave the app for another page, by a link or a file dropped where the page does not take it.
+  win.webContents.on('will-navigate', (event, url) => {
+    if (url !== win.webContents.getURL()) event.preventDefault()
+  })
   win.webContents.on('before-input-event', (_, input) => {
     if (input.type === 'keyDown' && input.key === 'F12') win.webContents.toggleDevTools()
   })
@@ -112,8 +228,8 @@ function createWindow(): void {
     if (!dirty) return
     const choice = dialog.showMessageBoxSync(win, {
       type: 'warning',
-      message: closeWarning.message,
-      buttons: [closeWarning.discard, closeWarning.cancel],
+      message: labels.unsaved,
+      buttons: [labels.discard, labels.cancel],
       defaultId: 1,
       cancelId: 1,
     })
@@ -162,7 +278,8 @@ app.whenReady().then(() => {
       path = result.filePath
       granted.add(path)
     }
-    await writeFile(path, content, 'utf8')
+    await backUp(path)
+    await writeSafely(path, content)
     // Exports (PDF, SVG, DXF) are saved this way too; only drawings are worth reopening.
     if (/\.(opencalque|opencad)$/i.test(path)) remember(path)
     return { name: basename(path), token: path }
@@ -173,8 +290,26 @@ app.whenReady().then(() => {
   ipcMain.handle('file:openRecent', (_, path: string) => (recent.includes(path) && existsSync(path) ? read(path) : null))
 
   ipcMain.handle('file:initial', () => {
+    const asked = waiting.shift()
+    if (asked) return read(asked)
     const file = process.argv.slice(1).find((arg) => arg.endsWith('.opencalque') || arg.endsWith('.opencad'))
     return file ? read(resolve(file)) : null
+  })
+
+  // The window is ready to be told of drawings to open; those that came before it was are told now.
+  ipcMain.on('file:listen', (event) => {
+    listening = event.sender
+    for (const path of waiting.splice(0)) event.sender.send('file:openRequest', path)
+  })
+
+  ipcMain.handle('file:openRequested', (_, path: string) => {
+    if (!requested.delete(path) || !existsSync(path)) return null
+    return read(path)
+  })
+
+  ipcMain.on('file:showBackups', async () => {
+    await mkdir(backups, { recursive: true }).catch(() => {})
+    shell.openPath(backups)
   })
 
   ipcMain.on('doc:dirty', (_, value: boolean) => {
@@ -190,14 +325,15 @@ app.whenReady().then(() => {
     win?.setBackgroundColor(dark ? '#1e1e1e' : '#ffffff')
   })
 
-  ipcMain.on('doc:closeWarning', (_, labels: typeof closeWarning) => {
-    closeWarning = labels
+  ipcMain.on('app:labels', (_, given: Partial<typeof labels>) => {
+    for (const key of Object.keys(labels) as (keyof typeof labels)[]) if (typeof given[key] === 'string') labels[key] = given[key]
   })
 
   // Lets the assistant reach a model server on this computer without that server having to
   // accept requests from the app's page.
-  ipcMain.handle('net:request', async (_, url: string, init: { method: string; headers: Record<string, string>; body: string }) => {
+  ipcMain.handle('net:request', async (event, url: string, init: { method: string; headers: Record<string, string>; body: string }) => {
     if (!/^https?:\/\//i.test(url)) throw new Error('Only http and https addresses can be requested.')
+    if (!(await mayReach(new URL(url), BrowserWindow.fromWebContents(event.sender)))) throw new Error(`Connecting to ${new URL(url).origin} was not allowed.`)
     // A request without a body (GET) must not be given one, even an empty one.
     const response = await net.fetch(url, init.body ? init : { method: init.method, headers: init.headers })
     return { status: response.status, body: await response.text() }

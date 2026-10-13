@@ -37,7 +37,7 @@ export const LayerSchema = z
   .object({
     id: Id,
     name: z.string(),
-    order: z.string().describe('Fractional index; layers sort by plain string comparison of this key.'),
+    order: z.string().describe('Fractional index such as "a0"; layers sort by plain string comparison of this key.'),
     visible: z.boolean().optional().describe('Defaults to true.'),
     locked: z.boolean().optional().describe('Defaults to false.'),
     color: z.string().optional().describe('Default stroke color of nodes on this layer.'),
@@ -115,7 +115,7 @@ const base = {
   parent: Id.nullable().describe('Id of the page, component or group this node is directly inside. Null for pages and components.'),
   order: z
     .string()
-    .describe('Fractional index giving the z-order among siblings (plain string comparison, later = on top).'),
+    .describe('Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as "a0", "a1" or "a0V"; leave it out when adding a node to put it on top.'),
   layer: Id.optional(),
   visible: z.boolean().optional().describe('Defaults to true.'),
   locked: z.boolean().optional().describe('Defaults to false.'),
@@ -136,6 +136,48 @@ const tip = z.enum(DIMENSION_MARKERS).optional()
 const markerSize = z.number().positive().optional().describe('Length of the end symbols in mm. Defaults to 150.')
 /** The paths an annotation's leader can take. */
 export const LEADER_SHAPES = ['curve', 'straight', 'elbow'] as const
+
+/** The look of a dimension: everything about it but where it is and what it says in place of its length. A dimension style may define any of it. */
+const dimensionLook = {
+  startMarker: marker,
+  endMarker: marker,
+  markerSize: z.number().positive().optional().describe('Length of the end markers in mm. Defaults to 100.'),
+  extension: StyleSchema.pick({ stroke: true, strokeWidth: true, dash: true })
+    .optional()
+    .describe('Look of the two extension lines. Unset values follow the dimension line.'),
+  extensionGap: z.number().nonnegative().optional().describe('Gap in mm between a measured point and its extension line. Defaults to 0.'),
+  size: z.number().positive().optional().describe('Text size in mm. Defaults to 150.'),
+  font,
+  textColor: z.string().optional().describe('Defaults to the color of the dimension line.'),
+  textPosition: z.enum(['above', 'center', 'below']).optional().describe("Where the text sits relative to the dimension line. Defaults to 'above'."),
+  textRotation: z.enum(['aligned', 'horizontal']).optional().describe("Defaults to 'aligned' (along the dimension line)."),
+  verticalText: z
+    .enum(['up', 'down'])
+    .optional()
+    .describe(
+      "Which way text along a vertical dimension line reads: 'up', from bottom to top, read with the head turned to the left or from the right-hand side of the sheet (as ISO 129 asks); 'down' (the default), from top to bottom, read with the head turned to the right. A line within a degree of vertical counts as vertical; text along any other line reads from below.",
+    ),
+  unit: z.enum(['mm', 'cm', 'm', 'in', 'ft', 'ft-in']).optional().describe("Unit the measured value is shown in. Defaults to 'mm'. 'ft-in' writes feet and inches with a fraction, as 7' 6 1/2\". Coordinates stay in mm whatever this is."),
+  fraction: z.number().int().positive().optional().describe("With unit 'ft-in': the fraction of an inch the value is rounded to, as its lower number (2, 4, 8, 16, 32). Defaults to 16."),
+  decimals: z.number().int().min(0).max(6).optional().describe('Decimal places. Defaults to 0 for mm, 1 for cm and in, 2 for m and ft.'),
+  showUnit: z.boolean().optional().describe('Append the unit to the value.'),
+}
+
+export const DimensionStyleSchema = z
+  .object({
+    id: Id,
+    name: z.string(),
+    style: StyleSchema.pick({ stroke: true, strokeWidth: true, dash: true }).optional().describe('The dimension line and its end markers, as the "style" of a dimension.'),
+    ...dimensionLook,
+  })
+  .describe(
+    'A way of drawing dimensions that belongs to the drawing. It holds the properties of a dimension that it gives a value to, under the same names, and only those. A dimension refers to it by "dimensionStyle" and takes what it defines; a value the dimension gives itself wins, and what the style leaves out stays the dimension\'s own.',
+  )
+
+export type DimensionStyle = z.infer<typeof DimensionStyleSchema>
+export type DimensionStyleProperty = Exclude<keyof DimensionStyle, 'id' | 'name'>
+/** What a dimension style can define for its dimensions: the properties of a dimension that make its look. */
+export const DIMENSION_STYLE_PROPERTIES = Object.keys(DimensionStyleSchema.shape).filter((key) => key !== 'id' && key !== 'name') as DimensionStyleProperty[]
 
 /** One line of a wall's outline: whether it is drawn, and its own colour, weight and kind of line over the wall's. */
 export const WallEdgeSchema = z.object({
@@ -318,23 +360,9 @@ export const NodeSchema = z
         a: Vec2Schema,
         b: Vec2Schema,
         offset: z.number().describe('Signed distance from the measured points to the dimension line.'),
-        startMarker: marker,
-        endMarker: marker,
-        markerSize: z.number().positive().optional().describe('Length of the end markers in mm. Defaults to 100.'),
-        extension: StyleSchema.pick({ stroke: true, strokeWidth: true, dash: true })
-          .optional()
-          .describe('Look of the two extension lines. Unset values follow the dimension line.'),
-        extensionGap: z.number().nonnegative().optional().describe('Gap in mm between a measured point and its extension line. Defaults to 0.'),
         text: z.string().optional().describe('Replaces the measured value when set.'),
-        size: z.number().positive().optional().describe('Text size in mm. Defaults to 150.'),
-        font,
-        textColor: z.string().optional().describe('Defaults to the color of the dimension line.'),
-        textPosition: z.enum(['above', 'center', 'below']).optional().describe("Where the text sits relative to the dimension line. Defaults to 'above'."),
-        textRotation: z.enum(['aligned', 'horizontal']).optional().describe("Defaults to 'aligned' (along the dimension line)."),
-        unit: z.enum(['mm', 'cm', 'm', 'in', 'ft', 'ft-in']).optional().describe("Unit the measured value is shown in. Defaults to 'mm'. 'ft-in' writes feet and inches with a fraction, as 7' 6 1/2\". Coordinates stay in mm whatever this is."),
-        fraction: z.number().int().positive().optional().describe("With unit 'ft-in': the fraction of an inch the value is rounded to, as its lower number (2, 4, 8, 16, 32). Defaults to 16."),
-        decimals: z.number().int().min(0).max(6).optional().describe('Decimal places. Defaults to 0 for mm, 1 for cm and in, 2 for m and ft.'),
-        showUnit: z.boolean().optional().describe('Append the unit to the value.'),
+        dimensionStyle: Id.optional().describe('The id of the dimension style it is drawn in, among the document\'s "dimensionStyles". It takes what the style defines, except where it gives itself a value.'),
+        ...dimensionLook,
       })
       .describe(
         'A linear dimension: an annotation showing the distance between a and b. The node "style" styles the dimension line and its end markers.',
@@ -389,6 +417,7 @@ export const DocumentSchema = z
     layers: z.record(Id, LayerSchema).describe('Layers by id.'),
     colors: z.record(Id, SharedColorSchema).optional().describe('Shared colours by id, referred to from colour properties as "var(--<id>)".'),
     wallTypes: z.record(Id, WallTypeSchema).optional().describe('Wall types by id, referred to from walls by "wallType".'),
+    dimensionStyles: z.record(Id, DimensionStyleSchema).optional().describe('Dimension styles by id, referred to from dimensions by "dimensionStyle".'),
     assets: z.record(Id, AssetSchema).optional().describe('Embedded files by id. Large; tools that only need the drawing can ignore it.'),
     nodes: z
       .record(Id, NodeSchema)
@@ -400,6 +429,9 @@ export const DocumentSchema = z
     meta: z.record(z.string(), z.unknown()).optional(),
   })
   .describe('An OpenCalque document (.opencalque file).')
+
+/** Every type of node this version of the format knows. */
+export const NODE_TYPES: string[] = NodeSchema.options.map((option) => option.shape.type.value)
 
 export type Style = z.infer<typeof StyleSchema>
 export type Layer = z.infer<typeof LayerSchema>

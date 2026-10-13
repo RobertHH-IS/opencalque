@@ -2,7 +2,7 @@
 
 What the app does today, the ten big features chosen to do next and where each stands, and the longer backlog. For how things are built, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Last updated: 2026-10-10.
+Last updated: 2026-10-13 (1.0.0-rc.1).
 
 ## 1. What exists today
 
@@ -13,7 +13,8 @@ Last updated: 2026-10-10.
 - **Curved walls**: a wall bent into an arc by dragging the handle in its middle or typing its curve. It joins its neighbours, takes doors and windows, bounds rooms and is measured round its curve.
 - Doors and windows that snap onto a wall, cut the opening, adapt to the wall's thickness and slide along it. Door type, hinge side, angle; window panes, glazing, sill.
 - Stairs: straight, L-shaped, U-shaped, spiral, each with its own parameters. A compass rose for north.
-- Dimensions with configurable line, end markers, extension lines, text, font, unit and decimals; and a separate measure tool that only reads a distance.
+- Dimensions with configurable line, end markers, extension lines, text, font, unit and decimals, and vertical text that reads from bottom to top or from top to bottom; and a separate measure tool that only reads a distance.
+- **Dimension styles**: whichever of those settings a style defines, shared by the dimensions drawn in it, each of which may still differ from it.
 - Text typed directly on the drawing, on several lines; double-click a text to change it. **Fields** (`{date}`, `{page}`, `{page-number}`, `{pages}`, `{document}`) are filled in when drawn and exported.
 - **Line style**: weight chosen as printed millimetres, kinds of line (dashes, dots), and arrows or other ends on lines and polylines; a bar above the tools sets the style of the next shapes.
 - **Eyedropper**: copy the look of an object to the selection or to the next shapes.
@@ -43,7 +44,7 @@ Last updated: 2026-10-10.
 ### Organising a drawing
 - Pages, which can be duplicated with their contents and reordered by dragging, and layers with colour, visibility and lock. **On every sheet**: a title, a logo or a north arrow drawn once, in millimetres of paper, shows on every paper at its own scale, in the corner it was drawn nearest to, with fields (`{sheet}`, `{scale}`, `{page}`, `{project}`…) filled in for each sheet.
 - **Groups**: several objects treated as one (`Ctrl+G`, `Ctrl+Shift+G`), nestable; double-click to edit inside.
-- **Components**: a reusable definition with instances that all update together; double-click an instance to edit the component.
+- **Components**: a reusable definition with instances that all update together; double-click an instance to edit the component, or ungroup it (`Ctrl+Shift+G`) to turn it back into objects of the drawing.
 - **Stacking order**: bring forward or send backward one step or all the way, from the properties panel, the right-click menu, shortcuts, or by dragging rows in the object list (several at once when they are selected).
 - A Structure panel listing the objects, with an icon per kind of object, expandable groups, lock and hide per object.
 - Cut, copy and paste, including between drawings and windows.
@@ -61,6 +62,7 @@ Last updated: 2026-10-10.
 
 ### Assistant
 - A chat panel that changes the drawing from a description, through the same validated operations as the rest of the app; one undo per request.
+- **It knows what is selected**: the selected objects (or wall corner) go with each message, in full and with what they measure, so "this" means what you point at; a label above the message box says what will be sent, and can leave it out.
 - Conversations are kept and can be reopened from the selector at the top or with `/resume`; pictures can be pasted or attached; the model is chosen below the message; `/new`, `/model`, `/clear`, `/help`.
 - Providers: Claude with an API key, Claude through the Claude Code CLI on the computer (desktop), a local model through Ollama, or any OpenAI-compatible service.
 
@@ -69,8 +71,11 @@ Last updated: 2026-10-10.
 - A **welcome window** at start (new drawing, open, recent drawings on desktop, or the bundled example) and an **About** window with the release notes, read from `CHANGELOG.md`.
 - In the desktop app on Windows and macOS the menu bar is the window's title bar.
 - Menu bar, dockable panels that can be moved, tabbed, floated and closed, a command list (`Ctrl+K`) with every command and rebindable shortcuts, a right-click menu, preferences.
-- Autosave to the drawing's file, which can be switched off.
-- English, French, Spanish and German.
+- Autosave to the drawing's file, which can be switched off. Saving never leaves a half-written file (desktop).
+- **Crash recovery**: unsaved work is copied aside as it changes and offered back after a crash. **Backups** (desktop): each drawing is copied before the app first writes over it.
+- **Drawings stay readable**: what a newer version adds is kept; a newer format is refused with a message; a drawing with a broken reference opens repaired, with a note.
+- A fault in one panel leaves the rest of the window working, and the drawing can always be saved.
+- English, French, Spanish, German, Chinese and Japanese.
 - Files are readable JSON with a published schema; a command-line tool creates, validates, edits and exports drawings.
 - Export to PDF at true scale (one page per paper, with a title block), to SVG and to DXF. Text in any script but Korean prints in the PDF: Chinese, Japanese, Greek, Cyrillic and Central European letters come from fonts shipped with the app, only the glyphs used embedded.
 
@@ -118,7 +123,7 @@ Agreed with the owner in October 2026. The first was built straight away.
 **Import and sharing**
 - ~~DXF import~~ (done, with blocks as groups); blocks as components
 - PNG export
-- A live demo on GitHub Pages; ~~downloadable installers~~ (done, unsigned); signed installers and automatic updates
+- A live demo on GitHub Pages; ~~downloadable installers~~ (done, unsigned by choice); automatic updates
 
 **Assistant**
 - A preview of its changes to accept or refuse before they are applied
@@ -144,7 +149,7 @@ Not ranked within an area.
 - More stairs: winders, landings of any shape, handrails, break line.
 
 **Components and extensions**
-- Component properties that vary per instance (text, sizes, visibility of parts); swap one component for another; detach an instance.
+- Component properties that vary per instance (text, sizes, visibility of parts); swap one component for another.
 - Favourites in the component library.
 - Publishing: package a library or extension and submit it to a public catalog; versioning and updates for installed extensions.
 - Extensions that add tools, commands, panels and import/export formats, loaded at runtime in a sandbox with declared permissions.
@@ -161,8 +166,8 @@ Not ranked within an area.
 
 **Application**
 - ~~Dark theme~~ (done); touch and pen input; high-contrast mode.
-- Crash recovery; version history.
-- Signed installers and automatic updates; file association for `.opencalque`.
+- ~~Crash recovery~~ (done); version history.
+- Automatic updates (installers stay unsigned); ~~file association for `.opencalque`~~ (done, macOS included).
 - Performance on drawings with tens of thousands of objects (caching per object, then GPU rendering).
-- Automated interface tests.
+- ~~Automated interface tests~~ (done for the main paths, `pnpm e2e`); more of the panels.
 - More languages, right-to-left support.

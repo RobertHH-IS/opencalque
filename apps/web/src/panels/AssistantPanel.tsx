@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ArrowUp, Paperclip, Plus, Square, Trash2, X } from 'lucide-react'
+import { ArrowUp, MousePointer2, Paperclip, Plus, Square, Trash2, X } from 'lucide-react'
 import {
   currentModel,
   deleteConversation,
@@ -17,10 +17,10 @@ import {
   type ModelChoice,
 } from '../ai/chat'
 import { attachmentFrom, pictureFiles } from '../ai/pictures'
-import { msg, t } from '../i18n'
+import { msg, t, tn } from '../i18n'
 import { usePrefs } from '../prefs'
 import { useStore } from '../store'
-import { IconButton } from '../ui'
+import { IconButton, labelOf } from '../ui'
 
 const EXAMPLES = [
   msg('Draw a 5 × 4 m room with a door on the bottom wall'),
@@ -39,6 +39,22 @@ const SLASH: { name: string; hint: string; takes?: boolean }[] = [
   { name: 'clear', hint: msg('Delete this conversation') },
   { name: 'help', hint: msg('List these commands') },
 ]
+
+/**
+ * What the next message will tell the assistant is selected, in a few words, or null when nothing
+ * is: like a selection in an editor shown above a chat, so the person sees what "this" will mean.
+ */
+function useSelectionLabel(): { label: string; detail: string } | null {
+  // Read as text, so that the panel is drawn again when the words change, not on every edit of the drawing.
+  const [label, detail] = useStore((s) => {
+    if (s.corner) return `${t('A wall corner')}\n${t('The wall corner you selected')}`
+    const nodes = s.selection.flatMap((id) => (s.doc.nodes[id] ? [s.doc.nodes[id]] : []))
+    if (nodes.length === 0) return ''
+    const names = nodes.map((node) => labelOf(s.doc, node))
+    return `${nodes.length === 1 ? names[0] : tn(nodes.length, '{n} object selected', '{n} objects selected')}\n${names.slice(0, 12).join(', ')}${names.length > 12 ? '…' : ''}`
+  }).split('\n')
+  return label ? { label, detail } : null
+}
 
 /** One line of the list that opens above the message while a command is being typed. */
 interface Suggestion {
@@ -61,6 +77,11 @@ export function AssistantPanel() {
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [models, setModels] = useState<ModelChoice[]>([])
   const [highlighted, setHighlighted] = useState(0)
+  const selected = useSelectionLabel()
+  // Left out of one message, the selection comes back as soon as another one is made.
+  const [withSelection, setWithSelection] = useState(true)
+  const selectionKey = useStore((s) => (s.corner ? `${s.corner.x},${s.corner.y}` : s.selection.join(',')))
+  useEffect(() => setWithSelection(true), [selectionKey])
   const end = useRef<HTMLDivElement>(null)
   const filePicker = useRef<HTMLInputElement>(null)
 
@@ -93,7 +114,7 @@ export function AssistantPanel() {
     if (busy || (message.trim() === '' && attachments.length === 0)) return
     setText('')
     setAttachments([])
-    sendMessage(message.trim(), attachments)
+    sendMessage(message.trim(), attachments, { selection: withSelection })
   }
 
   /** The choices for what is typed when it is a command, or null when it is an ordinary message. */
@@ -210,6 +231,22 @@ export function AssistantPanel() {
                 <span className="faint">{s.hint}</span>
               </button>
             ))}
+          </div>
+        )}
+        {selected && (
+          <div className={`assistant-context${withSelection ? '' : ' left-out'}`}>
+            <span title={withSelection ? t('Sent with your message, so the assistant knows what you mean by “this”: {what}', { what: selected.detail }) : t('Not sent with your next message')}>
+              <MousePointer2 size={12} />
+              {selected.label}
+            </span>
+            <button
+              type="button"
+              title={withSelection ? t('Do not send the selection with this message') : t('Send the selection with this message')}
+              aria-label={withSelection ? t('Do not send the selection with this message') : t('Send the selection with this message')}
+              onClick={() => setWithSelection(!withSelection)}
+            >
+              {withSelection ? <X size={10} /> : <Plus size={10} />}
+            </button>
           </div>
         )}
         {attachments.length > 0 && (

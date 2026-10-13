@@ -1,6 +1,7 @@
 import { childrenOf, isVisible, rootOf } from './document'
 import { add, dist, len, mid, norm, perp, rotate, scale, sub, type Bounds, type Vec2, ellipseArc, smoothPoints, unionBounds } from './geometry'
 import { resolveColor } from './colors'
+import { DIMENSION_MARKER_SIZE, DIMENSION_TEXT_SIZE, styledDimension } from './dimensions'
 import { fillFields } from './fields'
 import { formatFeetInches } from './imperial'
 import { applyModifiers, movedModifiers, segmentsInside, HATCH_INK, patternStrokes } from './modifiers'
@@ -21,9 +22,9 @@ export const DIVIDER_INK = '#8b9099'
 /** A sheet of paper and its edge. */
 export const PAPER_FILL = '#ffffff'
 export const PAPER_EDGE = '#c4c8cf'
-const DIMENSION_TEXT_SIZE = 150
-const DIMENSION_MARKER_SIZE = 100
 const MAX_INSTANCE_DEPTH = 8
+/** How far from vertical, in degrees, a dimension line may lean and still have its text read the way the dimension says vertical text reads. */
+const VERTICAL_TEXT_TOLERANCE = 1
 
 export interface KindContext {
   doc: Document
@@ -380,8 +381,12 @@ function dimensionPrimitives(node: NodeOf<'dimension'>): Primitive[] {
     anchor = { x: centre.x, y: centre.y + size * 0.35 }
     cover = (Math.abs(dir.x) * width) / 2 + Math.abs(dir.y) * size * 0.6 + size * 0.2
   } else {
-    angle = (Math.atan2(dir.y, dir.x) * 180) / Math.PI
-    if (angle > 90 || angle <= -90) angle += 180
+    // Along the line, turned to read from below. On a vertical line it reads from bottom to top
+    // or from top to bottom, as the dimension says; one that leans a little reads the same way.
+    angle = ((((Math.atan2(dir.y, dir.x) * 180) / Math.PI) % 180) + 180) % 180
+    if (Math.abs(angle - 90) <= VERTICAL_TEXT_TOLERANCE) {
+      if (node.verticalText === 'up') angle -= 180
+    } else if (angle > 90) angle -= 180
     const lift = position === 'above' ? size * 0.3 : position === 'below' ? -size : -size * 0.35
     anchor = add(middle, scale(rotate({ x: 0, y: -1 }, angle), lift))
     cover = width / 2 + size * 0.3
@@ -563,7 +568,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     snapLines: (node, drawn) => [...drawn, wallPoints(node)],
   },
   dimension: {
-    primitives: dimensionPrimitives,
+    primitives: (node, ctx) => dimensionPrimitives(styledDimension(ctx.doc, node)),
     move: moveAB,
     // The third handle sits on the dimension line and sets how far it stands off.
     handles: (node) => [node.a, node.b, add(mid(node.a, node.b), scale(perp(norm(sub(node.b, node.a))), node.offset))],
@@ -657,7 +662,7 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
   // References to shared colours are followed here, once, for whatever the kind and the style say.
   const paint = (value: string | undefined) => resolveColor(ctx.doc, value)
   const layerColor = paint(node.layer === undefined ? undefined : ctx.doc.layers[node.layer]?.color)
-  // A wall takes from its type what the type defines, and keeps what it says for itself.
+  // A wall takes from its type what the type defines, and keeps what it says for itself; a dimension likewise from its style.
   const type = node.type === 'wall' && node.wallType ? ctx.doc.wallTypes?.[node.wallType] : undefined
   const typed = type && {
     ...(type.stroke === undefined ? {} : { stroke: type.stroke }),
@@ -665,7 +670,7 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
     ...(type.dash === undefined ? {} : { dash: type.dash }),
     ...(type.pattern === undefined ? {} : { pattern: type.pattern }),
   }
-  const style = typed ? { ...typed, ...node.style } : node.style
+  const style = node.type === 'dimension' ? styledDimension(ctx.doc, node).style : typed ? { ...typed, ...node.style } : node.style
   const styled = kindOf(node)
     .primitives(node, ctx)
     .map((p) => {

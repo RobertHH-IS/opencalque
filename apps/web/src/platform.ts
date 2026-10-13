@@ -12,6 +12,19 @@ export interface OpenedFile extends StoredFile {
   content: string
 }
 
+/** The words of the dialogs the desktop app shows itself, in the user's language. */
+export interface DialogLabels {
+  /** Asked before closing a window with unsaved changes. */
+  unsaved: string
+  discard: string
+  cancel: string
+  /** Asked the first time the assistant reaches a service that is not on this computer; {origin} is its address. */
+  connect: string
+  connectDetail: string
+  allow: string
+  deny: string
+}
+
 export interface Platform {
   /** True in the desktop app, which can reach programs and local services a web page cannot. */
   desktop: boolean
@@ -23,8 +36,8 @@ export interface Platform {
   cancelClaudeCli?(): void
   /** Desktop only: tells the window whether the interface is dark, and whether that is the system's choice, for the system's buttons and dialogs. */
   setTheme?(dark: boolean, followsSystem: boolean): void
-  /** The words of the "unsaved changes" question the desktop app asks before closing. */
-  setCloseWarning(labels: { message: string; discard: string; cancel: string }): void
+  /** The words of the questions the desktop app asks itself: before closing with unsaved changes, before reaching a new service. */
+  setDialogLabels(labels: DialogLabels): void
   open(extensions: string[]): Promise<OpenedFile | null>
   /** Like `open`, for files that are not text (pictures, PDFs). */
   openBytes(extensions: string[]): Promise<{ name: string; bytes: Uint8Array } | null>
@@ -36,6 +49,10 @@ export interface Platform {
   openRecent?(path: string): Promise<OpenedFile | null>
   /** The file the app was launched with, if any. */
   initial(): Promise<OpenedFile | null>
+  /** Desktop only: hears of drawings the system asks the running app to open (on macOS, a double-click in the Finder). */
+  onOpenFile?(listener: (file: OpenedFile) => void): void
+  /** Desktop only: shows the folder where drawings are copied before the app first writes over them. */
+  showBackups?(): void
   setDirty(dirty: boolean): void
 }
 
@@ -64,7 +81,7 @@ function createBrowserPlatform(): Platform {
   return {
     desktop: false,
     // The browser asks its own question when a page with unsaved changes is closed.
-    setCloseWarning: () => {},
+    setDialogLabels: () => {},
     async open(extensions) {
       const file = await pickFile(extensions)
       return file && { name: file.name, content: await file.text(), token: null }

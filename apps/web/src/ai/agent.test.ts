@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, childrenOf, createDocument, Registry, type Document } from '@opencalque/core'
+import { applyOps, childrenOf, createDocument, OpSchema, Registry, type Document, type Op, type Vec2 } from '@opencalque/core'
 import { architecture } from '@opencalque/ext-architecture'
 import { describeState, runRequest, systemPrompt, TOOLS, type AgentHost } from './agent'
+import { modelOptions } from './anthropic'
 import { parseReply } from './claudecli'
 import type { ChatSession, TurnInput, TurnOutput } from './types'
 
 const registry = new Registry().use(architecture)
 
-function fakeHost(initial: Document = createDocument()) {
+function fakeHost(initial: Document = createDocument(), seen: { scope?: string; selection?: string[]; corner?: Vec2 } = {}) {
   let doc = initial
   const host: AgentHost = {
-    state: () => ({ doc, scope: 'page_1', selection: [] }),
+    registry,
+    state: () => ({ doc, scope: seen.scope ?? 'page_1', selection: seen.selection ?? [], corner: seen.corner, activeLayer: 'layer_1', visible: { minX: 0, minY: 0, maxX: 10000, maxY: 8000 } }),
     apply: (ops) => {
       doc = applyOps(doc, ops)
     },
@@ -114,5 +116,53 @@ describe('assistant', () => {
     expect(prompt).toContain('"wall"')
     expect(TOOLS.map((t) => t.name)).toEqual(['apply_operations', 'read_document', 'view_image'])
     expect(JSON.stringify(TOOLS[0].schema)).toContain('add_node')
+  })
+
+  it('tells the model what is selected, in full and with what it measures, unless the person leaves it out', () => {
+    const plan = applyOps(createDocument(), [
+      { op: 'add_node', node: { type: 'wall', id: 'w1', parent: 'page_1', a: { x: 0, y: 0 }, b: { x: 4000, y: 0 }, thickness: 200 } },
+      { op: 'add_node', node: { type: 'wall', id: 'w2', parent: 'page_1', a: { x: 4000, y: 0 }, b: { x: 4000, y: 3000 }, thickness: 200 } },
+      { op: 'add_node', node: { type: 'group', id: 'g', parent: 'page_1' } },
+      { op: 'add_node', node: { type: 'line', id: 'inside', parent: 'g', a: { x: 0, y: 5000 }, b: { x: 1000, y: 5000 } } },
+    ] as Op[])
+    const state = describeState(fakeHost(plan, { selection: ['w1', 'g'] }).host)
+    expect(state).toContain('<selection>')
+    expect(state).toContain('"w1", a wall: length 4000 mm along its centre line, 200 mm thick')
+    expect(state).toContain('"g", a group: holds 1 objects: 1 line')
+    expect(state).toContain('"inside"')
+    expect(state).toContain('New objects go on the layer "Layer 1"')
+    expect(state).toContain('On their screen: x from 0 to 10000, y from 0 to 8000')
+    const left = describeState(fakeHost(plan, { selection: ['w1'] }).host, { selection: false })
+    expect(left).not.toContain('<selection>')
+    expect(left).toContain('chose not to send what is selected')
+    const corner = describeState(fakeHost(plan, { corner: { x: 4000, y: 0 } }).host)
+    expect(corner).toContain('wall corner at (4000, 0), where the walls "w1" (its end b) and "w2" (its end a) meet')
+    expect(describeState(fakeHost(plan, { scope: 'g' }).host)).toContain('editing inside the group')
+  })
+
+  it('tells the model which properties it wrote mean nothing, and reads nodes by id', async () => {
+    const { host } = fakeHost()
+    const typo = { op: 'add_node', node: { type: 'wall', id: 'w', parent: 'page_1', a: { x: 0, y: 0 }, b: { x: 4000, y: 0 }, thickness: 200, hieght: 2500 } }
+    const { session, received } = scripted([call('apply_operations', { operations: [typo] }), call('read_document', { ids: ['w'] }), call('read_document', { ids: ['nope'] })])
+    await runRequest(session, host, 'x', events(), new AbortController().signal)
+    const applied = JSON.parse((received[1] as { results: { content: string }[] }).results[0].content)
+    expect(applied.unknownProperties).toEqual(['new wall "w": "hieght"'])
+    const read = JSON.parse((received[2] as { results: { content: string }[] }).results[0].content)
+    expect(read.nodes[0]).toMatchObject({ id: 'w', hieght: 2500 })
+    expect((received[3] as { results: { isError?: boolean }[] }).results[0].isError).toBe(true)
+  })
+
+  it('explains every operation and that groups hold nodes too', () => {
+    const prompt = systemPrompt(registry)
+    for (const option of OpSchema.options) expect(prompt).toContain(option.shape.op.value)
+    expect(prompt).toContain('or in a group')
+    expect(prompt).toContain('never invent one such as "top"')
+    expect(prompt).toContain('<selection>')
+  })
+
+  it('asks each Claude model only for what it supports', () => {
+    expect(modelOptions('claude-opus-5-5')).toEqual({ thinking: { type: 'adaptive' }, output_config: { effort: 'medium' }, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' })
+    expect(modelOptions('claude-haiku-5-5')).toEqual({ thinking: { type: 'adaptive' }, output_config: { effort: 'medium' } })
+    expect(modelOptions('claude-haiku-4-5')).toEqual({})
   })
 })

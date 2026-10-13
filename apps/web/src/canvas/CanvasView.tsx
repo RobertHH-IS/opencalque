@@ -54,7 +54,7 @@ import {
   splitPlace,
   wallEdgeLines,
 } from '@opencalque/core'
-import { finishTextEdit, zoomToFit, pickStyle } from '../actions'
+import { dimensionToolLook, finishTextEdit, zoomToFit, pickStyle } from '../actions'
 import { onCommand } from '../commands'
 import { t } from '../i18n'
 import { usePrefs } from '../prefs'
@@ -276,7 +276,7 @@ function wallOps(id: string, a: Vec2, b: Vec2, prev?: WallRun, first?: WallRun):
 
 /** The node a two-point tool makes from its two points. */
 function shape(tool: Tool, id: string, a: Vec2, b: Vec2, offset = 0): NodeInput {
-  const { scope, activeLayer, wallThickness, wallType, dimensionTemplate, annotationTemplate, paperScale, base, doc } = get()
+  const { scope, activeLayer, wallThickness, wallType, annotationTemplate, paperScale, base, doc } = get()
   const common = { id, parent: scope, layer: activeLayer, ...(tool !== 'dimension' && tool !== 'paper' ? currentStyle() : {}) }
   switch (tool) {
     case 'paper': {
@@ -293,9 +293,12 @@ function shape(tool: Tool, id: string, a: Vec2, b: Vec2, offset = 0): NodeInput 
     case 'annotation':
       // The tip is the first point clicked, the text goes at the second; the words are typed afterwards.
       return { ...annotationTemplate, ...common, type: 'annotation', a, b, text: '' } as NodeInput
-    case 'dimension':
-      // New dimensions read in the unit the user works in, unless the tool's settings say otherwise.
-      return { unit: unit(), ...dimensionTemplate, ...common, type: 'dimension', a, b, offset } as NodeInput
+    case 'dimension': {
+      const look = dimensionToolLook()
+      const style = typeof look.dimensionStyle === 'string' ? doc.dimensionStyles?.[look.dimensionStyle] : undefined
+      // New dimensions read in the unit the user works in, unless the tool's settings or its style say otherwise.
+      return { ...(style?.unit === undefined ? { unit: unit() } : {}), ...look, ...common, type: 'dimension', a, b, offset } as NodeInput
+    }
     case 'rect':
       return { ...common, type: 'rect', x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) }
     case 'ellipse':

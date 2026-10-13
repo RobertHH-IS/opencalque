@@ -14,6 +14,7 @@ export const PANELS = {
   objects: msg('Structure'),
   colors: msg('Colours'),
   wallTypes: msg('Wall types'),
+  dimensionStyles: msg('Dimension styles'),
   properties: msg('Properties'),
   assistant: msg('Assistant'),
 } as const

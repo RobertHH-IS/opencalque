@@ -254,6 +254,78 @@
         "properties": {
           "op": {
             "type": "string",
+            "const": "add_dimension_style"
+          },
+          "dimensionStyle": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "op",
+          "dimensionStyle"
+        ],
+        "additionalProperties": false,
+        "description": "Adds a dimension style: a name and whichever properties of a dimension it defines, under the same names (style, startMarker, size, unit…). Dimensions take it with \"dimensionStyle\": \"<id>\"."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "update_dimension_style"
+          },
+          "id": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Shallow merge patch: each key replaces that property, and a null value removes it."
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "patch"
+        ],
+        "additionalProperties": false,
+        "description": "Changes a dimension style; every dimension in it follows, except where it has a value of its own. A null in the patch makes the style stop defining that property."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "remove_dimension_style"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "id"
+        ],
+        "additionalProperties": false,
+        "description": "Removes a dimension style. Its dimensions keep how they look: what the style gave them becomes their own."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
             "const": "update_color"
           },
           "id": {

@@ -48,7 +48,7 @@ export interface Prefs {
 export const CLAUDE_MODELS: [string, string][] = [
   ['claude-opus-5-5', 'Claude Opus 5.5'],
   ['claude-sonnet-5-5', msg('Claude Sonnet 5.5 (faster, cheaper)')],
-  ['claude-haiku-4-5', msg('Claude Haiku 4.5 (fastest)')],
+  ['claude-haiku-5-5', msg('Claude Haiku 5.5 (fastest, cheapest)')],
   ['claude-fable-5-1', msg('Claude Fable 5.1 (most capable)')],
 ]
 

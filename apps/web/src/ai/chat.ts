@@ -4,7 +4,7 @@ import { t } from '../i18n'
 import { platform } from '../platform'
 import { CLAUDE_MODELS, setAiPrefs, usePrefs, type Prefs } from '../prefs'
 import { collapseHistory, registry, replaceDoc, useStore } from '../store'
-import { runRequest, systemPrompt, TOOLS, type AgentHost } from './agent'
+import { runRequest, systemPrompt, TOOLS, type AgentHost, type RequestContext } from './agent'
 import { anthropicProvider } from './anthropic'
 import { claudeCliProvider } from './claudecli'
 import { compatibleProvider, type Http } from './compatible'
@@ -75,9 +75,12 @@ export const useChat = create(() => ({
 }))
 
 const host: AgentHost = {
+  registry,
   state: () => {
-    const { doc, scope, selection } = useStore.getState()
-    return { doc, scope, selection }
+    const { doc, scope, selection, corner, activeLayer, view, viewport } = useStore.getState()
+    // What is on screen, in millimetres: the canvas's corners taken back through the view.
+    const visible = viewport.width > 0 ? { minX: -view.x / view.zoom, minY: -view.y / view.zoom, maxX: (viewport.width - view.x) / view.zoom, maxY: (viewport.height - view.y) / view.zoom } : null
+    return { doc, scope, selection, corner, activeLayer, visible }
   },
   apply: (ops) => replaceDoc(applyOps(useStore.getState().doc, ops)),
 }
@@ -177,7 +180,7 @@ function remember(): void {
   storeConversations(next)
 }
 
-export async function sendMessage(text: string, attachments: Attachment[] = []): Promise<void> {
+export async function sendMessage(text: string, attachments: Attachment[] = [], context: RequestContext = { selection: true }): Promise<void> {
   if (useChat.getState().busy || (text.trim() === '' && attachments.length === 0)) return
   const active = currentSession()
   add({ role: 'user', text, pictures: attachments.length > 0 ? attachments.map((a) => a.preview) : undefined })
@@ -191,7 +194,7 @@ export async function sendMessage(text: string, attachments: Attachment[] = []):
   // Everything the assistant changes for this request becomes one undo step.
   const mark = useStore.getState().past.length
   try {
-    await runRequest(active.session, host, message, { onText: write, onActivity: (kind, text) => add({ role: kind === 'done' ? 'activity' : 'error', text }) }, abort.signal, seen)
+    await runRequest(active.session, host, message, { onText: write, onActivity: (kind, text) => add({ role: kind === 'done' ? 'activity' : 'error', text }) }, abort.signal, seen, context)
   } catch (error) {
     add({ role: 'error', text: active.provider.describeError(error) || t('Stopped.') })
   } finally {

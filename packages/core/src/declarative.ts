@@ -227,7 +227,10 @@ export function declarativeExtension(json: unknown): Extension {
           out.push({ kind: 'text', x: x(scope), y: y(scope), text: pieces.map((piece) => shown(piece(scope))).join(''), size: Math.max(1, size(scope)), align, stroke: look.stroke })
       }
       return (scope, out) => {
-        const times = count ? Math.floor(Number(count(scope))) : 1
+        // Counted in turns, not only in shapes drawn: a condition that is never true draws nothing,
+        // and must not keep the loop going for ever.
+        const wanted = count ? Math.floor(Number(count(scope))) : 1
+        const times = Number.isFinite(wanted) ? Math.min(wanted, MAX_SHAPES) : 0
         for (let i = 0; i < times && out.length < MAX_SHAPES; i++) {
           const inner = count ? { ...scope, [index]: i } : scope
           if (!when || when(inner)) one(inner, out)

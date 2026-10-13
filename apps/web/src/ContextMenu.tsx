@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { allCommands, execute, formatKey, keysOf, useCommands } from './commands'
+import { allCommands, execute, formatKey, keysOf, useCommands, type Command } from './commands'
 import { t } from './i18n'
 import { useStore } from './store'
 
@@ -69,7 +69,17 @@ export function ContextMenu() {
 
   if (!at) return null
   const commands = allCommands()
-  const items = [...(hasSelection ? ON_SELECTION : ON_NOTHING), ...(onPicture ? [null, 'tool.calibrate'] : []), ...(onPolyline ? [null, 'shape.close', 'shape.open', 'shape.curve', 'shape.straighten'] : [])].map((id) => commands.find((c) => c.id === id) ?? null)
+  // Only what can be done to what was clicked: unlike the menu bar, whose items keep their places
+  // and are greyed, this menu leaves out what does not apply (Ungroup on a wall, Create component
+  // on a component), and the separators left doubled or at an end.
+  const items: (Command | null)[] = []
+  for (const id of [...(hasSelection ? ON_SELECTION : ON_NOTHING), ...(onPicture ? [null, 'tool.calibrate'] : []), ...(onPolyline ? [null, 'shape.close', 'shape.open', 'shape.curve', 'shape.straighten'] : [])]) {
+    const command = id === null ? null : commands.find((c) => c.id === id)
+    if (command === undefined || (command && command.when && !command.when())) continue
+    if (command === null && (items.length === 0 || items[items.length - 1] === null)) continue
+    items.push(command)
+  }
+  if (items[items.length - 1] === null) items.pop()
 
   return (
     <div ref={menu} className="menu-list context-menu" role="menu" style={position} onContextMenu={(e) => e.preventDefault()}>
@@ -80,7 +90,6 @@ export function ContextMenu() {
           <button
             key={item.id}
             role="menuitem"
-            disabled={item.when ? !item.when() : false}
             onClick={() => {
               close()
               execute(item)

@@ -13,8 +13,8 @@ import {
   newId,
   OpSchema,
   pagesOf,
-  parseDocument,
   parseOps,
+  readDocument,
   Registry,
   serializeDocument,
   toDXF,
@@ -22,13 +22,14 @@ import {
   type Document,
   toPDF,
   pdfFontCharacters,
+  unknownProperties,
 } from '@opencalque/core'
 import { architecture } from '@opencalque/ext-architecture'
 
 const USAGE = `opencalque <command>
 
-  new <file> [name]            Create an empty document
-  validate <file>              Check that a file is a valid document
+  new <file> [name] [--force]  Create an empty document (--force replaces an existing file)
+  validate <file>              Check that a file is a valid document; lists what opening it would repair
   describe <file>              Print a JSON summary: pages, layers, components, object counts
   apply <file> <ops.json>      Apply a JSON array of operations and save the file
   import <file> <drawing.dxf>...
@@ -40,7 +41,10 @@ const USAGE = `opencalque <command>
   dxf <file> [--page <id>] [--out <file.dxf>]
                                Export a page to DXF for other CAD programs
   schema [--out <dir>]         Print or write the JSON Schemas of documents and operations
+  --version                    Print the version
 `
+
+const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
 
 const registry = new Registry().use(architecture)
 const args = process.argv.slice(2)
@@ -51,7 +55,26 @@ function flag(name: string): string | undefined {
   return args.splice(i, 2)[1]
 }
 
-const read = (file: string): Document => parseDocument(JSON.parse(readFileSync(file, 'utf8')))
+/** Whether a flag that takes no value was given; it is taken out of the arguments. */
+function toggle(name: string): boolean {
+  const i = args.indexOf(`--${name}`)
+  if (i === -1) return false
+  args.splice(i, 1)
+  return true
+}
+
+/** What `read` had to put right in the files it read, to say before anything else. */
+const repaired: string[] = []
+
+/** Reads a drawing, putting right what would stop it from being edited (see repairDocument), and noting what was. */
+function read(file: string): Document {
+  const { doc, repairs } = readDocument(JSON.parse(readFileSync(file, 'utf8')))
+  for (const repair of repairs) {
+    repaired.push(repair)
+    console.error(`warning: ${file}: ${repair}`)
+  }
+  return doc
+}
 
 function describe(doc: Document) {
   const container = (id: string) => {
@@ -72,21 +95,32 @@ function describe(doc: Document) {
 function main(): void {
   const out = flag('out')
   const page = flag('page')
+  const force = toggle('force')
+  if (toggle('version')) return void console.log(VERSION)
+  if (toggle('help') || toggle('h')) return void process.stdout.write(USAGE)
   const [command, file, extra] = args
   switch (command) {
     case 'new':
+      if (!file) throw new Error('Give the name of the file to create.')
+      if (existsSync(file) && !force) throw new Error(`${file} already exists. Add --force to replace it with an empty drawing.`)
       writeFileSync(file, serializeDocument(createDocument(extra)))
       return
     case 'validate':
       read(file)
-      console.log('OK')
+      // A file that had to be put right to open is readable, but not as it should be.
+      if (repaired.length > 0) {
+        console.log(`${file} opens, but ${repaired.length} problem${repaired.length === 1 ? ' was' : 's were'} repaired (listed above). Applying any operation, or saving it from the app, writes the repaired drawing.`)
+        process.exitCode = 1
+      } else console.log('OK')
       return
     case 'describe':
       console.log(JSON.stringify(describe(read(file)), null, 2))
       return
     case 'apply': {
       const ops = parseOps(JSON.parse(readFileSync(extra, 'utf8')))
-      writeFileSync(file, serializeDocument(applyOps(read(file), ops)))
+      const doc = read(file)
+      writeFileSync(file, serializeDocument(applyOps(doc, ops)))
+      for (const warning of unknownProperties(doc, ops)) console.error(`warning: not a property of the format, kept but without effect: ${warning}`)
       console.log(`Applied ${ops.length} operations`)
       return
     }

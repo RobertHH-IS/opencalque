@@ -47,13 +47,35 @@ function compact(messages: Message[]): Message[] {
 }
 
 /**
+ * What each Claude model the app offers takes besides a plain request: adaptive thinking, the
+ * effort setting, and the server-side fallback that retries a request a safety classifier declined
+ * on the model Anthropic recommends (Claude Haiku 5.5 has no such fallback). A model not listed,
+ * such as one chosen in an older version of the app, gets a plain request, which every model takes.
+ */
+export const CLAUDE_FEATURES: Record<string, { thinking: boolean; effort: boolean; fallbacks: boolean }> = {
+  'claude-fable-5-1': { thinking: true, effort: true, fallbacks: true },
+  'claude-opus-5-5': { thinking: true, effort: true, fallbacks: true },
+  'claude-sonnet-5-5': { thinking: true, effort: true, fallbacks: true },
+  'claude-haiku-5-5': { thinking: true, effort: true, fallbacks: false },
+}
+
+/** The parts of a request that depend on the model (see CLAUDE_FEATURES). */
+export function modelOptions(model: string) {
+  const features = CLAUDE_FEATURES[model] ?? { thinking: false, effort: false, fallbacks: false }
+  return {
+    ...(features.thinking ? { thinking: { type: 'adaptive' as const } } : {}),
+    ...(features.effort ? { output_config: { effort: 'medium' as const } } : {}),
+    // If a safety classifier declines the request, it is retried on the model Anthropic recommends.
+    ...(features.fallbacks ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
+  }
+}
+
+/**
  * Claude through the Anthropic API, called straight from the app with the user's own key. That is
  * the right shape for a local app; a hosted version should route through a server that holds the key.
  */
 export function anthropicProvider(config: { apiKey: string; model: string }): Provider {
   const client = new Anthropic({ apiKey: config.apiKey, dangerouslyAllowBrowser: true })
-  // Claude Haiku 4.5 predates adaptive thinking, the effort setting and server-side fallbacks.
-  const current = !config.model.includes('haiku')
 
   return {
     pictures: true,
@@ -88,15 +110,7 @@ export function anthropicProvider(config: { apiKey: string; model: string }): Pr
                 // then no longer validates them, so every input is validated before a tool runs.
                 tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.schema as Anthropic.Beta.BetaTool['input_schema'], eager_input_streaming: true })),
                 messages: next,
-                ...(current
-                  ? {
-                      thinking: { type: 'adaptive' as const },
-                      output_config: { effort: 'medium' as const },
-                      // If a safety classifier declines the request, retry it on the model Anthropic recommends.
-                      betas: ['server-side-fallback-2026-07-01'],
-                      fallbacks: 'default' as const,
-                    }
-                  : {}),
+                ...modelOptions(config.model),
               },
               { signal },
             )

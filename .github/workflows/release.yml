@@ -1,5 +1,7 @@
 # Pushing a tag such as v0.2.0 builds the installers on each system and publishes a release on
-# GitHub with them attached, described by that version's section of CHANGELOG.md.
+# GitHub with them attached, described by that version's section of CHANGELOG.md. A tag with a
+# hyphen (v1.0.0-rc.1) is published as a pre-release. Nothing is published unless every system
+# built: a release missing its macOS or Windows installer would be worse than a late one.
 name: Release
 
 on:
@@ -42,8 +44,6 @@ jobs:
 
   publish:
     needs: build
-    # A system that failed to build does not hold back the installers of the others.
-    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,6 +52,10 @@ jobs:
           path: installers
           merge-multiple: true
       - run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > notes.md
-      - run: gh release create "$GITHUB_REF_NAME" installers/* --title "OpenCalque ${GITHUB_REF_NAME#v}" --notes-file notes.md
+      - run: |
+          # A version with a hyphen (1.0.0-rc.1) is a pre-release.
+          prerelease=""
+          if [[ "$GITHUB_REF_NAME" == *-* ]]; then prerelease="--prerelease"; fi
+          gh release create "$GITHUB_REF_NAME" installers/* --title "OpenCalque ${GITHUB_REF_NAME#v}" --notes-file notes.md $prerelease
         env:
           GH_TOKEN: ${{ github.token }}

@@ -1,4 +1,4 @@
-import { childrenOf, paperRescaled, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
+import { applyOps, dimensionStylePatch, newDimensionStyle, styledDimension, type Document, type NodeOf, childrenOf, paperRescaled, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
 import { executeById } from '../commands'
 import { useEffect, useRef, useState, useLayoutEffect, type ReactNode } from 'react'
 import { Pipette, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Undo2, SquareSplitHorizontal } from 'lucide-react'
@@ -17,7 +17,7 @@ interface Option {
   label: string
 }
 
-interface FieldSpec {
+export interface FieldSpec {
   /** Property path, one or two levels deep: "x", "a.x", "props.width", "style.stroke". */
   path: string
   label: string
@@ -74,7 +74,7 @@ const STYLE: FieldSpec[] = [...stroke(STROKE), ...fill()]
 /** Where the look of a selection is changed, and so where it can be taken from another object. */
 const LOOK_SECTIONS = [STROKE, 'Style']
 
-const DIMENSION: FieldSpec[] = [
+export const DIMENSION: FieldSpec[] = [
   ...AB,
   len('offset', msg('Offset')),
   ...stroke(msg('Dimension line')),
@@ -91,6 +91,15 @@ const DIMENSION: FieldSpec[] = [
   { path: 'textColor', label: msg('Color'), type: 'color', section: msg('Text'), fallback: '#1f1f1f', unset: msg('from line') },
   { path: 'textPosition', label: msg('Position'), type: 'string', section: msg('Text'), fallback: 'above', options: options(['above', msg('Above line')], ['center', msg('On line')], ['below', msg('Below line')]) },
   { path: 'textRotation', label: msg('Rotation'), type: 'string', section: msg('Text'), fallback: 'aligned', options: options(['aligned', msg('Along line')], ['horizontal', msg('Horizontal')]) },
+  // Which way the head turns to read the text of a vertical dimension.
+  {
+    path: 'verticalText',
+    label: msg('Vertical text'),
+    type: 'string',
+    section: msg('Text'),
+    fallback: 'down',
+    options: options(['up', msg('Bottom to top (head turned left)')], ['down', msg('Top to bottom (head turned right)')]),
+  },
   { path: 'unit', label: msg('Unit'), type: 'string', section: msg('Text'), fallback: 'mm', options: options(['mm', 'mm'], ['cm', 'cm'], ['m', 'm'], ['in', 'in'], ['ft', 'ft'], ['ft-in', msg('ft and in')]) },
   { ...num('decimals', msg('Decimals'), undefined, msg('Text')), optional: true },
   { path: 'showUnit', label: msg('Show unit'), type: 'boolean', section: msg('Text'), fallback: false },
@@ -210,7 +219,7 @@ function fieldsOf(node: Node): FieldSpec[] {
   return [...fields, ...own, ...STYLE]
 }
 
-function read(node: Node, path: string): unknown {
+export function read(node: object, path: string): unknown {
   return path.split('.').reduce<any>((value, key) => value?.[key], node)
 }
 
@@ -218,7 +227,7 @@ function read(node: Node, path: string): unknown {
  * The patch that sets `path` to `value`, replacing the top-level property it lives in.
  * An undefined value unsets the property, and removes its parent object once that is empty.
  */
-function patchFor(node: Node, path: string, value: unknown): Record<string, unknown> {
+export function patchFor(node: Node, path: string, value: unknown): Record<string, unknown> {
   const [head, key] = path.split('.')
   if (!key) return { [head]: value ?? null }
   const next: Record<string, unknown> = { ...(node as any)[head], [key]: value }
@@ -226,12 +235,12 @@ function patchFor(node: Node, path: string, value: unknown): Record<string, unkn
   return { [head]: value === undefined && Object.keys(next).length === 0 ? null : next }
 }
 
-type Update = (patch: (node: Node) => Record<string, unknown>) => void
+export type Update = (patch: (node: Node) => Record<string, unknown>) => void
 
 /** Properties that are sizes, which dragging must not take below zero. */
 const SIZES = /(^|\.)(width|height|thickness|rx|ry|size|markerSize|extensionGap|strokeWidth|opacity|decimals)$/
 
-function FieldRow({ node, nodes, field, update }: { node: Node; nodes: Node[]; field: FieldSpec; update: Update }) {
+export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: Node[]; field: FieldSpec; update: Update }) {
   // With several objects selected, a property they do not all agree on is shown as mixed, with no
   // value of its own; setting it gives them all the same.
   const seen = (n: Node) => JSON.stringify(read(n, field.path) ?? field.fallback ?? null)
@@ -313,7 +322,8 @@ function FieldRow({ node, nodes, field, update }: { node: Node; nodes: Node[]; f
         </select>
       )}
       {field.type === 'string' && (
-        <select value={mixed ? 'mixed' : ((value as string | undefined) ?? '')} onChange={(e) => commit(e.target.value || undefined)}>
+        // A style that defines the plain font says so as "sans-serif", which is what no font means here.
+        <select value={mixed ? 'mixed' : value === 'sans-serif' && !field.options!.some((option) => option.value === value) ? '' : ((value as string | undefined) ?? '')} onChange={(e) => commit(e.target.value || undefined)}>
           {mixed && <option value="mixed">{t('Mixed')}</option>}
           {field.options!.map((option) => (
             <option key={option.value} value={option.value}>
@@ -357,29 +367,32 @@ function typeValue(type: WallType, path: string): unknown {
 }
 
 /**
- * A property row that knows about wall types. For a wall whose type defines the property, the
- * row shows the type's value with a small link, as something the wall takes rather than has. A
- * wall may still be given a value of its own: the row is then marked as an exception, with a
- * button that gives the property back to the type.
+ * A property row that knows about wall types and dimension styles. For a wall whose type, or a
+ * dimension whose style, defines the property, the row shows that value with a small link, as
+ * something the object takes rather than has. It may still be given a value of its own: the row is
+ * then marked as an exception, with a button that gives the property back to the type or style.
  */
 function TypedRow(props: { node: Node; nodes: Node[]; field: FieldSpec; update: Update }) {
   const { node, nodes, field, update } = props
   const types = useStore((s) => s.doc.wallTypes)
+  const styles = useStore((s) => s.doc.dimensionStyles)
   const type = nodes.length === 1 && node.type === 'wall' && node.wallType ? types?.[node.wallType] : undefined
-  const fromType = type ? typeValue(type, field.path) : undefined
-  if (node.type !== 'wall' || fromType === undefined) return <FieldRow {...props} />
-  const own = field.path === 'thickness' ? (node.overrides ?? []).includes('thickness') : read(node, field.path) !== undefined
+  const style = nodes.length === 1 && node.type === 'dimension' && node.dimensionStyle ? styles?.[node.dimensionStyle] : undefined
+  const fromType = type ? typeValue(type, field.path) : style ? read(style, field.path) : undefined
+  if (fromType === undefined) return <FieldRow {...props} />
+  const thickness = node.type === 'wall' && field.path === 'thickness'
+  const own = thickness ? (node.overrides ?? []).includes('thickness') : read(node, field.path) !== undefined
   // Giving it back: the thickness by taking it off the list of exceptions, the others by having none of their own.
-  const giveBack = () => update((n) => (field.path === 'thickness' ? { overrides: null } : patchFor(n, field.path, undefined)))
+  const giveBack = () => update((n) => (thickness ? { overrides: null } : patchFor(n, field.path, undefined)))
   return (
     <div className={`typed-row${own ? ' own' : ''}`}>
-      <FieldRow {...props} field={field.type === 'pattern' ? { ...field, pattern: fromType as Pattern } : own ? field : { ...field, fallback: fromType as FieldSpec['fallback'], unset: msg('from its type') }} />
+      <FieldRow {...props} field={field.type === 'pattern' ? { ...field, pattern: fromType as Pattern } : own ? field : { ...field, fallback: fromType as FieldSpec['fallback'], unset: style ? msg('from its style') : msg('from its type') }} />
       {own ? (
-        <IconButton title={t('Differs from its wall type. Click to take the type’s value again')} onClick={giveBack}>
+        <IconButton title={style ? t('Differs from its dimension style. Click to take the style’s value again') : t('Differs from its wall type. Click to take the type’s value again')} onClick={giveBack}>
           <Undo2 size={12} />
         </IconButton>
       ) : (
-        <i className="typed-mark" title={t('From its wall type: change it there, or type a value here to make an exception')}>
+        <i className="typed-mark" title={style ? t('From its dimension style: change it there, or set a value here to make an exception') : t('From its wall type: change it there, or type a value here to make an exception')}>
           <Link2 size={11} />
         </i>
       )}
@@ -632,6 +645,54 @@ function WallTypeChoice({ walls }: { walls: Extract<Node, { type: 'wall' }>[] })
   )
 }
 
+/**
+ * A dimension style to choose: one of the drawing's styles, none, or a new style made from how
+ * the dimension looks. Changing it changes only what the new style defines (`dimensionStylePatch`).
+ */
+function DimensionStyleChoice(props: { value: string; label: string; onChange: (value: string) => void }) {
+  const styles = useStore((s) => s.doc.dimensionStyles)
+  return (
+    <>
+      <label className="field">
+        <span>{props.label}</span>
+        <select value={props.value} onChange={(e) => props.onChange(e.target.value)}>
+          {props.value === 'mixed' && <option value="mixed">{t('Mixed')}</option>}
+          <option value="">{t('No style')}</option>
+          {Object.values(styles ?? {}).map((style) => (
+            <option key={style.id} value={style.id}>
+              {style.name}
+            </option>
+          ))}
+          <option value="new">{t('New style from this dimension…')}</option>
+        </select>
+      </label>
+      {props.value !== '' && props.value !== 'mixed' && <p className="hint">{t('It takes what its style defines, shown with a link. A value set here instead is an exception, and the arrow beside it gives it back to the style.')}</p>}
+    </>
+  )
+}
+
+/** The operation that adds a style made from how a dimension looks, with its id. */
+function newStyleOp(doc: Document, dimension: Partial<NodeOf<'dimension'>>): { op: Op; id: string } {
+  const id = newId('dimstyle')
+  const name = t('Dimension style {n}', { n: Object.keys(doc.dimensionStyles ?? {}).length + 1 })
+  return { id, op: { op: 'add_dimension_style', dimensionStyle: { id, name, ...newDimensionStyle(styledDimension(doc, dimension)) } } }
+}
+
+/** The style of the selected dimensions. */
+function SelectedDimensionStyle({ dimensions }: { dimensions: NodeOf<'dimension'>[] }) {
+  const current = dimensions.every((d) => d.dimensionStyle === dimensions[0].dimensionStyle) ? (dimensions[0].dimensionStyle ?? '') : 'mixed'
+  const give = (value: string) => {
+    const { doc } = useStore.getState()
+    if (value === 'new') {
+      // Made from the first of them, and given to them all.
+      const made = newStyleOp(doc, dimensions[0])
+      const after = applyOps(doc, [made.op])
+      if (apply([made.op, ...dimensions.map((d): Op => ({ op: 'update_node', id: d.id, patch: dimensionStylePatch(after, d, made.id) }))])) showPanel('dimensionStyles')
+    } else apply(dimensions.map((d): Op => ({ op: 'update_node', id: d.id, patch: dimensionStylePatch(doc, d, value || null) })))
+  }
+  return <DimensionStyleChoice value={current} label={t('Dimension style')} onChange={give} />
+}
+
 /** How to curve a wall, and for one that is curved, the circle it follows. */
 function WallCurve({ wall }: { wall: Extract<Node, { type: 'wall' }> }) {
   const arc = wallArc(wall)
@@ -846,6 +907,7 @@ function Selection({ nodes }: { nodes: Node[] }) {
           </div>
         )}
         {nodes.every((n) => n.type === 'wall') && <WallTypeChoice walls={nodes as Extract<Node, { type: 'wall' }>[]} />}
+        {nodes.every((n) => n.type === 'dimension') && <SelectedDimensionStyle dimensions={nodes as NodeOf<'dimension'>[]} />}
         {single && node.type === 'wall' && <WallEnds wall={node} />}
         {single && node.type === 'wall' && <WallCurve wall={node} />}
         {single && node.type === 'paper' && <PaperSheet node={node} update={update} />}
@@ -941,10 +1003,24 @@ function DimensionTool() {
     }
     useStore.setState({ dimensionTemplate: next })
   }
+  const styles = useStore((s) => s.doc.dimensionStyles)
+  // A style chosen in another drawing is not this drawing's: its dimensions are drawn in none.
+  const style = typeof template.dimensionStyle === 'string' && styles?.[template.dimensionStyle] ? template.dimensionStyle : ''
+  const give = (value: string) => {
+    const { doc } = useStore.getState()
+    const settings = { ...template, dimensionStyle: style || undefined } as Partial<NodeOf<'dimension'>>
+    if (value === 'new') {
+      const made = newStyleOp(doc, { unit: unit(), ...settings })
+      if (!apply([made.op])) return
+      update(() => dimensionStylePatch(useStore.getState().doc, settings, made.id))
+      showPanel('dimensionStyles')
+    } else update(() => dimensionStylePatch(doc, settings, value || null))
+  }
   return (
     <>
       <Section title={t('Dimension tool')}>
         <p className="hint">{t('Click two points, then click again to set how far the dimension line stands off. These settings apply to the dimensions you draw next.')}</p>
+        <DimensionStyleChoice value={style} label={t('Dimension style')} onChange={give} />
       </Section>
       <Sections node={node} fields={DIMENSION.filter((f) => f.section)} update={update} />
     </>

@@ -11,6 +11,7 @@ import { t } from './i18n'
 import { Layout } from './Layout'
 import { MenuBar } from './MenuBar'
 import { platform } from './platform'
+import { startRecovery } from './recovery'
 import { Preferences } from './Preferences'
 import { isDirty, useStore } from './store'
 import { watchScrubKey } from './ui'
@@ -79,10 +80,19 @@ export function App() {
 
   useEffect(() => {
     startUp()
-    // The desktop app asks before closing with unsaved changes; it needs the words in this language.
-    platform.setCloseWarning({ message: t('You have unsaved changes.'), discard: t('Discard changes'), cancel: t('Cancel') })
+    // The desktop app asks its own questions (before closing with unsaved changes, before reaching a new service); it needs the words in this language.
+    platform.setDialogLabels({
+      unsaved: t('You have unsaved changes.'),
+      discard: t('Discard changes'),
+      cancel: t('Cancel'),
+      connect: t('Let the assistant connect to {origin}?'),
+      connectDetail: t('OpenCalque reaches an AI service only at an address set in Preferences. Allow it if you entered this address yourself.'),
+      allow: t('Allow'),
+      deny: t('Do not allow'),
+    })
   }, [])
   useEffect(startAutosave, [])
+  useEffect(startRecovery, [])
   useEffect(watchScrubKey, [])
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown)

@@ -1,6 +1,5 @@
 import { generateKeyBetween } from 'fractional-indexing'
-import * as z from 'zod'
-import { DocumentSchema, FORMAT, FORMAT_VERSION, FORMER_FORMAT, type ContainerNode, type Document, type Layer, type Node } from './schema'
+import { FORMAT, FORMAT_VERSION, type ContainerNode, type Document, type Layer, type Node } from './schema'
 
 export function newId(prefix = 'n'): string {
   const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
@@ -80,6 +79,21 @@ export function leavesOf(doc: Document, rootId: string): Node[] {
   return leaves
 }
 
+/**
+ * Whether a string is an order key that sorts and can be put between others: a key of the
+ * fractional-indexing package, such as "a0" or "a1V". Anything else ("top", "1") would sort, but
+ * nothing could ever be placed above or below it.
+ */
+export function isOrderKey(key: string): boolean {
+  if (!/^[A-Za-z][0-9A-Za-z]*$/.test(key)) return false
+  try {
+    generateKeyBetween(key, null)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** An order key between two neighbours; null stands for "before the first" or "after the last". */
 export const orderBetween = (below: string | null, above: string | null): string => generateKeyBetween(below, above)
 
@@ -121,12 +135,19 @@ export function checkIntegrity(doc: Document): string[] {
   const problems: string[] = []
   for (const [key, layer] of Object.entries(doc.layers)) {
     if (layer.id !== key) problems.push(`Layer key "${key}" does not match its id "${layer.id}"`)
+    if (!isOrderKey(layer.order)) problems.push(`Layer ${key}: "${layer.order}" is not an order key`)
+  }
+  for (const map of ['colors', 'wallTypes', 'dimensionStyles', 'assets'] as const) {
+    for (const [key, entry] of Object.entries(doc[map] ?? {})) if (entry.id !== key) problems.push(`${map} key "${key}" does not match its id "${entry.id}"`)
   }
   if (Object.keys(doc.layers).length === 0) problems.push('Document has no layer')
   if (!Object.values(doc.nodes).some((n) => n.type === 'page')) problems.push('Document has no page')
   for (const [key, node] of Object.entries(doc.nodes)) {
     if (node.id !== key) problems.push(`Node key "${key}" does not match its id "${node.id}"`)
+    if (!isOrderKey(node.order)) problems.push(`Node ${key}: "${node.order}" is not an order key`)
     if (node.layer !== undefined && !doc.layers[node.layer]) problems.push(`Node ${key}: unknown layer "${node.layer}"`)
+    if (node.type === 'wall' && node.wallType !== undefined && !doc.wallTypes?.[node.wallType]) problems.push(`Node ${key}: unknown wall type "${node.wallType}"`)
+    if (node.type === 'dimension' && node.dimensionStyle !== undefined && !doc.dimensionStyles?.[node.dimensionStyle]) problems.push(`Node ${key}: unknown dimension style "${node.dimensionStyle}"`)
     if (isContainer(node)) {
       if (node.parent !== null) problems.push(`Node ${key}: a ${node.type} cannot have a parent`)
       continue
@@ -144,17 +165,6 @@ export function checkIntegrity(doc: Document): string[] {
     }
   }
   return problems
-}
-
-/** Validates untrusted JSON into a document. Throws with a readable message when it is not one. */
-export function parseDocument(json: unknown): Document {
-  // Drawings saved while the project was called OpenCAD carry that name; the format is the same.
-  const current = typeof json === 'object' && json !== null && (json as { format?: unknown }).format === FORMER_FORMAT ? { ...json, format: FORMAT } : json
-  const result = DocumentSchema.safeParse(current)
-  if (!result.success) throw new Error(`Not a valid OpenCalque document:\n${z.prettifyError(result.error)}`)
-  const problems = checkIntegrity(result.data)
-  if (problems.length > 0) throw new Error(`Not a valid OpenCalque document:\n${problems.join('\n')}`)
-  return result.data
 }
 
 /** The document without its embedded files: everything a reader of the drawing needs, at a fraction of the size. */

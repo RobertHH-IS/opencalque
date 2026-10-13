@@ -13,6 +13,7 @@ import {
   copyNodes,
   componentsOf,
   createComponent,
+  detachInstance,
   createDocument,
   groupNodes,
   importComponents,
@@ -22,6 +23,8 @@ import {
   orderBefore,
   orderBetween,
   parseDocument,
+  readDocument,
+  NewerFormatError,
   paperContents,
   pasteNodes,
   sceneBounds,
@@ -56,8 +59,9 @@ import { language, t, tn } from './i18n'
 import { imperialUnit } from './units'
 import { pdfFonts } from './pdfFonts'
 import { abortable } from './abortable'
-import { platform } from './platform'
+import { platform, type OpenedFile } from './platform'
 import { usePrefs } from './prefs'
+import { recoverable } from './recovery'
 import { apply, cancel, commit, editComponent, isDirty, loadDocument, registry, replaceDoc, select, selectCorner, setTool, toast, useStore, showPage } from './store'
 
 const get = useStore.getState
@@ -88,11 +92,51 @@ export function newDocument(): void {
   if (confirmDiscard()) loadDocument(blankDocument(), null)
 }
 
+/**
+ * Reads the text of a drawing file. A drawing from a newer version of the app is refused in the
+ * user's language. One that needed putting right to open (see `repairDocument`) opens: what was
+ * done goes to the console, and `then`, called once the drawing is shown, says so.
+ */
+export function readDrawing(name: string, text: string): { doc: Document; then: () => void } {
+  let json: unknown
+  try {
+    json = JSON.parse(text)
+  } catch {
+    throw new Error(t('{file} is not an OpenCalque drawing: it does not hold JSON text.', { file: name }))
+  }
+  try {
+    const { doc, repairs } = readDocument(json)
+    if (repairs.length > 0) console.warn(`Put right on opening ${name}:\n${repairs.join('\n')}`)
+    // Said once the drawing is in place: loading one clears what was being said.
+    const then = () => {
+      if (repairs.length > 0) toast(tn(repairs.length, 'One problem in {file} was put right so that it could be opened. Save it to keep the repair.', '{n} problems in {file} were put right so that it could be opened. Save it to keep the repairs.', { file: name }))
+    }
+    return { doc, then }
+  } catch (error) {
+    if (error instanceof NewerFormatError) throw new Error(t('{file} was saved by a newer version of OpenCalque. Update OpenCalque to open it.', { file: name }))
+    throw new Error(t('{file} could not be opened: {reason}', { file: name, reason: (error as Error).message }))
+  }
+}
+
+/** Opens a drawing file that was chosen or handed over. */
+function openFile(file: OpenedFile): void {
+  const { doc, then } = readDrawing(file.name, file.content)
+  loadDocument(doc, file)
+  useStore.setState({ welcomeOpen: false })
+  then()
+}
+
 export const openDocument = () =>
   guarded(async () => {
     if (!confirmDiscard()) return
     const file = await platform.open(DRAWING_EXTENSIONS)
-    if (file) loadDocument(parseDocument(JSON.parse(file.content)), file)
+    if (file) openFile(file)
+  })
+
+/** Opens a drawing the system asked the running app to open (on macOS, a double-click in the Finder). */
+export const openRequested = (file: OpenedFile) =>
+  guarded(() => {
+    if (confirmDiscard()) openFile(file)
   })
 
 let started = false
@@ -106,9 +150,13 @@ export const startUp = () =>
     // The interface is rebuilt when the language changes; the app starts only once.
     if (started) return
     started = true
+    // Unsaved work from a window that stopped without closing is offered back in the welcome window.
+    const lost = (await recoverable()).length > 0
     const file = await platform.initial()
-    if (file) loadDocument(parseDocument(JSON.parse(file.content)), file)
-    else if (usePrefs.getState().showWelcome) useStore.setState({ welcomeOpen: true })
+    if (file) openFile(file)
+    if (lost || (!file && usePrefs.getState().showWelcome)) useStore.setState({ welcomeOpen: true })
+    // Asked only now, so that a drawing the app was started for counts as the one it was launched with.
+    platform.onOpenFile?.((file) => openRequested(file))
   })
 
 /** Opens the drawing that comes with the app, as a new one with no file: a furnished flat to explore. */
@@ -127,8 +175,7 @@ export const openRecent = (path: string) =>
     if (!confirmDiscard()) return
     const file = await platform.openRecent?.(path)
     if (!file) return toast(t('This file is no longer there'))
-    loadDocument(parseDocument(JSON.parse(file.content)), file)
-    useStore.setState({ welcomeOpen: false })
+    openFile(file)
   })
 
 export const saveDocument = (saveAs = false) =>
@@ -271,12 +318,22 @@ export const exportQuantities = (pageId?: string) =>
     await platform.save(csv, `${baseName()}.csv`)
   })
 
+/**
+ * The settings of the dimension tool, for the dimensions it draws next in this drawing: the style
+ * among them only if this drawing has it, since the settings outlive the drawing they were made in.
+ */
+export function dimensionToolLook(): Record<string, unknown> {
+  const { doc, dimensionTemplate } = get()
+  const { dimensionStyle, ...look } = dimensionTemplate
+  return typeof dimensionStyle === 'string' && doc.dimensionStyles?.[dimensionStyle] ? { ...look, dimensionStyle } : look
+}
+
 /** Dimensions the selected walls: a chain along each, through its doors and windows, on the outside of the plan. */
 export function dimensionWalls(): void {
-  const { doc, selection, dimensionTemplate } = get()
+  const { doc, selection } = get()
   const walls = selection.flatMap((id) => (doc.nodes[id]?.type === 'wall' ? [doc.nodes[id] as Extract<Node, { type: 'wall' }>] : []))
   if (walls.length === 0) return toast(t('Select the walls to dimension first.'))
-  apply(dimensionChainOps(doc, walls, registry, dimensionTemplate, t('Dimensions')))
+  apply(dimensionChainOps(doc, walls, registry, dimensionToolLook(), t('Dimensions')))
 }
 
 /** Exports one page (or, without one given, what is being edited) as a picture. */
@@ -569,19 +626,25 @@ export const groupSelection = () =>
     select([result.groupId])
   })
 
-/** Dissolves every selected group, leaving what was inside selected. */
+/**
+ * Dissolves every selected group, and turns every selected component into objects of the drawing
+ * that no longer follow it, leaving what was inside selected.
+ */
 export const ungroupSelection = () =>
   guarded(() => {
     let { doc } = get()
     const freed: string[] = []
     for (const id of get().selection) {
-      if (doc.nodes[id]?.type !== 'group') {
-        freed.push(id)
-        continue
-      }
-      const result = ungroupNode(doc, id)
-      doc = result.doc
-      freed.push(...result.childIds)
+      const type = doc.nodes[id]?.type
+      if (type === 'group') {
+        const result = ungroupNode(doc, id)
+        doc = result.doc
+        freed.push(...result.childIds)
+      } else if (type === 'instance') {
+        const result = detachInstance(doc, id, registry)
+        doc = result.doc
+        freed.push(...result.ids)
+      } else freed.push(id)
     }
     replaceDoc(doc)
     select(freed)
