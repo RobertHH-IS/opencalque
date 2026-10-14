@@ -27,8 +27,8 @@
       "type": "component",
       "description": "Ø 300"
     },
-    "n_dxhzo019cu": {
-      "id": "n_dxhzo019cu",
+    "electrical_1_1": {
+      "id": "electrical_1_1",
       "parent": "electrical_1",
       "order": "a0",
       "type": "ellipse",
@@ -37,8 +37,8 @@
       "rx": 150,
       "ry": 150
     },
-    "n_ad0fzlvgrl": {
-      "id": "n_ad0fzlvgrl",
+    "electrical_1_2": {
+      "id": "electrical_1_2",
       "parent": "electrical_1",
       "order": "a1",
       "type": "line",
@@ -51,8 +51,8 @@
         "y": 256
       }
     },
-    "n_mayvtd5azf": {
-      "id": "n_mayvtd5azf",
+    "electrical_1_3": {
+      "id": "electrical_1_3",
       "parent": "electrical_1",
       "order": "a2",
       "type": "line",
@@ -73,8 +73,8 @@
       "type": "component",
       "description": "Ø 300"
     },
-    "n_y6qa41xai3": {
-      "id": "n_y6qa41xai3",
+    "electrical_2_1": {
+      "id": "electrical_2_1",
       "parent": "electrical_2",
       "order": "a0",
       "type": "ellipse",
@@ -83,8 +83,8 @@
       "rx": 150,
       "ry": 150
     },
-    "n_887juhmoef": {
-      "id": "n_887juhmoef",
+    "electrical_2_2": {
+      "id": "electrical_2_2",
       "parent": "electrical_2",
       "order": "a1",
       "type": "ellipse",
@@ -93,8 +93,8 @@
       "rx": 90,
       "ry": 90
     },
-    "n_ew7wmqbtoe": {
-      "id": "n_ew7wmqbtoe",
+    "electrical_2_3": {
+      "id": "electrical_2_3",
       "parent": "electrical_2",
       "order": "a2",
       "type": "line",
@@ -107,8 +107,8 @@
         "y": 214
       }
     },
-    "n_780i30warf": {
-      "id": "n_780i30warf",
+    "electrical_2_4": {
+      "id": "electrical_2_4",
       "parent": "electrical_2",
       "order": "a3",
       "type": "line",
@@ -129,8 +129,8 @@
       "type": "component",
       "description": "Top edge on the wall"
     },
-    "n_f1yzmxd2wn": {
-      "id": "n_f1yzmxd2wn",
+    "electrical_3_1": {
+      "id": "electrical_3_1",
       "parent": "electrical_3",
       "order": "a0",
       "type": "line",
@@ -143,8 +143,8 @@
         "y": 0
       }
     },
-    "n_0rqwgew2d2": {
-      "id": "n_0rqwgew2d2",
+    "electrical_3_2": {
+      "id": "electrical_3_2",
       "parent": "electrical_3",
       "order": "a1",
       "type": "polyline",
@@ -220,8 +220,8 @@
       ],
       "closed": false
     },
-    "n_5zs6ehtd19": {
-      "id": "n_5zs6ehtd19",
+    "electrical_3_3": {
+      "id": "electrical_3_3",
       "parent": "electrical_3",
       "order": "a2",
       "type": "line",
@@ -234,8 +234,8 @@
         "y": 106
       }
     },
-    "n_mmom2k8x9t": {
-      "id": "n_mmom2k8x9t",
+    "electrical_3_4": {
+      "id": "electrical_3_4",
       "parent": "electrical_3",
       "order": "a3",
       "type": "line",
@@ -256,8 +256,8 @@
       "type": "component",
       "description": "Ø 120"
     },
-    "n_12emxqhluy": {
-      "id": "n_12emxqhluy",
+    "electrical_4_1": {
+      "id": "electrical_4_1",
       "parent": "electrical_4",
       "order": "a0",
       "type": "ellipse",
@@ -266,8 +266,8 @@
       "rx": 60,
       "ry": 60
     },
-    "n_5qt5oqcwzv": {
-      "id": "n_5qt5oqcwzv",
+    "electrical_4_2": {
+      "id": "electrical_4_2",
       "parent": "electrical_4",
       "order": "a1",
       "style": {
@@ -287,8 +287,8 @@
       "type": "component",
       "description": "1200 × 100"
     },
-    "n_nf14w90un2": {
-      "id": "n_nf14w90un2",
+    "electrical_5_1": {
+      "id": "electrical_5_1",
       "parent": "electrical_5",
       "order": "a0",
       "type": "rect",
@@ -297,8 +297,8 @@
       "width": 1200,
       "height": 100
     },
-    "n_5jt2mb5bsa": {
-      "id": "n_5jt2mb5bsa",
+    "electrical_5_2": {
+      "id": "electrical_5_2",
       "parent": "electrical_5",
       "order": "a1",
       "type": "line",
@@ -319,8 +319,8 @@
       "type": "component",
       "description": "Top edge on the wall"
     },
-    "n_7k5nk8xcf8": {
-      "id": "n_7k5nk8xcf8",
+    "electrical_6_1": {
+      "id": "electrical_6_1",
       "parent": "electrical_6",
       "order": "a0",
       "type": "line",
@@ -333,8 +333,8 @@
         "y": 100
       }
     },
-    "n_rdoczoxqop": {
-      "id": "n_rdoczoxqop",
+    "electrical_6_2": {
+      "id": "electrical_6_2",
       "parent": "electrical_6",
       "order": "a1",
       "type": "line",
@@ -347,8 +347,8 @@
         "y": 100
       }
     },
-    "n_lhfshcthsc": {
-      "id": "n_lhfshcthsc",
+    "electrical_6_3": {
+      "id": "electrical_6_3",
       "parent": "electrical_6",
       "order": "a2",
       "type": "polyline",
@@ -432,8 +432,8 @@
       "type": "component",
       "description": "Top edge on the wall"
     },
-    "n_k147lep3vc": {
-      "id": "n_k147lep3vc",
+    "electrical_7_1": {
+      "id": "electrical_7_1",
       "parent": "electrical_7",
       "order": "a0",
       "type": "line",
@@ -446,8 +446,8 @@
         "y": 100
       }
     },
-    "n_icr1zjmv3d": {
-      "id": "n_icr1zjmv3d",
+    "electrical_7_2": {
+      "id": "electrical_7_2",
       "parent": "electrical_7",
       "order": "a1",
       "type": "line",
@@ -460,8 +460,8 @@
         "y": 100
       }
     },
-    "n_tlt3cvpkkn": {
-      "id": "n_tlt3cvpkkn",
+    "electrical_7_3": {
+      "id": "electrical_7_3",
       "parent": "electrical_7",
       "order": "a2",
       "type": "polyline",
@@ -537,8 +537,8 @@
       ],
       "closed": false
     },
-    "n_auk2mb5be6": {
-      "id": "n_auk2mb5be6",
+    "electrical_7_4": {
+      "id": "electrical_7_4",
       "parent": "electrical_7",
       "order": "a3",
       "type": "line",
@@ -551,8 +551,8 @@
         "y": 100
       }
     },
-    "n_5ul4z2pv17": {
-      "id": "n_5ul4z2pv17",
+    "electrical_7_5": {
+      "id": "electrical_7_5",
       "parent": "electrical_7",
       "order": "a4",
       "type": "line",
@@ -565,8 +565,8 @@
         "y": 100
       }
     },
-    "n_1pdwcxp650": {
-      "id": "n_1pdwcxp650",
+    "electrical_7_6": {
+      "id": "electrical_7_6",
       "parent": "electrical_7",
       "order": "a5",
       "type": "polyline",
@@ -650,8 +650,8 @@
       "type": "component",
       "description": "For a cooker. Top edge on the wall"
     },
-    "n_2u3jcxg38c": {
-      "id": "n_2u3jcxg38c",
+    "electrical_8_1": {
+      "id": "electrical_8_1",
       "parent": "electrical_8",
       "order": "a0",
       "type": "line",
@@ -664,8 +664,8 @@
         "y": 100
       }
     },
-    "n_2t8gs0mld3": {
-      "id": "n_2t8gs0mld3",
+    "electrical_8_2": {
+      "id": "electrical_8_2",
       "parent": "electrical_8",
       "order": "a1",
       "style": {
@@ -752,8 +752,8 @@
       "type": "component",
       "description": "Top edge on the wall"
     },
-    "n_3cc6mvt63w": {
-      "id": "n_3cc6mvt63w",
+    "electrical_9_1": {
+      "id": "electrical_9_1",
       "parent": "electrical_9",
       "order": "a0",
       "type": "line",
@@ -766,8 +766,8 @@
         "y": 100
       }
     },
-    "n_eg1of7r8y8": {
-      "id": "n_eg1of7r8y8",
+    "electrical_9_2": {
+      "id": "electrical_9_2",
       "parent": "electrical_9",
       "order": "a1",
       "type": "line",
@@ -780,8 +780,8 @@
         "y": 100
       }
     },
-    "n_xc7m6xmoxe": {
-      "id": "n_xc7m6xmoxe",
+    "electrical_9_3": {
+      "id": "electrical_9_3",
       "parent": "electrical_9",
       "order": "a2",
       "type": "polyline",
@@ -857,8 +857,8 @@
       ],
       "closed": false
     },
-    "n_5z3gpcop55": {
-      "id": "n_5z3gpcop55",
+    "electrical_9_4": {
+      "id": "electrical_9_4",
       "parent": "electrical_9",
       "order": "a3",
       "type": "text",
@@ -875,8 +875,8 @@
       "type": "component",
       "description": "RJ45"
     },
-    "n_b5y7ncvhtn": {
-      "id": "n_b5y7ncvhtn",
+    "electrical_10_1": {
+      "id": "electrical_10_1",
       "parent": "electrical_10",
       "order": "a0",
       "type": "rect",
@@ -885,8 +885,8 @@
       "width": 300,
       "height": 300
     },
-    "n_68fe5mebz5": {
-      "id": "n_68fe5mebz5",
+    "electrical_10_2": {
+      "id": "electrical_10_2",
       "parent": "electrical_10",
       "order": "a1",
       "type": "text",
@@ -903,8 +903,8 @@
       "type": "component",
       "description": "One-way"
     },
-    "n_630lyeb0ws": {
-      "id": "n_630lyeb0ws",
+    "electrical_11_1": {
+      "id": "electrical_11_1",
       "parent": "electrical_11",
       "order": "a0",
       "type": "ellipse",
@@ -913,8 +913,8 @@
       "rx": 75,
       "ry": 75
     },
-    "n_ofy2rx4fc4": {
-      "id": "n_ofy2rx4fc4",
+    "electrical_11_2": {
+      "id": "electrical_11_2",
       "parent": "electrical_11",
       "order": "a1",
       "type": "line",
@@ -927,8 +927,8 @@
         "y": 75
       }
     },
-    "n_g3taau570p": {
-      "id": "n_g3taau570p",
+    "electrical_11_3": {
+      "id": "electrical_11_3",
       "parent": "electrical_11",
       "order": "a2",
       "type": "line",
@@ -949,8 +949,8 @@
       "type": "component",
       "description": "Two circuits"
     },
-    "n_wczl7huzla": {
-      "id": "n_wczl7huzla",
+    "electrical_12_1": {
+      "id": "electrical_12_1",
       "parent": "electrical_12",
       "order": "a0",
       "type": "ellipse",
@@ -959,8 +959,8 @@
       "rx": 75,
       "ry": 75
     },
-    "n_7nrkhbeuvj": {
-      "id": "n_7nrkhbeuvj",
+    "electrical_12_2": {
+      "id": "electrical_12_2",
       "parent": "electrical_12",
       "order": "a1",
       "type": "line",
@@ -973,8 +973,8 @@
         "y": 75
       }
     },
-    "n_pcf83ss25v": {
-      "id": "n_pcf83ss25v",
+    "electrical_12_3": {
+      "id": "electrical_12_3",
       "parent": "electrical_12",
       "order": "a2",
       "type": "line",
@@ -987,8 +987,8 @@
         "y": 135
       }
     },
-    "n_iirsehqasx": {
-      "id": "n_iirsehqasx",
+    "electrical_12_4": {
+      "id": "electrical_12_4",
       "parent": "electrical_12",
       "order": "a3",
       "type": "line",
@@ -1009,8 +1009,8 @@
       "type": "component",
       "description": "One of two controlling the same light"
     },
-    "n_wqw382eelr": {
-      "id": "n_wqw382eelr",
+    "electrical_13_1": {
+      "id": "electrical_13_1",
       "parent": "electrical_13",
       "order": "a0",
       "type": "ellipse",
@@ -1019,8 +1019,8 @@
       "rx": 75,
       "ry": 75
     },
-    "n_fob6l5k61w": {
-      "id": "n_fob6l5k61w",
+    "electrical_13_2": {
+      "id": "electrical_13_2",
       "parent": "electrical_13",
       "order": "a1",
       "type": "line",
@@ -1033,8 +1033,8 @@
         "y": 75
       }
     },
-    "n_1bc2ztrhfi": {
-      "id": "n_1bc2ztrhfi",
+    "electrical_13_3": {
+      "id": "electrical_13_3",
       "parent": "electrical_13",
       "order": "a2",
       "type": "line",
@@ -1047,8 +1047,8 @@
         "y": 135
       }
     },
-    "n_adlvfhb4em": {
-      "id": "n_adlvfhb4em",
+    "electrical_13_4": {
+      "id": "electrical_13_4",
       "parent": "electrical_13",
       "order": "a3",
       "type": "line",
@@ -1061,8 +1061,8 @@
         "y": 525
       }
     },
-    "n_j0c84e60ap": {
-      "id": "n_j0c84e60ap",
+    "electrical_13_5": {
+      "id": "electrical_13_5",
       "parent": "electrical_13",
       "order": "a4",
       "type": "line",
@@ -1083,8 +1083,8 @@
       "type": "component",
       "description": "Ø 200"
     },
-    "n_o4j6qjfcj6": {
-      "id": "n_o4j6qjfcj6",
+    "electrical_14_1": {
+      "id": "electrical_14_1",
       "parent": "electrical_14",
       "order": "a0",
       "type": "ellipse",
@@ -1093,8 +1093,8 @@
       "rx": 100,
       "ry": 100
     },
-    "n_7tf6ogw8ty": {
-      "id": "n_7tf6ogw8ty",
+    "electrical_14_2": {
+      "id": "electrical_14_2",
       "parent": "electrical_14",
       "order": "a1",
       "type": "ellipse",
@@ -1111,8 +1111,8 @@
       "type": "component",
       "description": "Switch with a dimmer"
     },
-    "n_im8a6vkkao": {
-      "id": "n_im8a6vkkao",
+    "electrical_15_1": {
+      "id": "electrical_15_1",
       "parent": "electrical_15",
       "order": "a0",
       "type": "ellipse",
@@ -1121,8 +1121,8 @@
       "rx": 75,
       "ry": 75
     },
-    "n_67eijfdixg": {
-      "id": "n_67eijfdixg",
+    "electrical_15_2": {
+      "id": "electrical_15_2",
       "parent": "electrical_15",
       "order": "a1",
       "type": "line",
@@ -1135,8 +1135,8 @@
         "y": 75
       }
     },
-    "n_0ho5exm4bq": {
-      "id": "n_0ho5exm4bq",
+    "electrical_15_3": {
+      "id": "electrical_15_3",
       "parent": "electrical_15",
       "order": "a2",
       "type": "line",
@@ -1149,8 +1149,8 @@
         "y": 135
       }
     },
-    "n_ocrap4v4j8": {
-      "id": "n_ocrap4v4j8",
+    "electrical_15_4": {
+      "id": "electrical_15_4",
       "parent": "electrical_15",
       "order": "a3",
       "style": {
@@ -1181,8 +1181,8 @@
       "type": "component",
       "description": "600 × 250"
     },
-    "n_sv9u2q6n29": {
-      "id": "n_sv9u2q6n29",
+    "electrical_16_1": {
+      "id": "electrical_16_1",
       "parent": "electrical_16",
       "order": "a0",
       "type": "rect",
@@ -1191,8 +1191,8 @@
       "width": 600,
       "height": 250
     },
-    "n_zttkn23tj7": {
-      "id": "n_zttkn23tj7",
+    "electrical_16_2": {
+      "id": "electrical_16_2",
       "parent": "electrical_16",
       "order": "a1",
       "style": {
@@ -1223,8 +1223,8 @@
       "type": "component",
       "description": "200 × 200"
     },
-    "n_bdflv7dfhn": {
-      "id": "n_bdflv7dfhn",
+    "electrical_17_1": {
+      "id": "electrical_17_1",
       "parent": "electrical_17",
       "order": "a0",
       "type": "rect",
@@ -1233,8 +1233,8 @@
       "width": 200,
       "height": 200
     },
-    "n_gqu69apr3n": {
-      "id": "n_gqu69apr3n",
+    "electrical_17_2": {
+      "id": "electrical_17_2",
       "parent": "electrical_17",
       "order": "a1",
       "type": "line",
@@ -1247,8 +1247,8 @@
         "y": 200
       }
     },
-    "n_f1h1ama9ef": {
-      "id": "n_f1h1ama9ef",
+    "electrical_17_3": {
+      "id": "electrical_17_3",
       "parent": "electrical_17",
       "order": "a2",
       "type": "line",
@@ -1269,8 +1269,8 @@
       "type": "component",
       "description": "300 × 300"
     },
-    "n_lo8vbpd42t": {
-      "id": "n_lo8vbpd42t",
+    "electrical_18_1": {
+      "id": "electrical_18_1",
       "parent": "electrical_18",
       "order": "a0",
       "type": "rect",
@@ -1279,8 +1279,8 @@
       "width": 300,
       "height": 300
     },
-    "n_raxzykkr3i": {
-      "id": "n_raxzykkr3i",
+    "electrical_18_2": {
+      "id": "electrical_18_2",
       "parent": "electrical_18",
       "order": "a1",
       "type": "ellipse",
@@ -1289,8 +1289,8 @@
       "rx": 100,
       "ry": 100
     },
-    "n_258b9diarn": {
-      "id": "n_258b9diarn",
+    "electrical_18_3": {
+      "id": "electrical_18_3",
       "parent": "electrical_18",
       "order": "a2",
       "style": {
@@ -1310,8 +1310,8 @@
       "type": "component",
       "description": "Ø 400"
     },
-    "n_1h3us1h6o9": {
-      "id": "n_1h3us1h6o9",
+    "electrical_19_1": {
+      "id": "electrical_19_1",
       "parent": "electrical_19",
       "order": "a0",
       "type": "ellipse",
@@ -1320,8 +1320,8 @@
       "rx": 200,
       "ry": 200
     },
-    "n_pfewsy6zna": {
-      "id": "n_pfewsy6zna",
+    "electrical_19_2": {
+      "id": "electrical_19_2",
       "parent": "electrical_19",
       "order": "a1",
       "type": "polyline",
@@ -1353,8 +1353,8 @@
       "type": "component",
       "description": "1000 × 120"
     },
-    "n_i7bjo02l8m": {
-      "id": "n_i7bjo02l8m",
+    "electrical_20_1": {
+      "id": "electrical_20_1",
       "parent": "electrical_20",
       "order": "a0",
       "type": "rect",
@@ -1363,8 +1363,8 @@
       "width": 1000,
       "height": 120
     },
-    "n_jttdvy676j": {
-      "id": "n_jttdvy676j",
+    "electrical_20_2": {
+      "id": "electrical_20_2",
       "parent": "electrical_20",
       "order": "a1",
       "type": "line",
@@ -1377,8 +1377,8 @@
         "y": 120
       }
     },
-    "n_vh5i5s2f70": {
-      "id": "n_vh5i5s2f70",
+    "electrical_20_3": {
+      "id": "electrical_20_3",
       "parent": "electrical_20",
       "order": "a2",
       "type": "line",
@@ -1391,8 +1391,8 @@
         "y": 120
       }
     },
-    "n_hlovp50ika": {
-      "id": "n_hlovp50ika",
+    "electrical_20_4": {
+      "id": "electrical_20_4",
       "parent": "electrical_20",
       "order": "a3",
       "type": "line",
@@ -1405,8 +1405,8 @@
         "y": 120
       }
     },
-    "n_ekmq9icigl": {
-      "id": "n_ekmq9icigl",
+    "electrical_20_5": {
+      "id": "electrical_20_5",
       "parent": "electrical_20",
       "order": "a4",
       "type": "line",
@@ -1419,8 +1419,8 @@
         "y": 120
       }
     },
-    "n_quyo8gpuyn": {
-      "id": "n_quyo8gpuyn",
+    "electrical_20_6": {
+      "id": "electrical_20_6",
       "parent": "electrical_20",
       "order": "a5",
       "type": "line",
@@ -1433,8 +1433,8 @@
         "y": 120
       }
     },
-    "n_ai1jvbq1oo": {
-      "id": "n_ai1jvbq1oo",
+    "electrical_20_7": {
+      "id": "electrical_20_7",
       "parent": "electrical_20",
       "order": "a6",
       "type": "line",
@@ -1447,8 +1447,8 @@
         "y": 120
       }
     },
-    "n_22obt8dt3s": {
-      "id": "n_22obt8dt3s",
+    "electrical_20_8": {
+      "id": "electrical_20_8",
       "parent": "electrical_20",
       "order": "a7",
       "type": "line",
@@ -1461,8 +1461,8 @@
         "y": 120
       }
     },
-    "n_3ja5bbc5qq": {
-      "id": "n_3ja5bbc5qq",
+    "electrical_20_9": {
+      "id": "electrical_20_9",
       "parent": "electrical_20",
       "order": "a8",
       "type": "line",
@@ -1475,8 +1475,8 @@
         "y": 120
       }
     },
-    "n_8ivvx7p2el": {
-      "id": "n_8ivvx7p2el",
+    "electrical_20_10": {
+      "id": "electrical_20_10",
       "parent": "electrical_20",
       "order": "a9",
       "type": "line",

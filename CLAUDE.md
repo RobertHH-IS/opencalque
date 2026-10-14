@@ -15,6 +15,7 @@ pnpm e2e          # builds the web app and drives it in Chromium (Playwright, e2
 pnpm build && pnpm smoke   # scripted interaction test; prints a folder of screenshots to inspect
 pnpm dist         # package the installer for this system (apps/desktop/dist)
 pnpm schema       # regenerate schema/*.json after changing packages/core/src/schema.ts
+pnpm rooms:gallery # draw the plans rooms are tested on, to look them over
 ```
 
 Agent terminals have `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. Prefix Electron commands with `env -u ELECTRON_RUN_AS_NODE`.
@@ -43,7 +44,7 @@ Agent terminals have `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. Prefix Ele
 - A provider's `ChatSession` must implement `snapshot()` and accept it back as `history`, without picture data, so conversations can be stored and resumed.
 - A paper has no children: what lies inside its rectangle is on it, by position (`paperContents`). Moving or transforming a paper leaves what is on it where it is (the sheet is a frame put over the drawing); only copying, cutting and duplicating take the contents along, through `withPaperContents` in `apps/web/src/actions.ts`. Moves on the canvas also add `wallFollowOps` so joined walls stay joined.
 - What shows on every sheet (a title, a logo, a north arrow) is one component with a `sheet` size, in millimetres of real paper, which every paper draws over itself at its scale (`templates.ts`, `sheetContent` in `kinds.ts`). There is one per drawing and nothing is chosen per paper, only left out (`plain`). Do not bring back layers shown on every page, nor templates chosen from a list: both were tried and removed. The title block stays separate.
-- A room stores a point, never an outline: its floor comes from `roomAt` (`packages/core/src/rooms.ts`) each time it is drawn. Do not cache a room's shape in the document.
+- A room stores a point, never an outline: its floor comes from `roomAt` (`packages/core/src/rooms.ts`) each time it is drawn. Do not cache a room's shape in the document. A room is the space the walls leave as they are drawn; do not go back to rules about which wall ends nearly meet. When a room comes out wrong, add its plan to `packages/core/test/fixtures/rooms` (numbers only, no names) and keep `rooms-robust.test.ts` passing.
 - A colour property may be a reference to a shared colour, `var(--<id>)`, or `var(--layer)` (`LAYER_COLOR`), the colour of the node's layer. Resolve it with `resolveColor` (passing the layer's colour) before using it as a colour; never write the resolved value back into a node.
 - Modifiers (`packages/core/src/modifiers.ts`) are pure functions from primitives to primitives, run in list order at the end of `nodePrimitives`. Positions in a modifier are relative to its `frame`, which is all that moving and transforming code touches. Never make a modifier read or change the document.
 - Hints and the size fields depend on `drawStep` in the store; show nothing that cannot be used at the current step.
@@ -57,6 +58,7 @@ Agent terminals have `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. Prefix Ele
 - A wall type defines only the properties it gives a value to; the user decides which. A wall takes those, and may differ (its own `height` or `style`, or `'thickness'` in its `overrides`). A wall's `thickness` is always stored on the wall and kept in step with its type by `applyOps`: geometry code reads `wall.thickness` and never looks a type up. Heights are for measuring only; nothing is drawn with them.
 - An arc is an `ellipse` with `from`/`to`, a curve is a `polyline` with `smooth`: do not add node types for them. Use `arcOf` to know whether an ellipse is an arc.
 - Doors and windows are tied to walls by position, not by reference. Wall geometry lives in `packages/core/src/walls.ts`.
+- A wall's `a`-`b` is its line, which is its middle only when it has no `justify`; otherwise it is one of its faces. Read where its faces are with `wallSides` (and `wallSpot`, `wallContains`), never as half the thickness each side of `a`-`b`. Doors and windows sit in the middle of the thickness, not on the line.
 
 ## Open questions for the owner
 

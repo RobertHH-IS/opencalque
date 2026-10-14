@@ -1804,7 +1804,7 @@
               "y"
             ],
             "additionalProperties": false,
-            "description": "A room: the space enclosed by the walls and dividers around the point (x, y), which is also where its name and area are written. Its outline is not stored: it is found from the walls each time, so it follows them. Give it a \"name\". style.fill colours the floor. If the walls around the point do not close, only the name is drawn."
+            "description": "A room: the space enclosed by the walls and dividers around the point (x, y), which is also where its name and area are written. Its outline is not stored: it is found from the walls each time, so it follows them. Give it a \"name\". style.fill colours the floor and style.pattern covers it (tiles, planks); style.stroke is the colour of the name and area. If the walls around the point do not close, only the name is drawn."
           },
           {
             "type": "object",
@@ -3110,8 +3110,17 @@
                 "exclusiveMinimum": 0,
                 "description": "In mm. For a wall of a type that defines a thickness it is kept equal to the type's, unless \"overrides\" lists it."
               },
+              "justify": {
+                "description": "Which line of the wall a and b are: absent or \"center\", its middle; \"left\" or \"right\", that face, as the wall runs from a to b, the whole thickness then lying on the other side. Corners are where these lines meet, so walls drawn by the same face keep that face flush whatever their thicknesses, and a change of thickness grows away from the line.",
+                "type": "string",
+                "enum": [
+                  "left",
+                  "center",
+                  "right"
+                ]
+              },
               "bulge": {
-                "description": "Makes the wall curved: how far, in mm, the middle of its centerline stands off the straight line from a to b, the wall then following the arc of a circle through a, that point and b. Positive bows to the right of the direction a to b as seen on screen, negative to the left. At most half the distance from a to b, which is a half circle. Absent or 0 is a straight wall.",
+                "description": "Makes the wall curved: how far, in mm, the middle of its line (see \"justify\") stands off the straight line from a to b, the wall then following the arc of a circle through a, that point and b. Positive bows to the right of the direction a to b as seen on screen, negative to the left. At most half the distance from a to b, which is a half circle. Absent or 0 is a straight wall.",
                 "type": "number"
               },
               "height": {
@@ -3283,7 +3292,7 @@
               "thickness"
             ],
             "additionalProperties": false,
-            "description": "A wall along the centerline a-b, straight or, with \"bulge\", an arc. Walls sharing an endpoint are drawn joined."
+            "description": "A wall along the line a-b (its middle, or one of its faces with \"justify\"), straight or, with \"bulge\", an arc. Walls sharing an endpoint are drawn joined."
           },
           {
             "type": "object",
@@ -4016,6 +4025,16 @@
               },
               "scale": {
                 "description": "Size multiplier of this placement. Defaults to 1.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "scaleX": {
+                "description": "Stretch of this placement along the component's own X axis, on top of \"scale\": wider than it is drawn. Defaults to 1.",
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              "scaleY": {
+                "description": "Stretch of this placement along the component's own Y axis, on top of \"scale\": taller than it is drawn. Defaults to 1.",
                 "type": "number",
                 "exclusiveMinimum": 0
               }

@@ -28,6 +28,24 @@ export function buildScene(doc: Document, containerId: string, registry: Registr
 }
 
 /**
+ * What a group of the scene draws, each visible thing in it an item of its own, however deeply
+ * it is grouped: for what must see inside groups, as lining a moved thing up with one wall of a
+ * plan whose walls were grouped together, which the group's own box does not show.
+ */
+export function heldItems(doc: Document, groupId: string, registry: Registry): SceneItem[] {
+  const ctx = { doc, registry, depth: 0 }
+  const walk = (id: string): SceneItem[] =>
+    childrenOf(doc, id)
+      .filter((node) => isVisible(doc, node))
+      .flatMap((node) => {
+        if (node.type === 'group') return walk(node.id)
+        const prims = nodePrimitives(node, ctx)
+        return [{ id: node.id, node, prims, bounds: boundsOf(prims), locked: isLocked(doc, node) }]
+      })
+  return walk(groupId)
+}
+
+/**
  * The sheet that what is on every sheet was drawn on, as it is in the hand, in millimetres, its
  * corner at the origin. It lies under that component while it is being edited, to show where
  * things fall on the sheet; it cannot be picked up.

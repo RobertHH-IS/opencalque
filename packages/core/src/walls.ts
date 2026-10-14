@@ -125,7 +125,8 @@ function openingIndex(doc: Document, parentId: string | null, registry: Registry
   const always: Wall[] = []
   const square = (v: number) => Math.floor(v / OPENING_GRID)
   for (const wall of walls) {
-    const pad = wall.thickness / 2 + 1
+    // Its line is somewhere between its faces: a thickness all round covers it whichever face it is.
+    const pad = wall.thickness + 1
     const [x0, x1, y0, y1] = [square(Math.min(wall.a.x, wall.b.x) - pad), square(Math.max(wall.a.x, wall.b.x) + pad), square(Math.min(wall.a.y, wall.b.y) - pad), square(Math.max(wall.a.y, wall.b.y) + pad)]
     const cells = (x1 - x0 + 1) * (y1 - y0 + 1)
     if (wallArc(wall) || !(cells <= OPENING_GRID_CELLS)) {
@@ -207,8 +208,11 @@ interface Course {
   dir(s: number): Vec2
   /** The point `across` mm to the right of the line there (to the left when negative). */
   offset(s: number, across: number): Vec2
-  /** How far along the point of the line nearest to `p` is (before the start and past the end count on), and how far `p` stands off it. */
-  project(p: Vec2): { along: number; off: number }
+  /**
+   * How far along the point of the line nearest to `p` is (before the start and past the end count
+   * on), and how far `p` stands off it: to the right when `across` is positive, as for `offset`.
+   */
+  project(p: Vec2): { along: number; across: number }
   /** Where a drawn line needs a point to follow the curve, ends included; none for a straight wall. */
   stops: number[]
 }
@@ -235,7 +239,7 @@ function makeCourse(wall: { a: Vec2; b: Vec2; bulge?: number }): Course {
       at,
       dir: () => d,
       offset: (s, across) => add(at(s), scale(n, across)),
-      project: (p) => ({ along: dot(sub(p, wall.a), d), off: Math.abs(cross(d, sub(p, wall.a))) }),
+      project: (p) => ({ along: dot(sub(p, wall.a), d), across: cross(d, sub(p, wall.a)) }),
       stops: [],
     }
   }
@@ -255,7 +259,7 @@ function makeCourse(wall: { a: Vec2; b: Vec2; bulge?: number }): Course {
       // Measured from the middle of the arc, so that both ends are well away from where angles wrap round.
       let turn = Math.atan2(p.y - centre.y, p.x - centre.x) - (from + sweep / 2)
       turn = Math.atan2(Math.sin(turn), Math.cos(turn))
-      return { along: length / 2 + (turn / sweep) * length, off: Math.abs(dist(p, centre) - radius) }
+      return { along: length / 2 + (turn / sweep) * length, across: way * (radius - dist(p, centre)) }
     },
     stops: Array.from({ length: steps + 1 }, (_, i) => (length * i) / steps),
   }
@@ -289,12 +293,51 @@ export function wallParallel(wall: { a: Vec2; b: Vec2; bulge?: number }, across:
   return extend > 0 ? [sub(line[0], scale(course.dir(0), extend)), ...line, add(line[line.length - 1], scale(course.dir(course.length), extend))] : line
 }
 
-/** How far a point is from a wall's middle line. */
+/** How far a point is from a wall's line. */
 export function distToWall(p: Vec2, wall: { a: Vec2; b: Vec2; bulge?: number }): number {
   if (!wallArc(wall)) return distToSegment(p, wall.a, wall.b)
   const course = courseOf(wall)
-  const { along, off } = course.project(p)
-  return along >= 0 && along <= course.length ? off : Math.min(dist(p, wall.a), dist(p, wall.b))
+  const { along, across } = course.project(p)
+  return along >= 0 && along <= course.length ? Math.abs(across) : Math.min(dist(p, wall.a), dist(p, wall.b))
+}
+
+/**
+ * How far a wall reaches to each side of its line, the line from `a` to `b` that its corners are
+ * on, left and right as it runs from `a` to `b`: half its thickness each way for a wall drawn by
+ * its middle, all of it to one side for a wall drawn by a face (`justify`). Its faces are at
+ * `-left` and `right` across its line; nothing that draws or measures a wall assumes them even.
+ */
+export function wallSides(wall: { thickness: number; justify?: Wall['justify'] }): { left: number; right: number } {
+  if (wall.justify === 'left') return { left: 0, right: wall.thickness }
+  if (wall.justify === 'right') return { left: wall.thickness, right: 0 }
+  return { left: wall.thickness / 2, right: wall.thickness / 2 }
+}
+
+/** How far across its line the middle of a wall's thickness is: 0 for a wall drawn by its middle. */
+const middleAcross = (wall: { thickness: number; justify?: Wall['justify'] }): number => {
+  const { left, right } = wallSides(wall)
+  return (right - left) / 2
+}
+
+/**
+ * Whether a point is in a wall, or within `tolerance` of it: between its faces, and between its
+ * ends.
+ */
+export function wallContains(wall: Wall, p: Vec2, tolerance = 0): boolean {
+  if (dist(wall.a, wall.b) < 1e-6) return false
+  const course = courseOf(wall)
+  const { along, across } = course.project(p)
+  const { left, right } = wallSides(wall)
+  return along >= -tolerance && along <= course.length + tolerance && across >= -left - tolerance && across <= right + tolerance
+}
+
+/** How far a point is from a wall itself, between its faces and its ends: 0 inside it. */
+function distToBody(p: Vec2, wall: Wall): number {
+  if (dist(wall.a, wall.b) < 1e-6) return Infinity
+  const course = courseOf(wall)
+  const { along, across } = course.project(p)
+  const { left, right } = wallSides(wall)
+  return Math.hypot(Math.max(0, -left - across, across - right), along < 0 ? -along : Math.max(0, along - course.length))
 }
 
 /** The bulge that puts the middle of a wall's curve at `p`, as near as a half circle allows; undefined when that leaves it straight. */
@@ -306,9 +349,15 @@ export function bulgeThrough(wall: { a: Vec2; b: Vec2 }, p: Vec2): number | unde
   return Math.abs(bulge) < 1 ? undefined : bulge
 }
 
-/** One wall leaving a joint: its direction away from the joint, half thickness and length. */
+/**
+ * One wall leaving a joint: its direction away from the joint, how far its faces are on either
+ * side of its line (`plus` towards `perp(d)`, `minus` away from it), half its thickness, and its
+ * length.
+ */
 interface Ray {
   d: Vec2
+  plus: number
+  minus: number
   h: number
   length: number
   angle: number
@@ -324,6 +373,12 @@ interface Ray {
 }
 
 export type WallJoin = (typeof WALL_JOINS)[number]
+
+/** The reach of a wall to either side of the way it leaves the joint at `end`: leaving from `a`, its right is the plus side; from `b`, its left. */
+function reachAt(wall: Wall, end: 'a' | 'b'): { plus: number; minus: number; h: number } {
+  const { left, right } = wallSides(wall)
+  return end === 'a' ? { plus: right, minus: left, h: wall.thickness / 2 } : { plus: left, minus: right, h: wall.thickness / 2 }
+}
 
 /** How two wall ends that meet are joined, from what each of them asks for. Rounded wins over cut off, which wins over one running through. */
 function styleOf(a: WallJoin | undefined, b: WallJoin | undefined): 'auto' | 'miter' | 'round' | 'bevel' | 'butt' {
@@ -387,8 +442,8 @@ function facesCross(p: Vec2, a: Face, b: Face, reach: number): Vec2 | null {
  * the joint. Returns the outline points each wall takes, ordered from its own face towards the joint.
  */
 function meet(p: Vec2, a: Ray, b: Ray, style: 'auto' | 'miter' | 'round' | 'bevel' = 'auto'): { a: Vec2[]; b: Vec2[] } {
-  const qa = add(p, scale(perp(a.d), a.h))
-  const qb = sub(p, scale(perp(b.d), b.h))
+  const qa = add(p, scale(perp(a.d), a.plus))
+  const qb = sub(p, scale(perp(b.d), b.minus))
   const square = { a: [qa], b: [qb] }
   const denom = cross(a.d, b.d)
   if (Math.abs(denom) < 1e-9) return square
@@ -415,7 +470,7 @@ function meet(p: Vec2, a: Ray, b: Ray, style: 'auto' | 'miter' | 'round' | 'beve
     if (sweep < -Math.PI) sweep += 2 * Math.PI
     const steps = Math.max(2, Math.ceil(Math.abs(sweep) / (Math.PI / 16)))
     const at = (t: number): Vec2 => {
-      const r = a.h + (b.h - a.h) * t
+      const r = a.plus + (b.minus - a.plus) * t
       return { x: tidy(p.x + r * Math.cos(from + sweep * t)), y: tidy(p.y + r * Math.sin(from + sweep * t)) }
     }
     const half = Array.from({ length: steps + 1 }, (_, i) => i / (2 * steps))
@@ -423,7 +478,8 @@ function meet(p: Vec2, a: Ray, b: Ray, style: 'auto' | 'miter' | 'round' | 'beve
   }
   // Cut off when asked, or, left to itself, when the point would stick out too far. A sharp point
   // asked for by name is drawn whatever its length, short of what no drawing could hold.
-  const tip = dist(c, p) / Math.max(a.h, b.h)
+  // Measured against the faces that meet there, which for a wall drawn by a face may be its whole thickness from the joint.
+  const tip = dist(c, p) / Math.max(a.plus, b.minus, 1e-9)
   if (s < 0 && (style === 'bevel' || (style === 'auto' && tip > MITER_LIMIT) || tip > FORCED_MITER_LIMIT)) {
     const m = mid(qa, qb)
     return { a: [qa, m], b: [qb, m] }
@@ -450,11 +506,13 @@ function cap(p: Vec2, wall: Wall, away: Vec2, doc: Document, seams?: [Vec2, Vec2
       const d = self ? away : side === 'a' ? course.dir(0) : scale(course.dir(course.length), -1)
       const edge = w.edges?.[side]
       const look = !!edge && (edge.stroke !== undefined || edge.strokeWidth !== undefined || edge.dash !== undefined)
-      rays.push({ d, h: w.thickness / 2, length: course.length, angle: Math.atan2(d.y, d.x), self, join: w.joins?.[side], line: edge?.show, look, centre: wallArc(w)?.centre })
+      rays.push({ d, ...reachAt(w, side), length: course.length, angle: Math.atan2(d.y, d.x), self, join: w.joins?.[side], line: edge?.show, look, centre: wallArc(w)?.centre })
     }
   }
-  const h = wall.thickness / 2
-  if (rays.length < 2) return [sub(p, scale(perp(away), h)), add(p, scale(perp(away), h))]
+  const own = reachAt(wall, p === wall.a ? 'a' : 'b')
+  /** Straight across the wall at `at`, from its minus face to its plus face. */
+  const square = (at: Vec2): Vec2[] => [sub(at, scale(perp(away), own.minus)), add(at, scale(perp(away), own.plus))]
+  if (rays.length < 2) return square(p)
   rays.sort((x, y) => x.angle - y.angle)
   const i = rays.findIndex((r) => r.self)
   const me = rays[i]
@@ -492,11 +550,11 @@ function cap(p: Vec2, wall: Wall, away: Vec2, doc: Document, seams?: [Vec2, Vec2
     const [passing, stopping] = passes ? [me, other] : [other, me]
     // The face of the passing wall on the side the other wall arrives from.
     const across = perp(passing.d)
-    const face = add(p, scale(across, (dot(stopping.d, across) >= 0 ? 1 : -1) * passing.h))
+    const face = dot(stopping.d, across) >= 0 ? add(p, scale(across, passing.plus)) : sub(p, scale(across, passing.minus))
     const turn = cross(stopping.d, passing.d)
     // Where a side of the stopping wall meets that face; `sign` picks its minus or its plus side.
     const lands = (sign: number): Vec2 => {
-      const from = add(p, scale(perp(stopping.d), sign * stopping.h))
+      const from = add(p, scale(perp(stopping.d), sign > 0 ? stopping.plus : -stopping.minus))
       return add(from, scale(stopping.d, cross(sub(face, from), passing.d) / turn))
     }
     // How far past the joint the passing wall has to go to cover both of those places.
@@ -512,10 +570,7 @@ function cap(p: Vec2, wall: Wall, away: Vec2, doc: Document, seams?: [Vec2, Vec2
     // to be drawn, usually by the wall that stops.
     const cut = [lands(-1), lands(1)]
     if (lineShown(true) && drawsLine(!passes)) seams?.push([cut[0], cut[1]])
-    if (passes) {
-      const end = sub(p, scale(away, reach))
-      return [sub(end, scale(perp(away), h)), add(end, scale(perp(away), h))]
-    }
+    if (passes) return square(sub(p, scale(away, reach)))
     return cut
   }
   // Joined into one, the two walls show no line between them unless one asks for it; it is then
@@ -538,9 +593,10 @@ function overlap(wall: Wall, span: [Vec2, Vec2]): [number, number] | null {
   const course = courseOf(wall)
   const length = course.length
   const ts: number[] = []
+  const { left, right } = wallSides(wall)
   for (const p of span) {
-    const { along, off } = course.project(p)
-    if (off > wall.thickness / 2 + 1e-6) return null
+    const { along, across } = course.project(p)
+    if (across < -left - 1e-6 || across > right + 1e-6) return null
     ts.push(along)
   }
   const from = Math.max(0, Math.min(...ts))
@@ -574,12 +630,6 @@ export function hostWall(doc: Document, node: Node, registry: Registry): Wall | 
  */
 export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec2[][] {
   if (dist(wall.a, wall.b) < 1e-6) return []
-  const course = courseOf(wall)
-  const length = course.length
-  const h = wall.thickness / 2
-  const capA = cap(wall.a, wall, course.dir(0), doc)
-  const capB = cap(wall.b, wall, scale(course.dir(length), -1), doc)
-
   const cuts: [number, number][] = []
   if (current(doc, wall)) {
     for (const cut of openingIndex(doc, wall.parent, registry).cuts.get(wall.id) ?? []) if (cut.visible) cuts.push([cut.from, cut.to])
@@ -591,18 +641,36 @@ export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec
     }
   }
   cuts.sort((x, y) => x[0] - y[0])
+  return wallPieces(wall, doc, cuts)
+}
+
+/**
+ * The whole outline of a wall as it is drawn, its ends mitred into the walls it meets, with no
+ * gaps for its doors and windows: what bounds a room. Empty for a wall of no length.
+ */
+export function wallOutline(wall: Wall, doc: Document): Vec2[] {
+  return dist(wall.a, wall.b) < 1e-6 ? [] : (wallPieces(wall, doc, [])[0] ?? [])
+}
+
+/** The outline of a wall in solid stretches, between the given cuts (distances along it, in order). */
+function wallPieces(wall: Wall, doc: Document, cuts: [number, number][]): Vec2[][] {
+  const course = courseOf(wall)
+  const length = course.length
+  const { left: l, right: r } = wallSides(wall)
+  const capA = cap(wall.a, wall, course.dir(0), doc)
+  const capB = cap(wall.b, wall, scale(course.dir(length), -1), doc)
 
   const polygons: Vec2[][] = []
   const piece = (from: number, to: number) => {
-    const left = from <= 0 ? capA : [course.offset(from, -h), course.offset(from, h)]
-    const right = to >= length ? capB : [course.offset(to, h), course.offset(to, -h)]
+    const left = from <= 0 ? capA : [course.offset(from, -l), course.offset(from, r)]
+    const right = to >= length ? capB : [course.offset(to, r), course.offset(to, -l)]
     // Between its two ends a curved wall follows its curve, along one face and back along the
     // other. Each face starts where the end before it left off, which at a mitred corner is some
     // way along the wall, or behind its end.
     const face = (side: 1 | -1, start: Vec2, stop: Vec2): Vec2[] => {
       const lo = from <= 0 ? course.project(start).along : from
       const hi = to >= length ? course.project(stop).along : to
-      return course.stops.filter((s) => s > lo + 1e-3 && s < hi - 1e-3).map((s) => course.offset(s, side * h))
+      return course.stops.filter((s) => s > lo + 1e-3 && s < hi - 1e-3).map((s) => course.offset(s, side > 0 ? r : -l))
     }
     polygons.push([...left, ...face(1, left[left.length - 1], right[0]), ...right, ...face(-1, left[0], right[right.length - 1]).reverse()])
   }
@@ -642,17 +710,15 @@ export function wallOutlineRuns(wall: Wall, pieces: Vec2[][]): { points: Vec2[];
   const set = (edge: WallEdge | undefined) => !!edge && (edge.show === false || edge.stroke !== undefined || edge.strokeWidth !== undefined || edge.dash !== undefined)
   if (!edges || ![edges.left, edges.right, edges.a, edges.b].some(set)) return null
   const course = courseOf(wall)
-  const h = wall.thickness / 2
-  const near = Math.max(0.5, h * 0.02)
-  // Which side of the middle line a point is on: the right (as the wall runs from a to b) is where `offset` goes with a positive distance.
-  const right = (q: Vec2, along: number) => dist(q, course.offset(along, h)) < dist(q, course.offset(along, -h))
+  const { left, right } = wallSides(wall)
+  const near = Math.max(0.5, wall.thickness * 0.01)
   /** Which edge of the wall the stretch from `from` to `to` belongs to. */
   const edgeOf = (from: Vec2, to: Vec2): 'left' | 'right' | 'a' | 'b' | 'opening' => {
     const points = [from, mid(from, to), to]
     const places = points.map((q) => course.project(q))
-    // Along a face: both ends and the middle are half a thickness off the middle line, on one side.
-    const sides = points.map((q, i) => right(q, places[i].along))
-    if (places.every((place) => Math.abs(place.off - h) < near) && sides.every((side) => side === sides[1])) return sides[1] ? 'right' : 'left'
+    // Along a face: both ends and the middle are where that face is across the line (to the right as the wall runs from a to b is positive).
+    if (places.every((place) => Math.abs(place.across - right) < near)) return 'right'
+    if (places.every((place) => Math.abs(place.across + left) < near)) return 'left'
     // Across an end: at the very start or the very end of the wall. Anything else is the side of an opening.
     if (places[1].along < near) return 'a'
     if (places[1].along > course.length - near) return 'b'
@@ -753,7 +819,7 @@ export function snapOpeningToWall(
   let wall: Wall | null = null
   let nearest = Infinity
   for (const w of wallsIn(doc, containerId)) {
-    const distance = distToWall(p, w) - w.thickness / 2
+    const distance = distToBody(p, w)
     if (distance <= reach && distance < nearest) {
       wall = w
       nearest = distance
@@ -766,10 +832,12 @@ export function snapOpeningToWall(
   let t = Math.round((course.project(p).along - half) / step) * step + half
   if (length >= 2 * half) t = Math.max(half, Math.min(length - half, t))
   const d = course.dir(t)
-  // A door is straight: in a curved wall it is a chord of the curve, its two ends on the middle line.
+  // In the middle of the thickness, whichever line of the wall it is drawn by. A door is straight:
+  // in a curved wall it is a chord of the curve, its two ends on the middle of the thickness.
   const arc = wallArc(wall)
-  const on = course.at(t)
-  const center = arc && half < arc.radius ? add(arc.centre, scale(sub(on, arc.centre), Math.sqrt(arc.radius ** 2 - half ** 2) / arc.radius)) : on
+  const on = course.offset(t, middleAcross(wall))
+  const radius = arc ? dist(on, arc.centre) : 0
+  const center = arc && half < radius ? add(arc.centre, scale(sub(on, arc.centre), Math.sqrt(radius ** 2 - half ** 2) / radius)) : on
   const along = (Math.atan2(d.y, d.x) * 180) / Math.PI
   const facing =
     keepRotation === undefined
@@ -815,6 +883,160 @@ export function wallFollowOps(doc: Document, moved: Node[], d: Vec2, registry: R
     }
   }
   return [...[...ends].map(([id, patch]): Op => ({ op: 'update_node', id, patch })), ...ops]
+}
+
+/**
+ * Where a point is beside a wall: how far along its line, from `a` and round the curve, and how far
+ * across it, to the right of the line as it runs from `a` to `b` (to the left when negative), the
+ * side its faces are named by. Its faces are at `-left` and `right` of `wallSides`.
+ */
+export function wallSpot(wall: { a: Vec2; b: Vec2; bulge?: number }, p: Vec2): { along: number; across: number } {
+  return courseOf(wall).project(p)
+}
+
+/** Moves a point beside a wall across it by `by`, to its right when positive: straight across, or for a curved wall towards or away from its centre. */
+function acrossBy(wall: Wall): (p: Vec2, by: number) => Vec2 {
+  const arc = wallArc(wall)
+  const right = arc ? null : perp(norm(sub(wall.b, wall.a)))
+  const way = arc ? Math.sign(arc.sweep) : 0
+  return (p, by) => {
+    if (right) return { x: tidy(p.x + right.x * by), y: tidy(p.y + right.y * by) }
+    const out = sub(p, arc!.centre)
+    const r = len(out)
+    if (r < 1e-9) return p
+    const q = add(arc!.centre, scale(out, (r - way * by) / r))
+    return { x: tidy(q.x), y: tidy(q.y) }
+  }
+}
+
+/** The doors and windows set in a wall moved across by `by`, as it is, so they stay in the middle of its thickness. */
+function openingsAcross(doc: Document, wall: Wall, by: number, registry: Registry): Op[] {
+  if (Math.abs(by) < 1e-9) return []
+  const move = acrossBy(wall)
+  const ops: Op[] = []
+  for (const [id, host] of openingIndex(doc, wall.parent, registry).hosts) {
+    const opening = doc.nodes[id]
+    if (host?.id === wall.id && opening?.type === 'parametric') ops.push({ op: 'update_node', id, patch: { ...move({ x: opening.x, y: opening.y }, by) } })
+  }
+  return ops
+}
+
+/**
+ * A line meeting the wall's line at a sharper angle than this (its sine) slides along itself to
+ * follow it; one nearly along it would have to slide far, and is left where it is instead.
+ */
+const SLIDE_LIMIT = 0.25
+
+/**
+ * The operations that give a wall a new thickness by moving one of its faces, `side`, while the
+ * other stays where it is; with no side, both faces move and the middle of its thickness stays.
+ * The wall's line (its corners) moves only as far as that asks: not at all for a wall drawn by the
+ * face that stays, half the change for one drawn by its middle, all of it for one drawn by the face
+ * that moves. When it moves, what is tied to it by position goes with it:
+ * - the walls it shares a corner with slide along their own line to stay joined, the corner going
+ *   where that line meets the line moved across; where they do not make one line (or curve), the
+ *   corner moves across with the wall and they turn a little; where they carry straight on from
+ *   it, they are left where they are, and the two walls then simply butt against each other;
+ * - an end of the wall that stops against the side of another slides along that other wall;
+ * - walls that stop against its sides are lengthened or shortened along themselves to keep reaching it.
+ * Its doors and windows move with the middle of its thickness. A curved wall keeps its centre:
+ * the radius of its line changes. Null when the thickness cannot be had that way: a curved wall
+ * whose line would shrink to its centre. `doc` is the drawing before the change.
+ */
+export function wallThicknessOps(doc: Document, wall: Wall, thickness: number, side: 'left' | 'right' | null, registry: Registry): Op[] | null {
+  // How much of the thickness lies left of the line: none for a wall drawn by its left face, all of it by its right, half by its middle.
+  const share = wallSides(wall).left / wall.thickness
+  const change = thickness - wall.thickness
+  // How far the line moves across, and how far the middle of the thickness, for the face that stays to stay.
+  const across = side === 'right' ? share * change : side === 'left' ? -(1 - share) * change : (-(1 - 2 * share) * change) / 2
+  const middle = side === 'right' ? change / 2 : side === 'left' ? -change / 2 : 0
+  if (Math.abs(across) < 1e-9) return [{ op: 'update_node', id: wall.id, patch: { thickness } }, ...openingsAcross(doc, wall, middle, registry)]
+  const arc = wallArc(wall)
+  const way = arc ? Math.sign(arc.sweep) : 0
+  const radius = arc ? arc.radius - way * across : 0
+  if (arc && radius < 1) return null
+  const right = arc ? null : perp(norm(sub(wall.b, wall.a)))
+  const move = acrossBy(wall)
+  /** Where the line through `p` going `d` meets the wall's line moved across, as far from it as `p` was; null when that line runs too nearly along the wall. */
+  const onto = (p: Vec2, d: Vec2): Vec2 | null => {
+    if (right) {
+      const k = dot(d, right)
+      return Math.abs(k) < SLIDE_LIMIT ? null : { x: tidy(p.x + (d.x * across) / k), y: tidy(p.y + (d.y * across) / k) }
+    }
+    const out = sub(p, arc!.centre)
+    const r = len(out)
+    if (r < 1e-9 || Math.abs(dot(d, scale(out, 1 / r))) < SLIDE_LIMIT) return null
+    const crossings = lineCircle(p, d, arc!.centre, r - way * across)
+    if (crossings.length === 0) return null
+    const q = crossings.reduce((best, c) => (dist(c, p) < dist(best, p) ? c : best))
+    return { x: tidy(q.x), y: tidy(q.y) }
+  }
+  const straight = (w: Wall): Vec2 | null => (wallArc(w) || dist(w.a, w.b) < 1e-6 ? null : norm(sub(w.b, w.a)))
+  const walls = wallIndex(doc, wall.parent).walls
+  const ops: Op[] = []
+  const done: Vec2[] = []
+  /** Moves the corner at `from` to `to`: every end of another wall there goes with it. */
+  const carry = (from: Vec2, to: Vec2) => {
+    done.push(from)
+    ops.push(...moveCornerOps(doc, wall.parent, from, to).filter((op) => op.op !== 'update_node' || op.id !== wall.id))
+  }
+
+  const ends = (['a', 'b'] as const).map((end) => {
+    const c = wall[end]
+    const others = wallEndsAt(doc, wall.parent, c).filter((other) => other.wall.id !== wall.id)
+    done.push(c)
+    if (others.length > 0) {
+      // The walls there, as one line: the corner slides along it, or, when it carries straight on
+      // from this wall, it stays where it is and this wall's end leaves it.
+      const lines = others.map((other) => straight(other.wall))
+      const line = lines[0]
+      if (line && lines.every((d) => d && Math.abs(cross(d, line)) < 1e-3)) {
+        const slid = onto(c, line)
+        if (!slid) return move(c, across)
+        carry(c, slid)
+        return slid
+      }
+      const to = move(c, across)
+      carry(c, to)
+      return to
+    }
+    // An end that stops against the side of another wall slides along that wall.
+    const host = walls.find((w) => w.id !== wall.id && straight(w) && wallContains(w, c, JOIN_TOLERANCE))
+    return (host && onto(c, straight(host)!)) || move(c, across)
+  })
+  const patch: Record<string, unknown> = { a: ends[0], b: ends[1], thickness }
+  if (arc) {
+    // The same centre, so the face that stays is the same circle: the curve stands off its new chord by what that radius gives.
+    const chord = dist(ends[0], ends[1])
+    patch.bulge = tidy(Math.sign(wall.bulge!) * (radius - Math.sqrt(Math.max(0, radius * radius - (chord * chord) / 4))))
+  }
+  ops.unshift({ op: 'update_node', id: wall.id, patch })
+
+  // The walls that stop against its sides.
+  for (const other of walls) {
+    if (other.id === wall.id) continue
+    for (const end of ['a', 'b'] as const) {
+      const p = other[end]
+      if (done.some((q) => dist(p, q) < JOIN_TOLERANCE) || !wallContains(wall, p, JOIN_TOLERANCE)) continue
+      const line = straight(other)
+      const to = line && onto(p, line)
+      // One that runs along the wall rather than up to it is not stopping against it.
+      if (to) carry(p, to)
+    }
+  }
+  return [...ops, ...openingsAcross(doc, wall, middle, registry)]
+}
+
+/**
+ * The operations that draw a wall by another of its lines: its middle, or its left or right face
+ * as it runs from `a` to `b`. The line stays where it is, and with it the corners and the walls
+ * joined there; the wall moves to the other side of it, taking its doors and windows along.
+ */
+export function wallJustifyOps(doc: Document, wall: Wall, justify: 'left' | 'center' | 'right', registry: Registry): Op[] {
+  const next = justify === 'center' ? undefined : justify
+  if (wall.justify === next || (justify === 'center' && wall.justify === 'center')) return []
+  const by = middleAcross({ thickness: wall.thickness, justify: next }) - middleAcross(wall)
+  return [{ op: 'update_node', id: wall.id, patch: { justify: next ?? null } }, ...openingsAcross(doc, wall, by, registry)]
 }
 
 /**
@@ -886,7 +1108,7 @@ export function autoJoinCuts(ends: WallEnd[]): boolean {
   const rays = ends.map(({ wall, end }): Ray => {
     const course = courseOf(wall)
     const d = end === 'a' ? course.dir(0) : scale(course.dir(course.length), -1)
-    return { d, h: wall.thickness / 2, length: course.length, angle: Math.atan2(d.y, d.x), self: false, centre: wallArc(wall)?.centre }
+    return { d, ...reachAt(wall, end), length: course.length, angle: Math.atan2(d.y, d.x), self: false, centre: wallArc(wall)?.centre }
   })
   const p = ends[0].wall[ends[0].end]
   return meet(p, rays[0], rays[1], 'auto').a.length > 1 || meet(p, rays[1], rays[0], 'auto').a.length > 1

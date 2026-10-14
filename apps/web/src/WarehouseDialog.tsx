@@ -1,8 +1,8 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { applyOps, componentsOf, createDocument, declarativeExtension, importComponents, toSVG, type DeclarativeExtension, type Document, type Op, type ParametricKind } from '@opencalque/core'
-import { Pencil, TextCursorInput, Trash2 } from 'lucide-react'
+import { Pencil, SlidersHorizontal, TextCursorInput, Trash2 } from 'lucide-react'
 import { guarded, importLibrary, makeComponent } from './actions'
-import { language, t, tn } from './i18n'
+import { language, msg, t, tn } from './i18n'
 import { platform } from './platform'
 import { setPrefs, usePrefs } from './prefs'
 import { apply, BUILT_IN_EXTENSION, editComponent, loadExtensions, registry, replaceDoc, setTool, toast, useStore } from './store'
@@ -38,10 +38,15 @@ interface Card {
   place(): void
   /** Id of the component, for one that belongs to the drawing and can therefore be renamed, edited and deleted here. */
   own?: string
+  /** A parametric object: its sizes and options are set once placed. Marked on its card. */
+  parametric?: boolean
 }
 
+/** Where parametric objects that say no category, or one nothing else is in, are listed. */
 const OBJECTS = 'objects'
 const DRAWING = 'drawing'
+/** Groups of parametric objects that no library is, by the category they say, and their names. */
+const CATEGORIES: Record<string, string> = { architecture: msg('Architecture'), annotation: msg('Annotation') }
 
 /**
  * The component library: every object that can be placed, in one searchable grid. That is the
@@ -87,14 +92,25 @@ function Components({ libraries }: { libraries: Library[] }) {
       else toast(tn(ids.length, '{n} component added. It is in the component library, under “In this drawing”.', '{n} components added. They are in the component library, under “In this drawing”.'))
     })
 
-  const groups = [{ id: OBJECTS, name: t('Parametric objects') }, { id: DRAWING, name: t('In this drawing') }, ...libraries.map((l) => ({ id: l.id, name: own(l, l.name) }))]
+  // Parametric objects are listed among the components of the same kind (a table with the furniture),
+  // marked as such, rather than in a group of their own; those of a kind no library is make theirs.
+  const kinds = [...registry.parametric.values()]
+  const categories = [...new Set(kinds.map((kind) => kind.category ?? OBJECTS))].filter((category) => !libraries.some((l) => l.id === category))
+  const groups = [
+    { id: DRAWING, name: t('In this drawing') },
+    ...categories.filter((c) => c === 'architecture').map((id) => ({ id, name: t(CATEGORIES[id]) })),
+    ...libraries.map((l) => ({ id: l.id, name: own(l, l.name) })),
+    ...categories.filter((c) => c !== 'architecture' && c !== OBJECTS).map((id) => ({ id, name: CATEGORIES[id] ? t(CATEGORIES[id]) : t(id) })),
+    ...categories.filter((c) => c === OBJECTS).map((id) => ({ id, name: t('Other objects') })),
+  ]
 
   // Pictures are the objects themselves, rendered the way the drawing renders them.
   const objectCards = useMemo(
     () =>
       [...registry.parametric.values()].map((kind): Card => ({
         key: `kind ${kind.kind}`,
-        group: OBJECTS,
+        group: kind.category ?? OBJECTS,
+        parametric: true,
         name: t(kind.label),
         description: kind.description ? t(kind.description) : '',
         picture: objectPicture(kind),
@@ -172,6 +188,11 @@ function Components({ libraries }: { libraries: Library[] }) {
                 onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && card.place()}
               >
                 {card.picture ? <img src={card.picture} alt="" /> : <span className="warehouse-blank" />}
+                {card.parametric && (
+                  <span className="warehouse-badge" title={t('Parametric: its sizes and options are set once it is placed, in its properties or by pulling its sides')}>
+                    <SlidersHorizontal size={11} />
+                  </span>
+                )}
                 {renaming === card.key && card.own ? (
                   <input
                     className="inline-input"
@@ -269,7 +290,7 @@ function Extensions({ catalog }: { catalog: DeclarativeExtension[] }) {
         <div className="warehouse-row">
           <div>
             <strong>{t('Architecture')}</strong> <span className="faint">{t('built in')}</span>
-            <p className="hint">{t('Doors, windows and stairs.')}</p>
+            <p className="hint">{t('Doors, windows, stairs and washbasins.')}</p>
           </div>
           <button className="pill" onClick={() => change({ disabled: builtInOn ? [...disabled, BUILT_IN_EXTENSION] : disabled.filter((id) => id !== BUILT_IN_EXTENSION) })}>
             {builtInOn ? t('Turn off') : t('Turn on')}

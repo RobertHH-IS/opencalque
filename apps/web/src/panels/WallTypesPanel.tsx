@@ -4,7 +4,8 @@ import type { WallType } from '@opencalque/core'
 import { ColorChoice, PatternRows } from '../ColorChoice'
 import { msg, t } from '../i18n'
 import { apply, useStore } from '../store'
-import { penOf, PENS, pixelsOf } from '../strokes'
+import { pixelsOf } from '../strokes'
+import { WeightChoice } from '../WeightChoice'
 import { DashPicker, EditableText, Field, IconButton, Section } from '../ui'
 import { formatNumber, parseLength } from '../units'
 
@@ -103,13 +104,7 @@ export function WallTypes() {
               <ColorChoice stored={type.stroke} fallback="#1f1f1f" commit={(stroke) => set({ stroke: (stroke as string | undefined) ?? null })} />
             </Defines>
             <Defines label={t('Outline weight')} on={type.strokeWidth !== undefined} onToggle={(on) => set({ strokeWidth: on ? pixelsOf(0.5) : null })}>
-              <select value={penOf(type.strokeWidth ?? 1)} onChange={(e) => set({ strokeWidth: pixelsOf(Number(e.target.value)) })}>
-                {(PENS.includes(penOf(type.strokeWidth ?? 1)) ? PENS : [...PENS, penOf(type.strokeWidth ?? 1)].sort((p, q) => p - q)).map((mm) => (
-                  <option key={mm} value={mm}>
-                    {mm} mm
-                  </option>
-                ))}
-              </select>
+              <WeightChoice key={type.id} value={type.strokeWidth ?? 1} label={t('Outline weight')} onPick={(pixels) => pixels !== null && set({ strokeWidth: pixels })} />
             </Defines>
             <Defines label={t('Outline kind')} on={type.dash !== undefined} onToggle={(on) => set({ dash: on ? [6, 4] : null })}>
               {/* A type that defines the line gives a dashed one: a solid line is what a wall has anyway. */}

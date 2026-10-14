@@ -1,9 +1,20 @@
 /**
  * What this extension displays, in other languages, keyed by the English text. Option values
- * ("Single", "Left"…) are stored in drawings in English; only their display is translated.
+ * ("Single", "Left"…) are stored in drawings in English; only their display is translated. Where a
+ * value means something else for one parameter, it is also given as "Parameter: Value" ("Glazing:
+ * Single" is single glass, "Single" a door of one leaf), which the panel looks for first.
  */
 export const translations: Record<string, Record<string, string>> = {
   fr: {
+    Washbasin: 'Lavabo',
+    'Double washbasin': 'Lavabo double vasque',
+    Depth: 'Profondeur',
+    Bowls: 'Vasques',
+    'A counter with its bowls. Pull its sides to make it longer or deeper: the bowls and taps keep their size.': 'Un plan avec ses vasques. Tirez ses côtés pour l’allonger ou l’approfondir : les vasques et les robinets gardent leur taille.',
+    Triple: 'Triple',
+    'Glazing: Single': 'Simple',
+    'Glazing: Double': 'Double',
+    'Glazing: Triple': 'Triple',
     Door: 'Porte',
     Window: 'Fenêtre',
     'Stair, straight': 'Escalier droit',
@@ -49,6 +60,15 @@ export const translations: Record<string, Record<string, string>> = {
     'Insert 4 × 3 m room': 'Insérer une pièce de 4 × 3 m',
   },
   es: {
+    Washbasin: 'Lavabo',
+    'Double washbasin': 'Lavabo doble',
+    Depth: 'Fondo',
+    Bowls: 'Senos',
+    'A counter with its bowls. Pull its sides to make it longer or deeper: the bowls and taps keep their size.': 'Una encimera con sus senos. Tire de sus lados para alargarla o hacerla más profunda: los senos y los grifos conservan su tamaño.',
+    Triple: 'Triple',
+    'Glazing: Single': 'Simple',
+    'Glazing: Double': 'Doble',
+    'Glazing: Triple': 'Triple',
     Door: 'Puerta',
     Window: 'Ventana',
     'Stair, straight': 'Escalera recta',
@@ -94,6 +114,15 @@ export const translations: Record<string, Record<string, string>> = {
     'Insert 4 × 3 m room': 'Insertar una habitación de 4 × 3 m',
   },
   de: {
+    Washbasin: 'Waschbecken',
+    'Double washbasin': 'Doppelwaschbecken',
+    Depth: 'Tiefe',
+    Bowls: 'Becken',
+    'A counter with its bowls. Pull its sides to make it longer or deeper: the bowls and taps keep their size.': 'Eine Platte mit ihren Becken. Ziehen Sie an den Seiten, um sie länger oder tiefer zu machen: Becken und Armaturen behalten ihre Größe.',
+    Triple: 'Dreifach',
+    'Glazing: Single': 'Einfach',
+    'Glazing: Double': 'Zweifach',
+    'Glazing: Triple': 'Dreifach',
     Door: 'Tür',
     Window: 'Fenster',
     'Stair, straight': 'Treppe, gerade',
@@ -139,6 +168,15 @@ export const translations: Record<string, Record<string, string>> = {
     'Insert 4 × 3 m room': 'Raum 4 × 3 m einfügen',
   },
   zh: {
+    Washbasin: '洗手盆',
+    'Double washbasin': '双盆洗手台',
+    Depth: '进深',
+    Bowls: '盆数',
+    'A counter with its bowls. Pull its sides to make it longer or deeper: the bowls and taps keep their size.': '带盆的台面。拖动其边可加长或加深：盆和水龙头保持原尺寸。',
+    Triple: '三层',
+    'Glazing: Single': '单层',
+    'Glazing: Double': '双层',
+    'Glazing: Triple': '三层',
     Door: '门',
     Window: '窗',
     'Stair, straight': '直跑楼梯',
@@ -184,6 +222,15 @@ export const translations: Record<string, Record<string, string>> = {
     'Insert 4 × 3 m room': '插入 4 × 3 米的房间',
   },
   ja: {
+    Washbasin: '洗面器',
+    'Double washbasin': 'ダブルボウル洗面台',
+    Depth: '奥行き',
+    Bowls: 'ボウル数',
+    'A counter with its bowls. Pull its sides to make it longer or deeper: the bowls and taps keep their size.': 'ボウル付きのカウンター。辺を引くと長く・深くなり、ボウルと水栓の大きさは変わりません。',
+    Triple: '三層',
+    'Glazing: Single': '単板',
+    'Glazing: Double': '複層',
+    'Glazing: Triple': '三層',
     Door: 'ドア',
     Window: '窓',
     'Stair, straight': '直階段',

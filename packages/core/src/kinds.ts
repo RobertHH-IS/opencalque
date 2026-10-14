@@ -1,5 +1,5 @@
 import { childrenOf, isVisible, rootOf } from './document'
-import { add, dist, len, mid, norm, perp, rotate, scale, sub, type Bounds, type Vec2, ellipseArc, smoothPoints, unionBounds } from './geometry'
+import { add, applyTransform, dist, inverseTransform, len, mid, norm, perp, rotate, scale, sub, type Bounds, type Vec2, ellipseArc, smoothPoints, unionBounds } from './geometry'
 import { resolveColor } from './colors'
 import { DIMENSION_MARKER_SIZE, DIMENSION_TEXT_SIZE, styledDimension } from './dimensions'
 import { fillFields } from './fields'
@@ -12,7 +12,7 @@ import type { Registry } from './registry'
 import type { Asset, Document, Node, NodeOf, NodeType, WallEdge } from './schema'
 import { DEFAULT_PAPER_SCALE, paperFormat, paperSheet } from './papers'
 import { roomAt } from './rooms'
-import { bulgeThrough, hostWall, wallMiddle, wallParallel, wallPoints, wallPolygons, wallSeams, wallOutlineRuns } from './walls'
+import { bulgeThrough, hostWall, wallMiddle, wallParallel, wallPoints, wallPolygons, wallSeams, wallOutlineRuns, wallSides } from './walls'
 
 export const DEFAULT_INK = '#1f1f1f'
 export const WALL_FILL = '#ffffff'
@@ -48,10 +48,10 @@ export interface NodeKind<N> {
   primitives(node: N, ctx: KindContext): Primitive[]
   /** Patch that translates the node by `d`. */
   move(node: N, d: Vec2): Record<string, unknown>
-  /** Points the user can drag to reshape the node. */
-  handles?(node: N): Vec2[]
+  /** Points the user can drag to reshape the node. A parametric object's depend on its kind, found in `registry`. */
+  handles?(node: N, registry?: Registry): Vec2[]
   /** Patch that puts handle `index` at `p`. */
-  moveHandle?(node: N, index: number, p: Vec2): Record<string, unknown>
+  moveHandle?(node: N, index: number, p: Vec2, registry?: Registry): Record<string, unknown>
   /** Points other geometry snaps to. Defaults to the vertices of the node's paths. */
   snapPoints?(node: N): Vec2[]
   /**
@@ -84,7 +84,8 @@ const boxCorners = (node: { x: number; y: number; width: number; height: number 
   { x: node.x, y: node.y + node.height },
 ]
 
-function parametricPrimitives(node: NodeOf<'parametric'>, ctx: KindContext): Primitive[] {
+/** What a parametric object draws in its own coordinates, from its parameters, before it is placed. */
+export function parametricPrimitives(node: NodeOf<'parametric'>, ctx: KindContext): Primitive[] {
   const kind = ctx.registry.parametric.get(node.kind)
   if (!kind) return placeholder(node.kind)
   try {
@@ -478,7 +479,8 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       const name = label(node.name ?? '', 0)
       // Walls that no longer close leave a room with no floor to show; its name stays, to find it by.
       if (!region) return [name]
-      const floor: Primitive = { kind: 'path', points: region.outline, closed: true, fill: ROOM_FILL, stroke: 'none', backdrop: 'floor' }
+      // The room's stroke is the colour of its name: the floor keeps no outline whatever it is.
+      const floor: Primitive = { kind: 'path', points: region.outline, closed: true, fill: ROOM_FILL, stroke: 'none', over: true, backdrop: 'floor' }
       return node.showArea === false ? [floor, name] : [floor, name, label(`${(region.area / 1e6).toFixed(2)} m²`, 1)]
     },
     move: moveXY,
@@ -566,7 +568,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     moveHandle: (node, index, p) => (index < 2 ? moveHandleAB(node, index, p) : { bulge: bulgeThrough(node, p) ?? null }),
     // The middle of a straight wall is found as the middle of its line; the top of a curve has to be given.
     snapPoints: (node) => (node.bulge ? [node.a, node.b, wallMiddle(node)] : [node.a, node.b]),
-    // Its faces as drawn, and its middle line, which is where another wall comes to meet it.
+    // Its faces as drawn, and its line (its middle, or the face it is drawn by), which is where another wall comes to meet it.
     snapLines: (node, drawn) => [...drawn, wallPoints(node)],
   },
   dimension: {
@@ -613,7 +615,38 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
   parametric: {
     primitives: (node, ctx) => parametricPrimitives(node, ctx).map((p) => transformPrimitive(p, node)),
     move: moveXY,
+    // One whose kind says which of its lengths is its size along its X axis (a door's or a window's
+    // width) has the two ends of that size to drag, on that axis: each moves alone, the other
+    // staying where it is, so the object is stretched along a wall rather than scaled.
+    handles: (node, registry) => {
+      const size = stretchOf(node, registry)
+      return size ? [applyTransform({ x: 0, y: 0 }, node), applyTransform({ x: size.value, y: 0 }, node)] : []
+    },
+    moveHandle: (node, index, p, registry) => {
+      const size = stretchOf(node, registry)
+      if (!size) return {}
+      // Where the pointer is along the object's own X axis; how far off that axis it is does not count.
+      const along = inverseTransform(p, node).x
+      const tidy = (n: number) => Math.round(n * 1000) / 1000
+      if (index === 1) return { props: { ...node.props, [size.key]: tidy(Math.max(MIN_STRETCH, along)) } }
+      // The start moves, and the insertion point with it: the end stays where it was.
+      const start = Math.min(along, size.value - MIN_STRETCH)
+      const at = applyTransform({ x: start, y: 0 }, node)
+      return { x: tidy(at.x), y: tidy(at.y), props: { ...node.props, [size.key]: tidy(size.value - start) } }
+    },
   },
+}
+
+/** The least a parametric object is stretched to, in mm. */
+const MIN_STRETCH = 10
+
+/** The length a parametric object is stretched by along its X axis, as its kind says (`size`), and what it is now; null for a kind that says none. */
+function stretchOf(node: NodeOf<'parametric'>, registry: Registry | undefined): { key: string; value: number } | null {
+  const kind = registry?.parametric.get(node.kind)
+  const key = kind?.size?.x
+  if (!kind || !key) return null
+  const value = Number(registry!.resolveProps(kind, node.props)[key])
+  return Number.isFinite(value) ? { key, value } : null
 }
 
 export function kindOf(node: Node): NodeKind<any> {
@@ -630,11 +663,12 @@ function wallLayerLines(wall: NodeOf<'wall'>, layers: { thickness: number }[], p
   if (layers.length < 2 || dist(wall.a, wall.b) < 1e-6) return []
   const reach = wall.thickness * 4
   const out: Primitive[] = []
-  let across = -wall.thickness / 2
+  // Counted in from the face at `right` across the wall's line, whichever line the wall is drawn by.
+  const face = wallSides(wall).right
+  let across = 0
   for (const layer of layers.slice(0, -1)) {
     across += layer.thickness
-    // The left face is the one on the left when going from a to b, and `across` is counted from it.
-    const line = wallParallel(wall, -across, reach)
+    const line = wallParallel(wall, face - across, reach)
     for (const piece of pieces) {
       // Along a curved wall the line is many short stretches: those that follow on are drawn as one.
       let run: Vec2[] = []

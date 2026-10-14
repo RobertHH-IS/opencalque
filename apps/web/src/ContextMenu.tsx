@@ -6,6 +6,7 @@ import { useStore } from './store'
 /** What a right-click offers, as command ids; null is a separator. */
 const ON_SELECTION = [
   // The few things reached for most; the rest is in the Object menu and the properties panel.
+  // Turning and mirroring are not here: they are in the toolbar, beside the Rotate tool.
   // First, where it is: from the list of objects, the thing picked may be anywhere on the drawing.
   'view.zoomToSelection',
   null,
@@ -18,13 +19,10 @@ const ON_SELECTION = [
   'edit.group',
   'edit.ungroup',
   'component.create',
+  'component.vectorize',
   null,
   'edit.bringToFront',
   'edit.sendToBack',
-  null,
-  'edit.rotateRight',
-  'edit.flipHorizontal',
-  'edit.flipVertical',
 ]
 const ON_NOTHING = ['edit.paste', 'edit.pasteInPlace', 'edit.selectAll', null, 'view.zoomToFit', null, 'warehouse.components', 'file.importPlan']
 
@@ -98,7 +96,8 @@ export function ContextMenu() {
               useStore.setState({ menuPoint: null })
             }}
           >
-            <span className="menu-title">{t(item.title)}</span>
+            {/* It is what was clicked that it acts on: no need to say "selection" each time. */}
+            <span className="menu-title">{t(item.short ?? item.title)}</span>
             <kbd>{keysOf(item, overrides).slice(0, 1).map(formatKey)}</kbd>
           </button>
         ),

@@ -9,6 +9,7 @@ import {
   type Extension,
   type Op,
   type ParamDef,
+  type ParametricKind,
   type Primitive,
   type Vec2,
 } from '@opencalque/core'
@@ -16,7 +17,7 @@ import { translations } from './translations'
 
 /**
  * Bundled extension, and the reference for writing one: it depends only on @opencalque/core and
- * contributes doors, windows, stairs and one command.
+ * contributes doors, windows, stairs, washbasins and one command.
  *
  * Every object is drawn in local coordinates with the insertion point at the origin. Doors and
  * windows run along +X (the wall centerline) and are told the thickness of the wall they sit in.
@@ -35,6 +36,52 @@ const atLeast = (min: number, value: number) => Math.max(min, value)
 const MAX_STEPS = 500
 const count = (value: number) => (Number.isFinite(value) ? Math.min(MAX_STEPS, Math.max(1, Math.round(value))) : 1)
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
+/** The narrowest a stair is made by pulling its side, in mm. */
+const MIN_FLIGHT = 300
+/** The least a washbasin's counter is made, either way, by pulling its sides, in mm; and the most bowls it takes. */
+const MIN_COUNTER = 300
+const MAX_BOWLS = 4
+
+/**
+ * A washbasin: a counter along the wall (its top edge) with one bowl or more, each with its tap at
+ * the back. Its counter is resized by pulling its sides; its bowls and taps keep their size, that
+ * of the bowl of a 600 × 450 washbasin, each in the middle of its share of the counter, and are
+ * made smaller only when their share cannot hold them.
+ */
+const washbasin = (kind: string, label: string, width: number, depth: number, bowls: number): ParametricKind => ({
+  kind,
+  label,
+  category: 'bathroom',
+  description: 'A counter with its bowls. Pull its sides to make it longer or deeper: the bowls and taps keep their size.',
+  params: [
+    { ...WIDTH, default: width },
+    { key: 'depth', label: 'Depth', type: 'number', default: depth, unit: 'length' },
+    { key: 'bowls', label: 'Bowls', type: 'number', default: bowls },
+  ],
+  box: {
+    bounds: ({ width, depth }) => ({ left: 0, top: 0, right: atLeast(1, width), bottom: atLeast(1, depth) }),
+    resize: (_, size) => ({
+      ...(size.width === undefined ? {} : { width: Math.round(atLeast(MIN_COUNTER, size.width)) }),
+      ...(size.height === undefined ? {} : { depth: Math.round(atLeast(MIN_COUNTER, size.height)) }),
+    }),
+  },
+  build({ width, depth, bowls }) {
+    const w = atLeast(1, width)
+    const d = atLeast(1, depth)
+    const n = Math.min(MAX_BOWLS, count(bowls))
+    const share = w / n
+    const rx = clamp(share / 2 - 40, 20, 210)
+    const ry = clamp((d - 130) / 2, 20, 150)
+    // Between the taps at the back and a lip at the front.
+    const cy = Math.max(100 + ry, (100 + d - 30) / 2)
+    const prims: Primitive[] = [outline([pt(0, 0), pt(w, 0), pt(w, d), pt(0, d)])]
+    for (let i = 0; i < n; i++) {
+      const cx = (i + 0.5) * share
+      prims.push({ kind: 'ellipse', cx, cy, rx, ry }, { kind: 'ellipse', cx, cy: 60, rx: 20, ry: 20 })
+    }
+    return prims
+  },
+})
 
 /** Mirrors left and right within a span of `width`. */
 const mirrorAlong = (prims: Primitive[], width: number) => prims.map((p) => transformPrimitive(p, { x: width, y: 0, flipX: true }))
@@ -69,6 +116,7 @@ export const architecture: Extension = {
   activate(api) {
     api.registerParametric({
       kind: 'arch.door',
+      category: 'architecture',
       label: 'Door',
       description: 'Place it on a wall: it cuts the opening and follows the wall. Off a wall it stands alone.',
       params: [
@@ -80,6 +128,7 @@ export const architecture: Extension = {
         OTHER_SIDE,
       ],
       opening: ({ width }) => ({ from: 0, to: atLeast(1, width) }),
+      size: { x: 'width' },
       build({ width, type, hinge, angle, flip }, env) {
         const w = atLeast(1, width)
         const h = (env.wallThickness ?? LOOSE_WALL) / 2
@@ -106,22 +155,26 @@ export const architecture: Extension = {
 
     api.registerParametric({
       kind: 'arch.window',
+      category: 'architecture',
       label: 'Window',
       description: 'Place it on a wall: it cuts the opening and follows the wall. The sill marks the outside.',
       params: [
         { ...WIDTH, default: 1200 },
         { key: 'panes', label: 'Panes', type: 'number', default: 2 },
-        { key: 'glazing', label: 'Glazing', type: 'string', default: 'Double', options: ['Single', 'Double'] },
+        { key: 'glazing', label: 'Glazing', type: 'string', default: 'Double', options: ['Single', 'Double', 'Triple'] },
         HEIGHT(1250),
         { key: 'sill', label: 'Sill depth', type: 'number', default: 50, unit: 'length' },
         OTHER_SIDE,
       ],
       opening: ({ width }) => ({ from: 0, to: atLeast(1, width) }),
+      size: { x: 'width' },
       build({ width, panes, glazing, sill, flip }, env) {
         const w = atLeast(1, width)
         const h = (env.wallThickness ?? LOOSE_WALL) / 2
         const frame = Math.min(50, w / 4)
-        const glass = glazing === 'Double' ? [-Math.min(h * 0.3, 25), Math.min(h * 0.3, 25)] : [0]
+        // A line for each pane of glass, evenly across the middle of the wall.
+        const gap = Math.min(h * 0.3, 25)
+        const glass = glazing === 'Triple' ? [-gap, 0, gap] : glazing === 'Double' ? [-gap, gap] : [0]
         const n = count(panes)
         const prims: Primitive[] = [
           line([pt(0, -h), pt(w, -h)]),
@@ -141,9 +194,18 @@ export const architecture: Extension = {
 
     api.registerParametric({
       kind: 'arch.stair',
+      category: 'architecture',
       label: 'Stair, straight',
       description: 'Starts at the insertion point and climbs upward on the sheet.',
       params: [WIDTH, STEPS(12), TREAD],
+      // Up and down, it gains or loses whole steps; across, it is as wide as it is pulled.
+      box: {
+        bounds: ({ width, steps, tread }) => ({ left: 0, top: -count(steps) * atLeast(1, tread), right: atLeast(1, width), bottom: 0 }),
+        resize: ({ tread }, { width, height }) => ({
+          ...(width === undefined ? {} : { width: Math.round(atLeast(MIN_FLIGHT, width)) }),
+          ...(height === undefined ? {} : { steps: count(height / atLeast(1, tread)) }),
+        }),
+      },
       build({ width, steps, tread }) {
         const w = atLeast(1, width)
         const t = atLeast(1, tread)
@@ -156,9 +218,24 @@ export const architecture: Extension = {
 
     api.registerParametric({
       kind: 'arch.stair.l',
+      category: 'architecture',
       label: 'Stair, L-shaped',
       description: 'Climbs upward on the sheet, then turns a quarter on a landing.',
       params: [WIDTH, STEPS(14), { key: 'before', label: 'Steps before turn', type: 'number', default: 7 }, TREAD, TURN],
+      // Up and down, the first flight gains or loses steps; across, the second.
+      box: {
+        bounds: ({ width, steps, before, tread, turn }) => {
+          const [w, t, n1] = [atLeast(1, width), atLeast(1, tread), count(before)]
+          const end = w + count(steps - n1) * t
+          return { left: turn === 'Left' ? w - end : 0, top: -n1 * t - w, right: turn === 'Left' ? w : end, bottom: 0 }
+        },
+        resize: ({ width, steps, before, tread }, size) => {
+          const [w, t] = [atLeast(1, width), atLeast(1, tread)]
+          const n1 = size.height === undefined ? count(before) : count((size.height - w) / t)
+          const n2 = size.width === undefined ? count(steps - count(before)) : count((size.width - w) / t)
+          return { before: n1, steps: n1 + n2 }
+        },
+      },
       build({ width, steps, before, tread, turn }) {
         const w = atLeast(1, width)
         const t = atLeast(1, tread)
@@ -176,9 +253,26 @@ export const architecture: Extension = {
 
     api.registerParametric({
       kind: 'arch.stair.u',
+      category: 'architecture',
       label: 'Stair, U-shaped',
       description: 'Climbs upward on the sheet, turns half on a landing and comes back.',
       params: [WIDTH, STEPS(16), TREAD, { key: 'gap', label: 'Gap between flights', type: 'number', default: 100, unit: 'length' }, TURN],
+      // Up and down, both flights gain or lose a step for each tread; across, the gap between them changes.
+      box: {
+        bounds: ({ width, steps, tread, gap, turn }) => {
+          const [w, t] = [atLeast(1, width), atLeast(1, tread)]
+          const far = 2 * w + atLeast(0, gap)
+          return { left: turn === 'Left' ? w - far : 0, top: -count(steps / 2) * t - w, right: turn === 'Left' ? w : far, bottom: 0 }
+        },
+        resize: ({ width, steps, tread }, size) => {
+          const [w, t] = [atLeast(1, width), atLeast(1, tread)]
+          const more = size.height === undefined ? 0 : count((size.height - w) / t) - count(steps / 2)
+          return {
+            ...(size.height === undefined ? {} : { steps: Math.max(2, Math.round(steps) + 2 * more) }),
+            ...(size.width === undefined ? {} : { gap: Math.round(atLeast(0, size.width - 2 * w)) }),
+          }
+        },
+      },
       build({ width, steps, tread, gap, turn }) {
         const w = atLeast(1, width)
         const t = atLeast(1, tread)
@@ -201,6 +295,7 @@ export const architecture: Extension = {
 
     api.registerParametric({
       kind: 'arch.stair.spiral',
+      category: 'architecture',
       label: 'Stair, spiral',
       description: 'The insertion point is the centre. Starts at the bottom of the circle.',
       params: [
@@ -210,6 +305,11 @@ export const architecture: Extension = {
         { key: 'sweep', label: 'Sweep angle', type: 'number', default: 300 },
         { key: 'clockwise', label: 'Clockwise', type: 'boolean', default: true },
       ],
+      // Whichever way it is pulled, its radius follows: it stays round.
+      box: {
+        bounds: ({ radius }) => ({ left: -atLeast(1, radius), top: -atLeast(1, radius), right: atLeast(1, radius), bottom: atLeast(1, radius) }),
+        resize: (_, { width, height }) => ({ radius: Math.round(atLeast(MIN_FLIGHT, Math.max(width ?? 0, height ?? 0) / 2)) }),
+      },
       build({ radius, inner, steps, sweep, clockwise }) {
         const outer = atLeast(1, radius)
         const column = clamp(inner, 0, outer * 0.9)
@@ -234,8 +334,12 @@ export const architecture: Extension = {
       },
     })
 
+    api.registerParametric(washbasin('arch.washbasin', 'Washbasin', 600, 450, 1))
+    api.registerParametric(washbasin('arch.washbasin.double', 'Double washbasin', 1200, 500, 2))
+
     api.registerParametric({
       kind: 'arch.compass',
+      category: 'annotation',
       label: 'Compass (north)',
       description: 'Shows where north is. Turn it with its round handle, or type its rotation.',
       params: [

@@ -25,12 +25,35 @@ export interface ParametricKind {
   kind: string
   label: string
   description?: string
+  /**
+   * Where the component library lists it, among the components of the same kind: one of the
+   * libraries' ids ('furniture', 'bathroom', 'kitchen', 'electrical'), 'architecture' or
+   * 'annotation'; any other is a group of its own. Left out, it is listed with the other objects.
+   */
+  category?: string
   params: ParamDef[]
   /**
    * Makes the object a wall opening (door, window): the stretch of its local X axis that it cuts
    * out of a wall it is placed on. Such objects also snap to walls when placed or dragged.
    */
   opening?(props: Record<string, any>): { from: number; to: number }
+  /**
+   * The length parameter that is its size along its own X axis, from its insertion point: a door's
+   * or a window's width. With it, the object is stretched on the canvas by the two ends of that
+   * size, each moving alone, rather than scaled as a whole.
+   */
+  size?: { x: string }
+  /**
+   * The object as a box to resize on the canvas, as a rectangle is, its knob above turning it.
+   * `bounds` is the box it fills in its own coordinates (the insertion point at 0, 0); `resize`
+   * gives the parameters that make it fill a box of another width or height (only what changed is
+   * given), rounded to what it can be: whole steps for a stair. The object is then placed so that
+   * the side or corner held still stays where it was.
+   */
+  box?: {
+    bounds(props: Record<string, any>): { left: number; top: number; right: number; bottom: number }
+    resize(props: Record<string, any>, size: { width?: number; height?: number }): Record<string, unknown>
+  }
   build(props: Record<string, any>, env: BuildEnv): Primitive[]
 }
 

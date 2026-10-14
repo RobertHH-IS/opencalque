@@ -246,7 +246,7 @@ export const NodeSchema = z
         showArea: z.boolean().optional().describe('Whether the floor area is written under the name. Defaults to true.'),
       })
       .describe(
-        'A room: the space enclosed by the walls and dividers around the point (x, y), which is also where its name and area are written. Its outline is not stored: it is found from the walls each time, so it follows them. Give it a "name". style.fill colours the floor. If the walls around the point do not close, only the name is drawn.',
+        'A room: the space enclosed by the walls and dividers around the point (x, y), which is also where its name and area are written. Its outline is not stored: it is found from the walls each time, so it follows them. Give it a "name". style.fill colours the floor and style.pattern covers it (tiles, planks); style.stroke is the colour of the name and area. If the walls around the point do not close, only the name is drawn.',
       ),
     z
       .object({ ...base, type: z.literal('divider'), a: Vec2Schema, b: Vec2Schema })
@@ -327,11 +327,17 @@ export const NodeSchema = z
         a: Vec2Schema,
         b: Vec2Schema,
         thickness: z.number().positive().describe('In mm. For a wall of a type that defines a thickness it is kept equal to the type\'s, unless "overrides" lists it.'),
+        justify: z
+          .enum(['left', 'center', 'right'])
+          .optional()
+          .describe(
+            'Which line of the wall a and b are: absent or "center", its middle; "left" or "right", that face, as the wall runs from a to b, the whole thickness then lying on the other side. Corners are where these lines meet, so walls drawn by the same face keep that face flush whatever their thicknesses, and a change of thickness grows away from the line.',
+          ),
         bulge: z
           .number()
           .optional()
           .describe(
-            'Makes the wall curved: how far, in mm, the middle of its centerline stands off the straight line from a to b, the wall then following the arc of a circle through a, that point and b. Positive bows to the right of the direction a to b as seen on screen, negative to the left. At most half the distance from a to b, which is a half circle. Absent or 0 is a straight wall.',
+            'Makes the wall curved: how far, in mm, the middle of its line (see "justify") stands off the straight line from a to b, the wall then following the arc of a circle through a, that point and b. Positive bows to the right of the direction a to b as seen on screen, negative to the left. At most half the distance from a to b, which is a half circle. Absent or 0 is a straight wall.',
           ),
         height: z.number().positive().optional().describe('How high it stands, in mm, when that differs from its page. Used to measure its face; nothing is drawn with it.'),
         edges: z
@@ -352,7 +358,7 @@ export const NodeSchema = z
             "How each end is finished where it meets exactly one other wall. Left out (the default), the corner is automatic: a sharp point, cut off when the walls meet at less than 60° and the point would stick out. 'miter' keeps the sharp point at any angle, 'round' and 'bevel' round or cut that corner off, and 'through' with 'butt' on the other wall's end lets this wall run past while the other stops against it. Give both ends of a corner the same value, or the through/butt pair.",
           ),
       })
-      .describe('A wall along the centerline a-b, straight or, with "bulge", an arc. Walls sharing an endpoint are drawn joined.'),
+      .describe('A wall along the line a-b (its middle, or one of its faces with "justify"), straight or, with "bulge", an arc. Walls sharing an endpoint are drawn joined.'),
     z
       .object({
         ...base,
@@ -390,6 +396,8 @@ export const NodeSchema = z
         rotation,
         flipX: z.boolean().optional(),
         scale: z.number().positive().optional().describe('Size multiplier of this placement. Defaults to 1.'),
+        scaleX: z.number().positive().optional().describe('Stretch of this placement along the component\'s own X axis, on top of "scale": wider than it is drawn. Defaults to 1.'),
+        scaleY: z.number().positive().optional().describe('Stretch of this placement along the component\'s own Y axis, on top of "scale": taller than it is drawn. Defaults to 1.'),
       })
       .describe('A placement of a component. Editing the component updates every instance.'),
     z

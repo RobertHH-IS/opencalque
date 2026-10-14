@@ -3,9 +3,10 @@ import { msg } from './i18n'
 
 /**
  * Line weights are stored in screen pixels, but chosen here as what they print at: the standard
- * pen sizes of technical drawing, in millimetres.
+ * pen sizes of technical drawing, in millimetres, those a plan uses, from hatching (0.13) to the
+ * strongest outline (0.7). Others (1 and 1.4 were offered once) are still shown where they are used.
  */
-export const PENS = [0.13, 0.18, 0.25, 0.35, 0.5, 0.7, 1, 1.4]
+export const PENS = [0.13, 0.18, 0.25, 0.35, 0.5, 0.7]
 
 /** The printed width in mm of a weight in pixels, and back. */
 export const penOf = (pixels: number) => Math.round(pixels * PRINT_MM_PER_PIXEL * 100) / 100

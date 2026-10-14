@@ -34,11 +34,16 @@ import {
   AlignHorizontalSpaceAround,
   AlignStartHorizontal,
   AlignStartVertical,
+  ArrowDown,
+  ArrowDownToLine,
+  ArrowUp,
+  ArrowUpToLine,
+  BringToFront,
   AlignVerticalSpaceAround,
 } from 'lucide-react'
 import { zoomToFit } from './actions'
 import { CanvasView } from './canvas/CanvasView'
-import { executeById, useShortcutLabel } from './commands'
+import { executeById, formatKey, useShortcutLabel } from './commands'
 import { msg, t } from './i18n'
 import { QuickBar } from './QuickBar'
 import { editComponent, redo, registry, MEASURE_TOOLS, ROOM_TOOLS, setTool, SHAPE_TOOLS, TEXT_TOOLS, undo, useStore, type Tool } from './store'
@@ -65,9 +70,15 @@ const ICONS: Partial<Record<Tool, [title: string, icon: LucideIcon]>> = {
   divider: [msg('Room divider: separates two rooms where there is no wall'), SeparatorVertical],
 }
 
-/** Flipping the selection on itself, listed with the rotate tool. */
-/** Aligning and spacing the selection: one button in the toolbar, its choices in a list. The commands say when they apply. */
+/**
+ * Stacking, aligning and spacing the selection: one button in the toolbar, its choices in a list,
+ * each offered from the number of objects it needs. The properties panel has none of them.
+ */
 const ARRANGE: (GroupAction & { least: number })[] = [
+  { command: 'edit.bringToFront', title: msg('Bring to front'), icon: ArrowUpToLine, least: 1 },
+  { command: 'edit.bringForward', title: msg('Bring forward'), icon: ArrowUp, least: 1 },
+  { command: 'edit.sendBackward', title: msg('Send backward'), icon: ArrowDown, least: 1 },
+  { command: 'edit.sendToBack', title: msg('Send to back'), icon: ArrowDownToLine, least: 1 },
   { command: 'edit.align.left', title: msg('Align left'), icon: AlignStartVertical, least: 2 },
   { command: 'edit.align.center', title: msg('Align centres, across'), icon: AlignCenterVertical, least: 2 },
   { command: 'edit.align.right', title: msg('Align right'), icon: AlignEndVertical, least: 2 },
@@ -78,6 +89,7 @@ const ARRANGE: (GroupAction & { least: number })[] = [
   { command: 'edit.distribute.y', title: msg('Space evenly, up and down'), icon: AlignVerticalSpaceAround, least: 3 },
 ]
 
+/** Flipping the selection on itself, listed with the rotate tool. */
 const FLIPS: GroupAction[] = [
   { command: 'edit.flipHorizontal', title: msg('Mirror horizontally'), icon: FlipHorizontal2 },
   { command: 'edit.flipVertical', title: msg('Mirror vertically'), icon: FlipVertical2 },
@@ -224,20 +236,20 @@ function ArrangeMenu() {
       window.removeEventListener('keydown', onKeyDown, true)
     }
   }, [open])
-  // Nothing to line up with fewer than two: the list closes rather than offering only greyed choices.
+  // Nothing to arrange with nothing selected: the list closes rather than offering only greyed choices.
   useEffect(() => {
-    if (count < 2) setOpen(false)
+    if (count < 1) setOpen(false)
   }, [count])
   return (
     <div className="tool-group" ref={group}>
-      <IconButton title={t('Align and space evenly')} active={open} disabled={count < 2} onClick={() => setOpen(!open)}>
-        <AlignStartVertical size={18} />
+      <IconButton title={t('Arrange: stacking order, align, space evenly')} active={open} disabled={count < 1} onClick={() => setOpen(!open)}>
+        <BringToFront size={18} />
       </IconButton>
       {open && (
         <div className="menu-list tool-menu" role="menu">
           {ARRANGE.map((action, i) => (
             <div key={action.command} style={{ display: 'contents' }}>
-              {i === 6 && <hr />}
+              {(i === 4 || i === 10) && <hr />}
               <ActionChoice
                 action={action}
                 disabled={count < action.least}
@@ -322,8 +334,15 @@ function Hints() {
   // With the select tool, a preview in progress is an object being moved, reshaped, scaled or turned.
   const dragging = useStore((s) => s.tool === 'select' && s.base !== null && !s.editingText)
   const walls = useStore((s) => s.selection.some((id) => s.doc.nodes[id]?.type === 'wall'))
+  const face = useStore((s) => s.wallFace)
   // A rectangle or an ellipse alone is resized by the frame around it (resize.ts).
-  const boxed = useStore((s) => s.tool === 'select' && s.selection.length === 1 && ['rect', 'ellipse'].includes(s.doc.nodes[s.selection[0]]?.type ?? ''))
+  // A placed component is stretched by such a frame too, Shift keeping its proportions.
+  const boxed = useStore((s) => s.tool === 'select' && s.selection.length === 1 && ['rect', 'ellipse', 'instance'].includes(s.doc.nodes[s.selection[0]]?.type ?? ''))
+  // A stair is resized by such a frame too, but rounds what it is given (to whole steps), and has no proportions to keep.
+  const stretchy = useStore((s) => {
+    const node = s.tool === 'select' && s.selection.length === 1 ? s.doc.nodes[s.selection[0]] : undefined
+    return node?.type === 'parametric' && Boolean(registry.parametric.get(node.kind)?.box)
+  })
   let hints: Hint[]
   if (typing) hints = [['', t('Type the text')], ['Enter', t('starts a new line')], ['Esc', t('finishes')]]
   else if (tool === 'eyedropper') hints = [['', selected ? t('Click an object to give its look to what is selected') : t('Click an object to draw the next shapes with its look')]]
@@ -335,6 +354,11 @@ function Hints() {
         ? [['', t('Click the first of two points whose real distance you know')]]
         : [['', t('Click the second point')], ['Shift', t('keeps it level, upright or at 45°')]]
   }
+  // Ctrl grows a wall both ways, as it resizes from the middle in office programs; Alt keeps its meaning.
+  else if (face === 'drag') hints = [['', t('The other face stays where it is; joined walls stay joined')], [formatKey('Mod'), t('grows both sides, the middle staying put')], ['Alt', t('ignores the grid and snapping')]]
+  else if (face === 'hover' && !dragging) hints = [['', t('Drag the face to make the wall thicker or thinner on this side')], [formatKey('Mod'), t('both sides at once')]]
+  else if (dragging && stretchy) hints = [['', t('The side opposite stays where it is')], ['Alt', t('ignores the grid and snapping')]]
+  else if (stretchy) hints = [['', t('Drag a side to make it longer or wider, a corner for both')], ['', t('the knob above turns it')]]
   else if (dragging && boxed) hints = [['Shift', t('keeps its proportions, from a corner')], ['Alt', t('ignores the grid and snapping')]]
   else if (boxed) hints = [['', t('Drag the middle of a side to change one size, a corner to change both')], ['', t('the knob above turns it')]]
   else if (dragging) hints = walls ? [['', t('Joined walls stretch to stay joined')], ['↑ ←', t('holds it upright or level')], ['Alt', t('moves it alone, off the grid')]] : [['Shift', t('keeps an end on its own line')], ['↑ ←', t('holds it upright or level')], ['Alt', t('ignores the grid and snapping')]]

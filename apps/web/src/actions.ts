@@ -1,6 +1,6 @@
 import {
   applyOps,
-  distToWall,
+  wallContains,
   newId,
   splitWallOps,
   wallMiddle,
@@ -57,7 +57,9 @@ import {
   duplicatePageOps,
   pagesOf,
   reorderOps,
+  placeInOps,
   type Node,
+  parametricComponentOps,
 } from '@opencalque/core'
 import { gridStep } from './canvas/draw'
 import { language, t, tn } from './i18n'
@@ -565,7 +567,7 @@ export function splitWall(): void {
   if (!wall) return
   const { menuPoint } = get()
   // A right-click made elsewhere, earlier, says nothing about this wall.
-  const at = menuPoint && distToWall(menuPoint, wall) <= wall.thickness / 2 + 1 ? menuPoint : wallMiddle(wall)
+  const at = menuPoint && wallContains(wall, menuPoint, 1) ? menuPoint : wallMiddle(wall)
   useStore.setState({ menuPoint: null })
   const split = splitWallOps(wall, at, newId())
   if (!split) return toast(t('A wall cannot be split at one of its ends.'))
@@ -697,6 +699,22 @@ export const ungroupSelection = () =>
     select(freed)
   })
 
+/**
+ * Makes the one selected parametric object into a component of the drawing, of the shapes it
+ * draws, placed where it was: to be edited shape by shape, as a vectorized object.
+ */
+export const vectorizeSelection = () =>
+  guarded(() => {
+    const { doc, selection } = get()
+    const node = doc.nodes[selection[0]]
+    if (selection.length !== 1 || node?.type !== 'parametric') return
+    const kind = registry.parametric.get(node.kind)
+    const made = parametricComponentOps(doc, node.id, registry, kind ? t(kind.label) : node.kind)
+    if (!made || !apply(made.ops)) return
+    select([made.id])
+    toast(kind?.opening ? t('Made into a component of its shapes. It no longer cuts the wall it is in.') : t('Made into a component of its shapes, in the component library under “In this drawing”.'))
+  })
+
 export const makeComponent = () =>
   guarded(() => {
     const { doc, selection } = get()
@@ -737,6 +755,22 @@ export function reorderSelection(to: 'front' | 'forward' | 'backward' | 'back'):
 }
 
 /** Puts objects, or pages, just before or just after another, keeping their own order (as dragged in a list). */
+/**
+ * Puts objects in a group, or next to an object wherever it is (in a group or not), from the
+ * Structure list. What is selected afterwards is what can be selected where the selection is
+ * made: the objects, if they are now among what is being edited; else the group they went into,
+ * or the group holding it.
+ */
+export function placeIn(ids: string[], parent: string, target?: { id: string; after: boolean }): void {
+  const { doc, scope } = get()
+  const ops = placeInOps(doc, ids, parent, target)
+  if (ops.length === 0 || !apply(ops)) return
+  if (parent === scope) return select(ids)
+  let outer = parent
+  while (get().doc.nodes[outer]?.parent && get().doc.nodes[outer]!.parent !== scope) outer = get().doc.nodes[outer]!.parent!
+  select(get().doc.nodes[outer]?.parent === scope ? [outer] : [])
+}
+
 export function moveInOrder(ids: string[], target: string, after: boolean): void {
   const ops = reorderOps(get().doc, ids, target, after)
   if (ops.length > 0) apply(ops)

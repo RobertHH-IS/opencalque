@@ -18,6 +18,9 @@ export interface Transform {
   flipX?: boolean
   /** Size multiplier, applied before anything else. Defaults to 1. */
   scale?: number
+  /** Stretch along its own X and Y axes, on top of `scale`: a component placed wider or taller than it is drawn. Default to 1. */
+  scaleX?: number
+  scaleY?: number
 }
 
 export const add = (a: Vec2, b: Vec2): Vec2 => ({ x: a.x + b.x, y: a.y + b.y })
@@ -42,9 +45,18 @@ export function rotate(p: Vec2, degrees: number): Vec2 {
 
 export function applyTransform(p: Vec2, t: Transform): Vec2 {
   const k = t.scale ?? 1
-  const flipped = { x: (t.flipX ? -p.x : p.x) * k, y: p.y * k }
+  const flipped = { x: (t.flipX ? -p.x : p.x) * k * (t.scaleX ?? 1), y: p.y * k * (t.scaleY ?? 1) }
   const rotated = t.rotation ? rotate(flipped, t.rotation) : flipped
   return { x: rotated.x + t.x, y: rotated.y + t.y }
+}
+
+/** The point that `applyTransform` with `t` takes to `p`: a point of the drawing in the terms of what `t` places. */
+export function inverseTransform(p: Vec2, t: Transform): Vec2 {
+  const k = t.scale ?? 1
+  const moved = { x: p.x - t.x, y: p.y - t.y }
+  const unrotated = t.rotation ? rotate(moved, -t.rotation) : moved
+  const x = unrotated.x / (k * (t.scaleX ?? 1))
+  return { x: (t.flipX ? -x : x) || 0, y: unrotated.y / (k * (t.scaleY ?? 1)) || 0 }
 }
 
 export function boundsOfPoints(points: Vec2[]): Bounds | null {

@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "id": "opencalque.furniture",
   "name": "Adjustable furniture",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "OpenCalque",
   "description": "Tables, beds and shelving whose size and number of seats or bays you set.",
   "translations": {
@@ -71,12 +71,14 @@
   "objects": [
     {
       "kind": "furn.table",
+      "category": "furniture",
       "label": "Table with chairs",
       "params": [
         { "key": "length", "label": "Length", "type": "number", "default": 1800, "unit": "length" },
         { "key": "width", "label": "Width", "type": "number", "default": 900, "unit": "length" },
         { "key": "seats", "label": "Seats", "type": "number", "default": 6 }
       ],
+      "box": { "width": "length", "height": "width" },
       "draw": [
         { "closed": true, "path": [[0, 0], ["length", 0], ["length", "width"], [0, "width"]] },
         {
@@ -103,11 +105,13 @@
     },
     {
       "kind": "furn.bed",
+      "category": "furniture",
       "label": "Bed",
       "params": [
         { "key": "width", "label": "Width", "type": "number", "default": 1600, "unit": "length" },
         { "key": "length", "label": "Length", "type": "number", "default": 2000, "unit": "length" }
       ],
+      "box": { "width": "width", "height": "length" },
       "draw": [
         { "closed": true, "path": [[0, 0], ["width", 0], ["width", "length"], [0, "length"]] },
         {
@@ -125,12 +129,14 @@
     },
     {
       "kind": "furn.shelf",
+      "category": "furniture",
       "label": "Shelving unit",
       "params": [
         { "key": "length", "label": "Length", "type": "number", "default": 2000, "unit": "length" },
         { "key": "depth", "label": "Depth", "type": "number", "default": 400, "unit": "length" },
         { "key": "bays", "label": "Bays", "type": "number", "default": 4 }
       ],
+      "box": { "width": "length", "height": "depth" },
       "draw": [
         { "closed": true, "path": [[0, 0], ["length", 0], ["length", "depth"], [0, "depth"]] },
         { "repeat": { "count": "max(0, bays - 1)" }, "path": [["(i + 1) * length / max(1, bays)", 0], ["(i + 1) * length / max(1, bays)", "depth"]] },

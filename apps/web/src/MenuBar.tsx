@@ -18,7 +18,7 @@ const MENUS: [string, (string | null)[]][] = [
   // What is done to the selection as an object, as against editing in general: arranging, transforming, modifying.
   [
     msg('Object'),
-    ['edit.group', 'edit.ungroup', null, 'edit.bringToFront', 'edit.bringForward', 'edit.sendBackward', 'edit.sendToBack', null, 'edit.rotateRight', 'edit.rotateLeft', 'edit.flipHorizontal', 'edit.flipVertical', null, 'shape.close', 'shape.open', 'shape.curve', 'shape.straighten', null, 'wall.split', 'wall.extend', 'wall.trim', 'wall.dimension', null, 'modifier.crop', 'modifier.array', null, 'component.create', 'component.finish'],
+    ['edit.group', 'edit.ungroup', null, 'edit.bringToFront', 'edit.bringForward', 'edit.sendBackward', 'edit.sendToBack', null, 'edit.rotateRight', 'edit.rotateLeft', 'edit.flipHorizontal', 'edit.flipVertical', null, 'shape.close', 'shape.open', 'shape.curve', 'shape.straighten', null, 'wall.split', 'wall.extend', 'wall.trim', 'wall.dimension', null, 'modifier.crop', 'modifier.array', null, 'component.create', 'component.vectorize', 'component.finish'],
   ],
   [msg('View'), ['view.zoomToFit', 'view.zoomIn', 'view.zoomOut', null, 'view.toggleGrid', 'view.toggleSnapGrid', 'view.toggleSnapObjects', null, '@Panels', null, 'view.toggleTheme', 'view.resetLayout']],
   // There is no Insert or Tools menu: the toolbar holds the tools and the component library, and pages

@@ -2,6 +2,7 @@ import {
   applyTransform,
   boundsOfPoints,
   distToSegment,
+  ellipseArc,
   pointInPolygon,
   rotate,
   type Bounds,
@@ -114,21 +115,33 @@ export function transformPrimitive(p: Primitive, t: Transform): Primitive {
 }
 
 function transformGeometry(p: Primitive, t: Transform): Primitive {
+  const k = t.scale ?? 1
+  const [sx, sy] = [k * (t.scaleX ?? 1), k * (t.scaleY ?? 1)]
   switch (p.kind) {
     case 'path':
       return { ...p, points: p.points.map((q) => applyTransform(q, t)) }
     case 'ellipse': {
+      // Stretched along an axis it is not square to, an ellipse is no longer one that has a turn
+      // and two radii: it is drawn as the line round it, which is.
+      const own = (((p.rotation ?? 0) % 180) + 180) % 180
+      if (sx !== sy && own !== 0 && own !== 90) {
+        const { kind: _, cx, cy, rx, ry, rotation, ...style } = p
+        return { ...style, kind: 'path', closed: true, points: ellipseArc({ cx, cy, rx, ry, rotation, from: 0, to: 360 }).slice(0, -1).map((q) => applyTransform(q, t)) }
+      }
       const c = applyTransform({ x: p.cx, y: p.cy }, t)
-      return { ...p, cx: c.x, cy: c.y, rx: p.rx * (t.scale ?? 1), ry: p.ry * (t.scale ?? 1), rotation: (t.flipX ? -(p.rotation ?? 0) : (p.rotation ?? 0)) + (t.rotation ?? 0) }
+      const [ax, ay] = own === 90 ? [sy, sx] : [sx, sy]
+      return { ...p, cx: c.x, cy: c.y, rx: p.rx * ax, ry: p.ry * ay, rotation: (t.flipX ? -(p.rotation ?? 0) : (p.rotation ?? 0)) + (t.rotation ?? 0) }
     }
     case 'text': {
+      // Letters are not stretched: they take the stretch across their lines, their height.
       const c = applyTransform(p, t)
-      return { ...p, x: c.x, y: c.y, size: p.size * (t.scale ?? 1), rotation: (t.rotation ?? 0) + (p.rotation ?? 0) }
+      const upright = Math.abs(Math.cos(((p.rotation ?? 0) * Math.PI) / 180)) >= Math.SQRT1_2
+      return { ...p, x: c.x, y: c.y, size: p.size * (upright ? sy : sx), rotation: (t.rotation ?? 0) + (p.rotation ?? 0) }
     }
     case 'image': {
       // Pictures are moved and turned with their container but never mirrored.
       const c = applyTransform(p, t)
-      return { ...p, x: c.x, y: c.y, width: p.width * (t.scale ?? 1), height: p.height * (t.scale ?? 1), rotation: (t.rotation ?? 0) + (p.rotation ?? 0) }
+      return { ...p, x: c.x, y: c.y, width: p.width * sx, height: p.height * sy, rotation: (t.rotation ?? 0) + (p.rotation ?? 0) }
     }
   }
 }

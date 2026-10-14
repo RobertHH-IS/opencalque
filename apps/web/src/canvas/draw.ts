@@ -116,6 +116,8 @@ export interface Overlay {
   smart?: MoveGuides
   /** A line of a wall pointed at in the properties panel, in world coordinates. */
   edgeHover?: Vec2[][]
+  /** The face of the selected wall that a press would drag, or that is being dragged, to change its thickness, as its stretches. */
+  face?: Vec2[][]
   /** Where the split tool would cut: a point, the way the thing runs there, and how far the mark reaches to either side. */
   cut?: { at: Vec2; dir: Vec2; half: number; parts?: Vec2[][]; gap?: number }
   /** The measure tool's reading, in world coordinates. It is not part of the drawing. */
@@ -133,6 +135,8 @@ export interface Overlay {
   corner?: Vec2 | null
   /** Whether the box around the selection gets its grips: corners to scale by, a knob to turn by. */
   grips?: boolean
+  /** What is selected is shown by its own outline alone, with no box around it: rooms, whose floor may be any shape. */
+  boxless?: boolean
   /**
    * The frame a single box-shaped object is resized by, in place of that box: its eight grips (four
    * corners, then the middles of the sides) in world coordinates, and the direction its knob stands
@@ -352,8 +356,9 @@ export function drawScene(
   ctx.strokeStyle = ACCENT
   ctx.lineWidth = 1
   // One box around everything selected: it shows the selection as a whole, and is the area where
-  // a right-click is about the selection. A single object with draggable handles needs none.
-  const box = selected.length === 1 && (handles.length > 0 || overlay.frame) ? null : sceneBounds(selected)
+  // a right-click is about the selection. A single object with draggable handles needs none, and
+  // nor do rooms, whose floor is outlined already and may be any shape: an arch in a rectangle.
+  const box = (selected.length === 1 && (handles.length > 0 || overlay.frame)) || overlay.boxless ? null : sceneBounds(selected)
   if (overlay.frame) {
     // The outline of the object is lit up already; its frame adds a grip at each corner and in the middle of each side, and the knob.
     const grips = overlay.frame.grips.map(toScreen)
@@ -572,6 +577,20 @@ export function drawScene(
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.drawImage(ring, 0, 0)
     ctx.restore()
+  }
+  if (overlay.face) {
+    // Drawn over the face in the colour of the selection, with a glow that sets it apart from the
+    // selection's own outline, so it is clear which side moves.
+    ctx.setLineDash([])
+    ctx.lineCap = 'round'
+    for (const [width, colour] of [[9, 'rgb(13 153 255 / 22%)'], [2.5, ACCENT]] as const) {
+      ctx.strokeStyle = colour
+      ctx.lineWidth = width
+      ctx.beginPath()
+      for (const line of overlay.face) line.map(toScreen).forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+      ctx.stroke()
+    }
+    ctx.lineCap = 'butt'
   }
   if (overlay.cut) {
     const { at, dir, half } = overlay.cut

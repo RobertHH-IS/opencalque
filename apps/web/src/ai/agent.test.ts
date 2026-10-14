@@ -127,7 +127,7 @@ describe('assistant', () => {
     ] as Op[])
     const state = describeState(fakeHost(plan, { selection: ['w1', 'g'] }).host)
     expect(state).toContain('<selection>')
-    expect(state).toContain('"w1", a wall: length 4000 mm along its centre line, 200 mm thick')
+    expect(state).toContain('"w1", a wall: length 4000 mm along its line, 200 mm thick')
     expect(state).toContain('"g", a group: holds 1 objects: 1 line')
     expect(state).toContain('"inside"')
     expect(state).toContain('New objects go on the layer "Layer 1"')

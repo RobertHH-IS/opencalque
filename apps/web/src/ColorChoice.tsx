@@ -283,11 +283,11 @@ export function ColorChoice({
   compact?: boolean
   title?: string
   /**
-   * The layer of what the colour is for, offered as a colour to follow (`LAYER_COLOR`): its name
-   * (none when several objects on different layers are being set), its colour, and whether no
-   * colour at all already means it (a stroke's does).
+   * The layer of what the colour is for, offered as a colour to follow (`LAYER_COLOR`): its colour,
+   * whether the objects being set are on different layers, and whether no colour at all already
+   * means it (a stroke's does). Not its name: the Layer field above already says which it is.
    */
-  layer?: { name?: string; color: string; byDefault: boolean }
+  layer?: { color: string; several: boolean; byDefault: boolean }
   /** Only a colour of its own: no shared colours to link to, as for the value of a shared colour itself. */
   plain?: boolean
 }) {
@@ -349,7 +349,7 @@ export function ColorChoice({
   const shared = linked === null ? undefined : doc.colors?.[linked]
   // Following the layer: said so, or meant by having no colour where that is what no colour means.
   const followsLayer = layer !== undefined && (stored === LAYER_COLOR || (stored === undefined && layer.byDefault))
-  const layerTitle = layer && (layer.name ? t('Follows the colour of the layer “{name}”', { name: layer.name }) : t('Follows the colour of each one’s layer'))
+  const layerTitle = layer && (layer.several ? t('Follows the colour of each one’s layer') : t('Follows the colour of its layer'))
   // What is painted: the shared colour's value, the layer's, the property's own colour, or what it falls back on.
   const shown = followsLayer ? layer!.color : (resolveColor(doc, stored) ?? fallback)
   const colors = colorsOf(doc)
@@ -380,7 +380,7 @@ export function ColorChoice({
         ) : stored === LAYER_COLOR ? (
           <>
             <Layers size={12} />
-            <span>{layer?.name ?? t('Layer')}</span>
+            <span>{t('Layer')}</span>
           </>
         ) : linked ? (
           <>
@@ -420,7 +420,7 @@ export function ColorChoice({
             {layer && (
               <button type="button" className={`color-option${followsLayer ? ' active' : ''}`} title={layerTitle} onClick={() => (commit(layer.byDefault ? undefined : LAYER_COLOR), setOpen(false))}>
                 <i style={swatch(layer.color)} />
-                <span>{layer.name ? t('Colour of the layer “{name}”', { name: layer.name }) : t('Colour of the layer')}</span>
+                <span>{t('Colour of the layer')}</span>
                 {followsLayer && <Check size={12} />}
               </button>
             )}

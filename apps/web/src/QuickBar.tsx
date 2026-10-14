@@ -3,16 +3,17 @@ import { drawing } from './canvas/drawing'
 import { ColorChoice } from './ColorChoice'
 import { msg, t } from './i18n'
 import { useStore, type Tool } from './store'
-import { dashIndex, DASHES, penOf, PENS, pixelsOf } from './strokes'
-import { DashPicker, scrub } from './ui'
+import { dashIndex, DASHES } from './strokes'
+import { WeightChoice } from './WeightChoice'
+import { DashPicker, JustifyPicker, scrub } from './ui'
 import { formatNumber, parseLength, parseNumber, unit, unitSuffix } from './units'
 
-/** Where the clicked points can lie on a wall, as it is drawn from left to right: its name and where the line is in its picture. */
-const JUSTIFY: ['left' | 'center' | 'right', string, number][] = [
-  ['left', msg('Points along the left face of the wall'), 5],
-  ['center', msg('Points along the middle of the wall'), 9],
-  ['right', msg('Points along the right face of the wall'), 13],
-]
+/** Where the clicked points can lie on a wall, as it is drawn: they are its corners, and the line it keeps. */
+const JUSTIFY = {
+  left: msg('Points along the left face of the wall'),
+  center: msg('Points along the middle of the wall'),
+  right: msg('Points along the right face of the wall'),
+}
 
 type Kind = 'length' | 'angle'
 type Size = { which: 'a' | 'b'; label: string; kind: Kind }
@@ -162,19 +163,12 @@ export function QuickBar() {
           </select>
         )}
         {tool === 'wall' && (
-          <div className="end-picker justify-picker" role="radiogroup" aria-label={t('Where the points you click lie on the wall')}>
-            {JUSTIFY.map(([value, name, y]) => (
-              <button key={value} type="button" role="radio" aria-checked={value === wallJustify} className={value === wallJustify ? 'active' : ''} title={t(name)} aria-label={t(name)} onClick={() => useStore.setState({ wallJustify: value })}>
-                {/* The wall as a band, and the line of clicked points as a dashed line with its two points. */}
-                <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1.2">
-                  <rect x="3" y="5" width="22" height="8" fill="currentColor" fillOpacity="0.18" />
-                  <path d={`M3 ${y}h22`} strokeWidth="1.6" strokeDasharray="3 2" />
-                  <circle cx="3" cy={y} r="1.8" fill="currentColor" stroke="none" />
-                  <circle cx="25" cy={y} r="1.8" fill="currentColor" stroke="none" />
-                </svg>
-              </button>
-            ))}
-          </div>
+          <JustifyPicker
+            value={wallJustify}
+            names={{ left: t(JUSTIFY.left), center: t(JUSTIFY.center), right: t(JUSTIFY.right) }}
+            label={t('Where the points you click lie on the wall')}
+            onPick={(value) => useStore.setState({ wallJustify: value })}
+          />
         )}
         {tool === 'paper' && (
           <label className="quick-field locked" title={t('The drawing scale of the sheet. It sets how much of the drawing a standard format covers.')}>
@@ -207,14 +201,8 @@ export function QuickBar() {
         ))}
         {/* Beyond the ready-made ones: any colour, or one of the drawing's shared colours. */}
         <ColorChoice compact title={t('Another colour, or a shared one')} stored={color !== null && !COLORS.includes(color) ? color : undefined} fallback="#ffffff" commit={(next) => useStore.setState({ drawColor: (next as string | undefined) ?? null })} />
-        <select className="quick-select" title={t('Line weight of the next shapes, as printed')} aria-label={t('Line weight of the next shapes, as printed')} value={weight === null ? '' : String(penOf(weight))} onChange={(e) => useStore.setState({ drawWeight: e.target.value === '' ? null : pixelsOf(Number(e.target.value)) })}>
-          <option value="">{t('Weight')}</option>
-          {(weight !== null && !PENS.includes(penOf(weight)) ? [...PENS, penOf(weight)].sort((p, q) => p - q) : PENS).map((mm) => (
-            <option key={mm} value={mm}>
-              {mm} mm
-            </option>
-          ))}
-        </select>
+        {/* With none, the next shapes take the usual weight. */}
+        <WeightChoice compact value={weight ?? undefined} placeholder={t('Weight')} none={t('default')} label={t('Line weight of the next shapes, as printed')} onPick={(pixels) => useStore.setState({ drawWeight: pixels })} />
         <DashPicker value={dash} label={t('Kind of line of the next shapes')} onPick={(pattern) => useStore.setState({ drawDash: pattern })} />
       </div>
     </div>

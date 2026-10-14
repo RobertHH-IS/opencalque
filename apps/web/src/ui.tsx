@@ -236,6 +236,52 @@ export function Section(props: { title: string; action?: ReactNode; children: Re
  * dashes. `value` is the pattern in use (none for a solid line); one that is not among the kinds
  * leaves no picture chosen.
  */
+/** Where the line of a wall can be, and where it is in its picture: along the left face of a wall drawn from left to right, along its middle, or along its right face. */
+const JUSTIFY_LINES: ['left' | 'center' | 'right', number][] = [
+  ['left', 5],
+  ['center', 9],
+  ['right', 13],
+]
+
+/**
+ * Three pictures to choose the line of a wall by: its left face, its middle, its right face, as
+ * the wall runs. None is lit when `value` is undefined (several walls that differ). `onHover` is
+ * told which one the pointer is on, and null when it leaves them.
+ */
+export function JustifyPicker(props: {
+  value: 'left' | 'center' | 'right' | undefined
+  names: Record<'left' | 'center' | 'right', string>
+  label: string
+  onPick: (value: 'left' | 'center' | 'right') => void
+  onHover?: (value: 'left' | 'center' | 'right' | null) => void
+}) {
+  return (
+    <div className="end-picker justify-picker" role="radiogroup" aria-label={props.label} onMouseLeave={() => props.onHover?.(null)}>
+      {JUSTIFY_LINES.map(([value, y]) => (
+        <button
+          key={value}
+          type="button"
+          role="radio"
+          aria-checked={value === props.value}
+          className={value === props.value ? 'active' : ''}
+          title={props.names[value]}
+          aria-label={props.names[value]}
+          onClick={() => props.onPick(value)}
+          onMouseEnter={() => props.onHover?.(value)}
+        >
+          {/* The wall as a band, and its line as a dashed line with its two corners. */}
+          <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1.2">
+            <rect x="3" y="5" width="22" height="8" fill="currentColor" fillOpacity="0.18" />
+            <path d={`M3 ${y}h22`} strokeWidth="1.6" strokeDasharray="3 2" />
+            <circle cx="3" cy={y} r="1.8" fill="currentColor" stroke="none" />
+            <circle cx="25" cy={y} r="1.8" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function DashPicker(props: { value: unknown; none?: boolean; label?: string; onPick: (pattern: number[] | null) => void; hidden?: { chosen: boolean; onPick: () => void }; faint?: boolean }) {
   // With `hidden`, the line can also be no line at all, the last choice; `faint` shows the choice as one that is inherited.
   const current = props.none || props.hidden?.chosen ? -1 : dashIndex(props.value)

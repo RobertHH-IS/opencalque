@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { alignMove, applyOps, buildScene, createDocument, moveGuides, Registry, snapTo, type Alignable, type Op } from '../src'
+import { architecture } from '../../ext-architecture/src'
+import { alignables, alignMove, applyOps, buildScene, createDocument, moveGuides, Registry, snapTo, type Alignable, type Op } from '../src'
 
 const registry = new Registry()
 const add = (node: Record<string, unknown>): Op => ({ op: 'add_node', node: { parent: 'page_1', ...node } }) as Op
@@ -90,5 +91,42 @@ describe('lining up what is moved', () => {
   it('shows a line over everything that shares a side', () => {
     const { lines } = moveGuides(box(0, 0, 700, 500), [box(3000, 2000, 5000, 3000)], { x: 3000, y: 700 })
     expect(lines).toEqual([[{ x: 3000, y: 700 }, { x: 3000, y: 3000 }]])
+  })
+})
+
+describe('lining up with what is inside a group', () => {
+  const arch = new Registry().use(architecture)
+  // A room whose walls are grouped together, as those of a traced plan often are, and inside it,
+  // outside the group, a washbasin turned with its back (the top of its counter) to the left.
+  // The group has too many points to line up by them: only its box, around the whole room.
+  const wall = (id: string, ax: number, ay: number, bx: number, by: number) => add({ type: 'wall', id, parent: 'plan', a: { x: ax, y: ay }, b: { x: bx, y: by }, thickness: 200 })
+  const doc = applyOps(createDocument(), [
+    add({ type: 'group', id: 'plan' }),
+    wall('left', 0, 0, 0, 4000),
+    wall('bottom', 0, 4000, 5000, 4000),
+    wall('right', 5000, 4000, 5000, 0),
+    wall('top', 5000, 0, 0, 0),
+    add({ type: 'parametric', id: 'basin', kind: 'arch.washbasin', x: 1000, y: 2500, rotation: 270, props: {} }),
+  ])
+  const scene = buildScene(doc, 'page_1', arch)
+
+  it('brings the back of a washbasin against the face of a grouped wall', () => {
+    const { moving, others } = alignables(scene, doc, arch, new Set(['basin']))
+    expect(moving!.bounds.minX).toBeCloseTo(1000)
+    // The group, and each of its walls.
+    expect(others).toHaveLength(5)
+    // Its back brought 20 mm short of the wall's face, at x = 100: it goes against it.
+    const fit = alignMove(moving!, others, { x: -880, y: 0 }, 50)
+    expect(fit.x).toBe(true)
+    expect(fit.d.x).toBeCloseTo(-900)
+    // By the group's box alone, all there was to line up with before, the face could not be found.
+    expect(alignMove(moving!, others.slice(0, 1), { x: -880, y: 0 }, 50).x).toBe(false)
+  })
+
+  it('leaves out what is moved, when it is inside the group', () => {
+    // The wall picked in the Structure panel: the group and the other walls stay, with the washbasin.
+    expect(alignables(scene, doc, arch, new Set(['left'])).others).toHaveLength(5)
+    // The whole group moved: nothing it holds is lined up with.
+    expect(alignables(scene, doc, arch, new Set(['plan'])).others).toHaveLength(1)
   })
 })

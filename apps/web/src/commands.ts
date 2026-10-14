@@ -11,6 +11,7 @@ import {
   exportSvg,
   importLibrary,
   makeComponent,
+  vectorizeSelection,
   newDocument,
   openDocument,
   paste,
@@ -58,6 +59,11 @@ import { labelOf } from './ui'
 export interface Command {
   id: string
   title: string
+  /**
+   * What the right-click menu calls it, where it is plain that it acts on what was clicked: "Delete"
+   * rather than "Delete selection". The menu bar and the palette keep the title.
+   */
+  short?: string
   category: string
   /** Default shortcuts, written like "Mod+Shift+S". Mod is Ctrl, or Cmd on macOS. */
   keys?: string[]
@@ -78,6 +84,7 @@ const get = useStore.getState
 const prefs = usePrefs.getState
 const selected = () => get().selection.length > 0
 const onlyInstance = () => get().selection.length === 1 && get().doc.nodes[get().selection[0]]?.type === 'instance'
+const onlyParametric = () => get().selection.length === 1 && get().doc.nodes[get().selection[0]]?.type === 'parametric'
 /** A line, a wall or a divider has its first point and is waiting for the next. */
 const drawingLine = () => get().drawStep > 0 && ['line', 'wall', 'divider'].includes(get().tool)
 /** Something is being dragged with the select tool: moved, or reshaped by one of its points. */
@@ -151,12 +158,12 @@ const STATIC: Command[] = [
 
   { id: 'edit.undo', title: msg('Undo'), category: 'Edit', keys: ['Mod+Z'], interrupts: true, run: undo },
   { id: 'edit.redo', title: msg('Redo'), category: 'Edit', keys: ['Mod+Shift+Z', 'Mod+Y'], interrupts: true, run: redo },
-  { id: 'edit.delete', title: msg('Delete selection'), category: 'Edit', keys: ['Delete', 'Backspace'], interrupts: true, run: deleteSelection },
+  { id: 'edit.delete', title: msg('Delete selection'), short: msg('Delete'), category: 'Edit', keys: ['Delete', 'Backspace'], interrupts: true, run: deleteSelection },
   { id: 'edit.cut', title: msg('Cut'), category: 'Edit', keys: ['Mod+X'], interrupts: true, when: selected, run: cutSelection },
   { id: 'edit.copy', title: msg('Copy'), category: 'Edit', keys: ['Mod+C'], when: selected, run: copySelection },
   { id: 'edit.paste', title: msg('Paste'), category: 'Edit', keys: ['Mod+V'], interrupts: true, run: () => paste() },
   { id: 'edit.pasteInPlace', title: msg('Paste in place'), category: 'Edit', keys: ['Mod+Shift+V'], interrupts: true, keywords: 'same position page floor', run: () => paste(true) },
-  { id: 'edit.duplicate', title: msg('Duplicate selection'), category: 'Edit', keys: ['Mod+D'], interrupts: true, run: duplicateSelection },
+  { id: 'edit.duplicate', title: msg('Duplicate selection'), short: msg('Duplicate'), category: 'Edit', keys: ['Mod+D'], interrupts: true, run: duplicateSelection },
   {
     id: 'edit.selectAll',
     title: msg('Select all'),
@@ -205,7 +212,7 @@ const STATIC: Command[] = [
   { id: 'edit.distribute.y', title: msg('Space evenly, up and down'), category: 'Edit', when: () => get().selection.length > 2, run: () => distributeSelection('y') },
   { id: 'modifier.array', title: msg('Repeat in rows and columns'), category: 'Edit', when: selected, run: () => addModifier('array') },
   { id: 'modifier.hatch', title: msg('Hatch or floor pattern'), category: 'Edit', when: selected, run: () => addModifier('hatch') },
-  { id: 'edit.group', title: msg('Group selection'), category: 'Edit', keys: ['Mod+G'], interrupts: true, when: selected, run: groupSelection },
+  { id: 'edit.group', title: msg('Group selection'), short: msg('Group together'), category: 'Edit', keys: ['Mod+G'], interrupts: true, when: selected, run: groupSelection },
   {
     id: 'edit.ungroup',
     title: msg('Ungroup'),
@@ -218,11 +225,12 @@ const STATIC: Command[] = [
   },
 
   // A component alone is one already: making another from it would only wrap it.
-  { id: 'component.create', title: msg('Create component from selection'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: () => selected() && !onlyInstance(), run: makeComponent },
+  { id: 'component.vectorize', title: msg('Vectorize into a component'), short: msg('Vectorize'), category: 'Components', interrupts: true, when: onlyParametric, run: vectorizeSelection },
+  { id: 'component.create', title: msg('Create component from selection'), short: msg('Create a component'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: () => selected() && !onlyInstance(), run: makeComponent },
   { id: 'component.finish', title: msg('Finish editing this group or component'), category: 'Components', when: () => get().scope !== get().page, run: () => editComponent(null) },
 
   { id: 'view.zoomToFit', title: msg('Zoom to fit'), category: 'View', keys: ['Shift+1'], run: zoomToFit },
-  { id: 'view.zoomToSelection', title: msg('Zoom to selection'), category: 'View', keys: ['Shift+2'], when: selected, run: zoomToSelection },
+  { id: 'view.zoomToSelection', title: msg('Zoom to selection'), short: msg('Zoom to it'), category: 'View', keys: ['Shift+2'], when: selected, run: zoomToSelection },
   { id: 'view.zoomIn', title: msg('Zoom in'), category: 'View', keys: ['+', 'Shift++', 'Mod+='], run: () => zoomBy(1.25) },
   { id: 'view.toggleTheme', title: msg('Dark theme'), category: 'View', keywords: 'dark light mode appearance colours', checked: () => useTheme.getState().dark, run: toggleTheme },
   { id: 'view.toggleGrid', title: msg('Show grid'), category: 'View', checked: () => prefs().showGrid, run: () => setPrefs({ showGrid: !prefs().showGrid }) },

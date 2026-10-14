@@ -27,8 +27,8 @@
       "type": "component",
       "description": "600 × 600"
     },
-    "n_5gjb0vl2ku": {
-      "id": "n_5gjb0vl2ku",
+    "kitchen_1_1": {
+      "id": "kitchen_1_1",
       "parent": "kitchen_1",
       "order": "a0",
       "type": "rect",
@@ -45,8 +45,8 @@
       "type": "component",
       "description": "1200 × 600"
     },
-    "n_8fvrdp9chc": {
-      "id": "n_8fvrdp9chc",
+    "kitchen_2_1": {
+      "id": "kitchen_2_1",
       "parent": "kitchen_2",
       "order": "a0",
       "type": "rect",
@@ -55,8 +55,8 @@
       "width": 1200,
       "height": 600
     },
-    "n_axyumlwpp5": {
-      "id": "n_axyumlwpp5",
+    "kitchen_2_2": {
+      "id": "kitchen_2_2",
       "parent": "kitchen_2",
       "order": "a1",
       "type": "rect",
@@ -65,8 +65,8 @@
       "width": 480,
       "height": 440
     },
-    "n_19s900y2k2": {
-      "id": "n_19s900y2k2",
+    "kitchen_2_3": {
+      "id": "kitchen_2_3",
       "parent": "kitchen_2",
       "order": "a2",
       "type": "ellipse",
@@ -75,8 +75,8 @@
       "rx": 20,
       "ry": 20
     },
-    "n_pld20mwkps": {
-      "id": "n_pld20mwkps",
+    "kitchen_2_4": {
+      "id": "kitchen_2_4",
       "parent": "kitchen_2",
       "order": "a3",
       "type": "line",
@@ -89,8 +89,8 @@
         "y": 500
       }
     },
-    "n_8fqg6bfj34": {
-      "id": "n_8fqg6bfj34",
+    "kitchen_2_5": {
+      "id": "kitchen_2_5",
       "parent": "kitchen_2",
       "order": "a4",
       "type": "line",
@@ -103,8 +103,8 @@
         "y": 500
       }
     },
-    "n_2sxt2w1pzb": {
-      "id": "n_2sxt2w1pzb",
+    "kitchen_2_6": {
+      "id": "kitchen_2_6",
       "parent": "kitchen_2",
       "order": "a5",
       "type": "line",
@@ -117,8 +117,8 @@
         "y": 500
       }
     },
-    "n_bogca94zsm": {
-      "id": "n_bogca94zsm",
+    "kitchen_2_7": {
+      "id": "kitchen_2_7",
       "parent": "kitchen_2",
       "order": "a6",
       "type": "line",
@@ -131,8 +131,8 @@
         "y": 500
       }
     },
-    "n_gh5p7zfu0l": {
-      "id": "n_gh5p7zfu0l",
+    "kitchen_2_8": {
+      "id": "kitchen_2_8",
       "parent": "kitchen_2",
       "order": "a7",
       "type": "line",
@@ -153,8 +153,8 @@
       "type": "component",
       "description": "600 × 600"
     },
-    "n_1u4kvq3gf1": {
-      "id": "n_1u4kvq3gf1",
+    "kitchen_3_1": {
+      "id": "kitchen_3_1",
       "parent": "kitchen_3",
       "order": "a0",
       "type": "rect",
@@ -163,8 +163,8 @@
       "width": 600,
       "height": 600
     },
-    "n_pu16pfxzo8": {
-      "id": "n_pu16pfxzo8",
+    "kitchen_3_2": {
+      "id": "kitchen_3_2",
       "parent": "kitchen_3",
       "order": "a1",
       "type": "ellipse",
@@ -173,8 +173,8 @@
       "rx": 90,
       "ry": 90
     },
-    "n_mzrhxpko9t": {
-      "id": "n_mzrhxpko9t",
+    "kitchen_3_3": {
+      "id": "kitchen_3_3",
       "parent": "kitchen_3",
       "order": "a2",
       "type": "ellipse",
@@ -183,8 +183,8 @@
       "rx": 70,
       "ry": 70
     },
-    "n_ya20slpqbk": {
-      "id": "n_ya20slpqbk",
+    "kitchen_3_4": {
+      "id": "kitchen_3_4",
       "parent": "kitchen_3",
       "order": "a3",
       "type": "ellipse",
@@ -193,8 +193,8 @@
       "rx": 70,
       "ry": 70
     },
-    "n_eixter4ai4": {
-      "id": "n_eixter4ai4",
+    "kitchen_3_5": {
+      "id": "kitchen_3_5",
       "parent": "kitchen_3",
       "order": "a4",
       "type": "ellipse",
@@ -211,8 +211,8 @@
       "type": "component",
       "description": "600 × 650"
     },
-    "n_vgl1avuwas": {
-      "id": "n_vgl1avuwas",
+    "kitchen_4_1": {
+      "id": "kitchen_4_1",
       "parent": "kitchen_4",
       "order": "a0",
       "type": "rect",
@@ -221,8 +221,8 @@
       "width": 600,
       "height": 650
     },
-    "n_tguspa0o3l": {
-      "id": "n_tguspa0o3l",
+    "kitchen_4_2": {
+      "id": "kitchen_4_2",
       "parent": "kitchen_4",
       "order": "a1",
       "type": "line",
@@ -243,8 +243,8 @@
       "type": "component",
       "description": "600 × 600"
     },
-    "n_7614aij6qr": {
-      "id": "n_7614aij6qr",
+    "kitchen_5_1": {
+      "id": "kitchen_5_1",
       "parent": "kitchen_5",
       "order": "a0",
       "type": "rect",
@@ -253,8 +253,8 @@
       "width": 600,
       "height": 600
     },
-    "n_3eqtye9tn7": {
-      "id": "n_3eqtye9tn7",
+    "kitchen_5_2": {
+      "id": "kitchen_5_2",
       "parent": "kitchen_5",
       "order": "a1",
       "type": "line",
@@ -267,8 +267,8 @@
         "y": 90
       }
     },
-    "n_vipv0bam1n": {
-      "id": "n_vipv0bam1n",
+    "kitchen_5_3": {
+      "id": "kitchen_5_3",
       "parent": "kitchen_5",
       "order": "a2",
       "type": "ellipse",

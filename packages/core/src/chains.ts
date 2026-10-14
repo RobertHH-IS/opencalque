@@ -3,7 +3,7 @@ import { newId } from './document'
 import type { NodeInput, Op } from './ops'
 import type { Registry } from './registry'
 import type { Document, NodeOf } from './schema'
-import { wallArc, wallOpenings } from './walls'
+import { wallArc, wallOpenings, wallSides } from './walls'
 
 /** How far the first line of dimensions stands from the face of its wall, and the next one from it, in mm. */
 const STAND_OFF = 500
@@ -37,7 +37,9 @@ export function dimensionChainOps(doc: Document, walls: NodeOf<'wall'>[], regist
     const stops = [...new Set([0, ...wallOpenings(doc, wall, registry).flatMap(({ from: start, to }) => [start, to]), length].map((t) => Math.round(t * 1000) / 1000))].sort((p, q) => p - q)
 
     const group = newId()
-    const half = wall.thickness / 2
+    // The face on that side, which for a wall drawn by a face may be on its line or a whole thickness off it.
+    const sides = wallSides(wall)
+    const half = side > 0 ? sides.right : sides.left
     const dimension = (start: number, end: number, row: number): Op => ({
       op: 'add_node',
       node: {

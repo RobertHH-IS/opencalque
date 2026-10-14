@@ -20,12 +20,14 @@ const text = (x: number, y: number, content: string, size: number): Shape => ({ 
 const INK = '#1f1f1f'
 const filled = (shape: Shape): Shape => ({ ...shape, style: { fill: INK } })
 const poly = (points: [number, number][], closed = false): Shape => ({ type: 'polyline', points: points.map(([x, y]) => ({ x, y })), closed })
-/** Part of a circle as a polyline, from angle `from` to `to` in degrees, clockwise on the sheet from the right. */
-const arc = (cx: number, cy: number, r: number, from: number, to: number): Shape =>
-  poly(Array.from({ length: 17 }, (_, i) => {
+/** The points of part of a circle, from angle `from` to `to` in degrees, clockwise on the sheet from the right. */
+const arcPoints = (cx: number, cy: number, r: number, from: number, to: number): [number, number][] =>
+  Array.from({ length: 17 }, (_, i) => {
     const a = ((from + ((to - from) * i) / 16) * Math.PI) / 180
     return [Math.round(cx + r * Math.cos(a)), Math.round(cy + r * Math.sin(a))] as [number, number]
-  }))
+  })
+/** Part of a circle as a polyline. */
+const arc = (cx: number, cy: number, r: number, from: number, to: number): Shape => poly(arcPoints(cx, cy, r, from, to))
 const cross = (cx: number, cy: number, r: number): Shape[] => {
   const d = Math.round(r * Math.SQRT1_2)
   return [line(cx - d, cy - d, cx + d, cy + d), line(cx - d, cy + d, cx + d, cy - d)]
@@ -48,7 +50,11 @@ interface Library {
   id: string
   name: string
   description: string
-  components: [name: string, description: string, shapes: Shape[]][]
+  /**
+   * In the order they keep: a component is known by its place (see below). One taken out leaves
+   * its place empty (null), so that those after it keep theirs.
+   */
+  components: ([name: string, description: string, shapes: Shape[]] | null)[]
 }
 
 const LIBRARIES: Library[] = [
@@ -74,9 +80,13 @@ const LIBRARIES: Library[] = [
     description: 'Sanitary fittings.',
     components: [
       ['Toilet', '380 × 700', [rect(0, 0, 380, 200), oval(190, 450, 170, 250)]],
-      ['Washbasin', '600 × 450', [rect(0, 0, 600, 450), oval(300, 250, 220, 150), oval(300, 60, 20)]],
+      // The washbasin is a parametric object now (in the built-in extension): its counter is resized, its bowls keep their size.
+      null,
       ['Bathtub', '1700 × 750', [rect(0, 0, 1700, 750), rect(60, 60, 1580, 630), oval(200, 375, 25)]],
       ['Shower tray', '900 × 900', [rect(0, 0, 900, 900), line(0, 0, 900, 900), line(900, 0, 0, 900), oval(450, 450, 30)]],
+      // Added after the others: a component already imported from a library is known by its place in it.
+      // Hung on the wall with its cistern in it: a straight back, a rounded front, the hinge of its seat.
+      ['Toilet, wall-hung', '360 × 540', [poly([[0, 0], [360, 0], ...arcPoints(180, 360, 180, 0, 180), [0, 0]], true), line(0, 100, 360, 100)]],
     ],
   },
   {
@@ -138,9 +148,9 @@ const TRANSLATIONS: Record<string, [fr: string, es: string, de: string, zh: stri
   Bathroom: ['Salle de bain', 'Baño', 'Bad', '卫生间', '浴室・トイレ'],
   'Sanitary fittings.': ['Appareils sanitaires.', 'Aparatos sanitarios.', 'Sanitärobjekte.', '卫生洁具。', '衛生器具。'],
   Toilet: ['WC', 'Inodoro', 'WC', '坐便器', '便器'],
-  Washbasin: ['Lavabo', 'Lavabo', 'Waschbecken', '洗手盆', '洗面器'],
   Bathtub: ['Baignoire', 'Bañera', 'Badewanne', '浴缸', '浴槽'],
   'Shower tray': ['Receveur de douche', 'Plato de ducha', 'Duschwanne', '淋浴底盘', 'シャワーパン'],
+  'Toilet, wall-hung': ['WC suspendu', 'Inodoro suspendido', 'Wand-WC', '壁挂式坐便器', '壁掛け便器'],
   Kitchen: ['Cuisine', 'Cocina', 'Küche', '厨房', 'キッチン'],
   'Units and appliances on a 600 mm module.': ['Meubles et appareils sur un module de 600 mm.', 'Muebles y electrodomésticos en módulo de 600 mm.', 'Schränke und Geräte im 600-mm-Raster.', '按 600 mm 模数排布的橱柜和电器。', '600 mm モジュールのキャビネットと家電。'],
   'Base unit': ['Meuble bas', 'Mueble bajo', 'Unterschrank', '地柜', 'ベースキャビネット'],
@@ -180,7 +190,7 @@ const TRANSLATIONS: Record<string, [fr: string, es: string, de: string, zh: stri
 
 /** The translations of the texts one library shows, by language code and then by the English text. */
 function translationsOf(library: Library): Record<string, Record<string, string>> {
-  const texts = [library.name, library.description, ...library.components.flatMap(([name, description]) => [name, description])]
+  const texts = [library.name, library.description, ...library.components.flatMap((component) => (component ? [component[0], component[1]] : []))]
   const out: Record<string, Record<string, string>> = { fr: {}, es: {}, de: {}, zh: {}, ja: {} }
   for (const english of texts) {
     const found = TRANSLATIONS[english]
@@ -194,15 +204,18 @@ const out = join(dirname(fileURLToPath(import.meta.url)), '../../../apps/web/src
 mkdirSync(out, { recursive: true })
 const index = LIBRARIES.map((library) => {
   const ops: Op[] = []
-  library.components.forEach(([name, description, shapes], i) => {
+  library.components.forEach((component, i) => {
+    if (!component) return
+    const [name, description, shapes] = component
     const id = `${library.id}_${i + 1}`
     ops.push({ op: 'add_node', node: { type: 'component', id, name, description } })
-    for (const shape of shapes) ops.push({ op: 'add_node', node: { ...shape, parent: id } as NodeInput })
+    // Ids of their own, the same each time, so that a library changes only where its components do.
+    shapes.forEach((shape, j) => ops.push({ op: 'add_node', node: { ...shape, id: `${id}_${j + 1}`, parent: id } as NodeInput }))
   })
   // A fixed document id, so a component imported twice (even after an update) is recognised.
   const doc = { ...applyOps(createDocument(library.name), ops), id: `warehouse.${library.id}` }
   writeFileSync(join(out, `${library.id}.opencalque`), serializeDocument(doc))
-  return { id: library.id, name: library.name, description: library.description, file: `${library.id}.opencalque`, components: library.components.length, translations: translationsOf(library) }
+  return { id: library.id, name: library.name, description: library.description, file: `${library.id}.opencalque`, components: library.components.filter(Boolean).length, translations: translationsOf(library) }
 })
 writeFileSync(join(out, 'index.json'), JSON.stringify(index, null, 2) + '\n')
 console.log(`Wrote ${index.length} libraries, ${index.reduce((n, l) => n + l.components, 0)} components, to ${out}`)

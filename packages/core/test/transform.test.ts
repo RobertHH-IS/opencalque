@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, boundsOf, buildScene, createDocument, Registry, transformOps, type Document, type Extension, type Op, type Similarity } from '../src'
+import { applyOps, boundsOf, buildScene, createDocument, Registry, transformOps, turnToOps, type Document, type Extension, type Op, type Similarity } from '../src'
 
 const boxes: Extension = {
   id: 'test.boxes',
@@ -80,5 +80,51 @@ describe('transforming', () => {
   it('keeps a paper upright, swapping its sides on a quarter turn', () => {
     const doc = apply(['sheet'], { pivot: { x: 2100, y: 1485 }, rotation: 90 })
     expect(node(doc, 'sheet')).toMatchObject({ x: 615, y: -615, width: 2970, height: 4200 })
+  })
+})
+
+describe('turning to an angle typed in the properties panel', () => {
+  const doc = applyOps(createDocument(), [
+    { op: 'add_node', node: { id: 'chair', type: 'component' } },
+    { op: 'add_node', node: { id: 'seat', type: 'rect', parent: 'chair', x: 1000, y: 500, width: 400, height: 200 } },
+    add({ type: 'rect', id: 'box', x: 0, y: 0, width: 400, height: 200 }),
+    add({ type: 'instance', id: 'placed', component: 'chair', x: 5000, y: 0, flipX: true }),
+    add({ type: 'text', id: 'label', text: 'Hall', x: 0, y: 3000, size: 200 }),
+  ] as Op[])
+  const middle = (d: Document, id: string) => {
+    const box = boundsOf(buildScene(d, 'page_1', registry).find((item) => item.id === id)!.prims)!
+    return { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }
+  }
+  const turn = (d: Document, id: string, degrees: number) => applyOps(d, turnToOps(d, [d.nodes[id]], degrees, registry))
+
+  it('turns a rectangle about its middle, not its corner', () => {
+    const doc30 = turn(doc, 'box', 30)
+    expect((doc30.nodes.box as { rotation: number }).rotation).toBe(30)
+    expect(middle(doc30, 'box').x).toBeCloseTo(200, 6)
+    expect(middle(doc30, 'box').y).toBeCloseTo(100, 6)
+  })
+
+  it('turns a component about the middle of what it draws, mirrored or not, without drifting from one angle to the next', () => {
+    const before = middle(doc, 'placed')
+    let d = doc
+    for (const degrees of [30, 75, 200, 0]) {
+      d = turn(d, 'placed', degrees)
+      expect((d.nodes.placed as { rotation?: number }).rotation ?? 0).toBeCloseTo(degrees, 6)
+      expect((d.nodes.placed as { flipX?: boolean }).flipX).toBe(true)
+    }
+    // Back at 0° about a point that never moved, it is where it was, to a millionth of a millimetre a turn.
+    expect((d.nodes.placed as { x: number }).x).toBeCloseTo(5000, 4)
+    expect((d.nodes.placed as { y: number }).y).toBeCloseTo(0, 4)
+    const after = turn(doc, 'placed', 90)
+    expect(middle(after, 'placed').x).toBeCloseTo(before.x, 6)
+    expect(middle(after, 'placed').y).toBeCloseTo(before.y, 6)
+  })
+
+  it('turns a text about its middle, and does nothing at the angle it already has', () => {
+    const before = middle(doc, 'label')
+    const d = turn(doc, 'label', 90)
+    expect(middle(d, 'label').x).toBeCloseTo(before.x, 3)
+    expect(middle(d, 'label').y).toBeCloseTo(before.y, 3)
+    expect(turnToOps(d, [d.nodes.label], 450, registry)).toEqual([])
   })
 })

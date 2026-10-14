@@ -27,8 +27,8 @@
       "type": "component",
       "description": "1600 × 2000"
     },
-    "n_pkzexvctis": {
-      "id": "n_pkzexvctis",
+    "furniture_1_1": {
+      "id": "furniture_1_1",
       "parent": "furniture_1",
       "order": "a0",
       "type": "rect",
@@ -37,8 +37,8 @@
       "width": 1600,
       "height": 2000
     },
-    "n_qsx8cqgbnl": {
-      "id": "n_qsx8cqgbnl",
+    "furniture_1_2": {
+      "id": "furniture_1_2",
       "parent": "furniture_1",
       "order": "a1",
       "type": "rect",
@@ -47,8 +47,8 @@
       "width": 650,
       "height": 400
     },
-    "n_gjspsuhp8w": {
-      "id": "n_gjspsuhp8w",
+    "furniture_1_3": {
+      "id": "furniture_1_3",
       "parent": "furniture_1",
       "order": "a2",
       "type": "rect",
@@ -57,8 +57,8 @@
       "width": 650,
       "height": 400
     },
-    "n_9s2q1ckuab": {
-      "id": "n_9s2q1ckuab",
+    "furniture_1_4": {
+      "id": "furniture_1_4",
       "parent": "furniture_1",
       "order": "a3",
       "type": "line",
@@ -79,8 +79,8 @@
       "type": "component",
       "description": "900 × 2000"
     },
-    "n_2psdzvvm20": {
-      "id": "n_2psdzvvm20",
+    "furniture_2_1": {
+      "id": "furniture_2_1",
       "parent": "furniture_2",
       "order": "a0",
       "type": "rect",
@@ -89,8 +89,8 @@
       "width": 900,
       "height": 2000
     },
-    "n_94wthdhc9s": {
-      "id": "n_94wthdhc9s",
+    "furniture_2_2": {
+      "id": "furniture_2_2",
       "parent": "furniture_2",
       "order": "a1",
       "type": "rect",
@@ -99,8 +99,8 @@
       "width": 700,
       "height": 400
     },
-    "n_2xgdeybn9k": {
-      "id": "n_2xgdeybn9k",
+    "furniture_2_3": {
+      "id": "furniture_2_3",
       "parent": "furniture_2",
       "order": "a2",
       "type": "line",
@@ -121,8 +121,8 @@
       "type": "component",
       "description": "1600 × 850"
     },
-    "n_j58ep2mtco": {
-      "id": "n_j58ep2mtco",
+    "furniture_3_1": {
+      "id": "furniture_3_1",
       "parent": "furniture_3",
       "order": "a0",
       "type": "rect",
@@ -131,8 +131,8 @@
       "width": 1600,
       "height": 850
     },
-    "n_9d3dwzr4lw": {
-      "id": "n_9d3dwzr4lw",
+    "furniture_3_2": {
+      "id": "furniture_3_2",
       "parent": "furniture_3",
       "order": "a1",
       "type": "rect",
@@ -141,8 +141,8 @@
       "width": 1600,
       "height": 200
     },
-    "n_8wiy8g4w4g": {
-      "id": "n_8wiy8g4w4g",
+    "furniture_3_3": {
+      "id": "furniture_3_3",
       "parent": "furniture_3",
       "order": "a2",
       "type": "rect",
@@ -151,8 +151,8 @@
       "width": 180,
       "height": 650
     },
-    "n_6mc2sh3pwy": {
-      "id": "n_6mc2sh3pwy",
+    "furniture_3_4": {
+      "id": "furniture_3_4",
       "parent": "furniture_3",
       "order": "a3",
       "type": "rect",
@@ -161,8 +161,8 @@
       "width": 180,
       "height": 650
     },
-    "n_girlyrufa9": {
-      "id": "n_girlyrufa9",
+    "furniture_3_5": {
+      "id": "furniture_3_5",
       "parent": "furniture_3",
       "order": "a4",
       "type": "line",
@@ -183,8 +183,8 @@
       "type": "component",
       "description": "850 × 850"
     },
-    "n_qsygt681fu": {
-      "id": "n_qsygt681fu",
+    "furniture_4_1": {
+      "id": "furniture_4_1",
       "parent": "furniture_4",
       "order": "a0",
       "type": "rect",
@@ -193,8 +193,8 @@
       "width": 850,
       "height": 850
     },
-    "n_07p6076nzf": {
-      "id": "n_07p6076nzf",
+    "furniture_4_2": {
+      "id": "furniture_4_2",
       "parent": "furniture_4",
       "order": "a1",
       "type": "rect",
@@ -203,8 +203,8 @@
       "width": 850,
       "height": 200
     },
-    "n_66w9x6o1sr": {
-      "id": "n_66w9x6o1sr",
+    "furniture_4_3": {
+      "id": "furniture_4_3",
       "parent": "furniture_4",
       "order": "a2",
       "type": "rect",
@@ -213,8 +213,8 @@
       "width": 150,
       "height": 650
     },
-    "n_i0y67ktjsd": {
-      "id": "n_i0y67ktjsd",
+    "furniture_4_4": {
+      "id": "furniture_4_4",
       "parent": "furniture_4",
       "order": "a3",
       "type": "rect",
@@ -231,8 +231,8 @@
       "type": "component",
       "description": "450 × 450"
     },
-    "n_pr6aylffmm": {
-      "id": "n_pr6aylffmm",
+    "furniture_5_1": {
+      "id": "furniture_5_1",
       "parent": "furniture_5",
       "order": "a0",
       "type": "rect",
@@ -241,8 +241,8 @@
       "width": 450,
       "height": 450
     },
-    "n_xa371kkhu1": {
-      "id": "n_xa371kkhu1",
+    "furniture_5_2": {
+      "id": "furniture_5_2",
       "parent": "furniture_5",
       "order": "a1",
       "type": "line",
@@ -263,8 +263,8 @@
       "type": "component",
       "description": "1800 × 900 table"
     },
-    "n_cyqtunmbb8": {
-      "id": "n_cyqtunmbb8",
+    "furniture_6_1": {
+      "id": "furniture_6_1",
       "parent": "furniture_6",
       "order": "a0",
       "type": "rect",
@@ -273,8 +273,8 @@
       "width": 1800,
       "height": 900
     },
-    "n_juqemxip8g": {
-      "id": "n_juqemxip8g",
+    "furniture_6_2": {
+      "id": "furniture_6_2",
       "parent": "furniture_6",
       "order": "a1",
       "type": "rect",
@@ -283,8 +283,8 @@
       "width": 450,
       "height": 450
     },
-    "n_r29z1kzlfh": {
-      "id": "n_r29z1kzlfh",
+    "furniture_6_3": {
+      "id": "furniture_6_3",
       "parent": "furniture_6",
       "order": "a2",
       "type": "line",
@@ -297,8 +297,8 @@
         "y": 60
       }
     },
-    "n_fqtn3zo8jn": {
-      "id": "n_fqtn3zo8jn",
+    "furniture_6_4": {
+      "id": "furniture_6_4",
       "parent": "furniture_6",
       "order": "a3",
       "type": "rect",
@@ -307,8 +307,8 @@
       "width": 450,
       "height": 450
     },
-    "n_48rn6rdc94": {
-      "id": "n_48rn6rdc94",
+    "furniture_6_5": {
+      "id": "furniture_6_5",
       "parent": "furniture_6",
       "order": "a4",
       "type": "line",
@@ -321,8 +321,8 @@
         "y": 1840
       }
     },
-    "n_8r4lhlo726": {
-      "id": "n_8r4lhlo726",
+    "furniture_6_6": {
+      "id": "furniture_6_6",
       "parent": "furniture_6",
       "order": "a5",
       "type": "rect",
@@ -331,8 +331,8 @@
       "width": 450,
       "height": 450
     },
-    "n_5bpwg967i7": {
-      "id": "n_5bpwg967i7",
+    "furniture_6_7": {
+      "id": "furniture_6_7",
       "parent": "furniture_6",
       "order": "a6",
       "type": "line",
@@ -345,8 +345,8 @@
         "y": 60
       }
     },
-    "n_wyc6ktouhp": {
-      "id": "n_wyc6ktouhp",
+    "furniture_6_8": {
+      "id": "furniture_6_8",
       "parent": "furniture_6",
       "order": "a7",
       "type": "rect",
@@ -355,8 +355,8 @@
       "width": 450,
       "height": 450
     },
-    "n_1ueooxghiw": {
-      "id": "n_1ueooxghiw",
+    "furniture_6_9": {
+      "id": "furniture_6_9",
       "parent": "furniture_6",
       "order": "a8",
       "type": "line",
@@ -369,8 +369,8 @@
         "y": 1840
       }
     },
-    "n_3u3x0si4fc": {
-      "id": "n_3u3x0si4fc",
+    "furniture_6_10": {
+      "id": "furniture_6_10",
       "parent": "furniture_6",
       "order": "a9",
       "type": "rect",
@@ -379,8 +379,8 @@
       "width": 450,
       "height": 450
     },
-    "n_l2428230ij": {
-      "id": "n_l2428230ij",
+    "furniture_6_11": {
+      "id": "furniture_6_11",
       "parent": "furniture_6",
       "order": "aA",
       "type": "line",
@@ -393,8 +393,8 @@
         "y": 60
       }
     },
-    "n_u6a3cloaw0": {
-      "id": "n_u6a3cloaw0",
+    "furniture_6_12": {
+      "id": "furniture_6_12",
       "parent": "furniture_6",
       "order": "aB",
       "type": "rect",
@@ -403,8 +403,8 @@
       "width": 450,
       "height": 450
     },
-    "n_rts7jr5hv0": {
-      "id": "n_rts7jr5hv0",
+    "furniture_6_13": {
+      "id": "furniture_6_13",
       "parent": "furniture_6",
       "order": "aC",
       "type": "line",
@@ -425,8 +425,8 @@
       "type": "component",
       "description": "1400 × 700"
     },
-    "n_vsesfgo99a": {
-      "id": "n_vsesfgo99a",
+    "furniture_7_1": {
+      "id": "furniture_7_1",
       "parent": "furniture_7",
       "order": "a0",
       "type": "rect",
@@ -435,8 +435,8 @@
       "width": 1400,
       "height": 700
     },
-    "n_3kdod9ulrk": {
-      "id": "n_3kdod9ulrk",
+    "furniture_7_2": {
+      "id": "furniture_7_2",
       "parent": "furniture_7",
       "order": "a1",
       "type": "ellipse",
@@ -453,8 +453,8 @@
       "type": "component",
       "description": "1800 × 600"
     },
-    "n_tfvo0z3as6": {
-      "id": "n_tfvo0z3as6",
+    "furniture_8_1": {
+      "id": "furniture_8_1",
       "parent": "furniture_8",
       "order": "a0",
       "type": "rect",
@@ -463,8 +463,8 @@
       "width": 1800,
       "height": 600
     },
-    "n_wcglyqtmgr": {
-      "id": "n_wcglyqtmgr",
+    "furniture_8_2": {
+      "id": "furniture_8_2",
       "parent": "furniture_8",
       "order": "a1",
       "type": "line",
@@ -477,8 +477,8 @@
         "y": 600
       }
     },
-    "n_0wo4ek47xg": {
-      "id": "n_0wo4ek47xg",
+    "furniture_8_3": {
+      "id": "furniture_8_3",
       "parent": "furniture_8",
       "order": "a2",
       "style": {
@@ -505,8 +505,8 @@
       "type": "component",
       "description": "Ø 900"
     },
-    "n_18lmigu9v7": {
-      "id": "n_18lmigu9v7",
+    "furniture_9_1": {
+      "id": "furniture_9_1",
       "parent": "furniture_9",
       "order": "a0",
       "type": "ellipse",

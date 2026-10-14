@@ -1,8 +1,9 @@
 import { childrenOf } from './document'
 import { add, rotate, scale, sub, type Vec2 } from './geometry'
-import { ANNOTATION_BEND, ANNOTATION_TEXT_SIZE, arcOf } from './kinds'
+import { ANNOTATION_BEND, ANNOTATION_TEXT_SIZE, arcOf, nodePrimitives } from './kinds'
 import type { Op } from './ops'
 import type { Registry } from './registry'
+import { boundsOf } from './scene'
 import type { Document, Node } from './schema'
 
 /**
@@ -64,9 +65,13 @@ export function transformOps(doc: Document, nodes: Node[], t: Similarity, regist
         }
       case 'room':
         return { ...map(node), ...(node.size === undefined && s === 1 ? {} : { size: tidy((node.size ?? 250) * s) }) }
-      case 'wall':
-        // The side a curved wall bows to is a matter of handedness, which a mirror reverses.
-        return { a: map(node.a), b: map(node.b), thickness: tidy(node.thickness * s), ...(node.bulge ? { bulge: tidy(node.bulge * s * (flip ? -1 : 1)) } : {}) }
+      case 'wall': {
+        // The side a curved wall bows to, its left and right faces, and the face it is drawn by are
+        // matters of handedness, which a mirror reverses: the same face is then on the other hand.
+        const swapped = flip && node.edges && (node.edges.left || node.edges.right) ? { edges: { ...node.edges, left: node.edges.right, right: node.edges.left } } : {}
+        const justify = flip && (node.justify === 'left' || node.justify === 'right') ? { justify: node.justify === 'left' ? 'right' : 'left' } : {}
+        return { a: map(node.a), b: map(node.b), thickness: tidy(node.thickness * s), ...(node.bulge ? { bulge: tidy(node.bulge * s * (flip ? -1 : 1)) } : {}), ...swapped, ...justify }
+      }
       case 'dimension':
         return {
           a: map(node.a),
@@ -139,5 +144,33 @@ export function transformOps(doc: Document, nodes: Node[], t: Similarity, regist
     if (!geometry) return []
     const patch = { ...geometry, ...modifiersOf(node) }
     return Object.keys(patch).length > 0 ? [{ op: 'update_node', id: node.id, patch }] : []
+  })
+}
+
+/**
+ * The operations that turn each node to `degrees` about its own middle: the middle of the box it
+ * fills when it is not turned, which stays where it is whatever the angle. This is what an angle
+ * typed in the properties panel does, as in drawing programs, so that a rectangle does not swing
+ * about its corner nor a component about its insertion point, each a different point.
+ */
+export function turnToOps(doc: Document, nodes: Node[], degrees: number, registry: Registry): Op[] {
+  const origin = { x: 0, y: 0 }
+  return nodes.flatMap((node): Op[] => {
+    const now = (node as { rotation?: number }).rotation ?? 0
+    if (turned(degrees - now) === 0) return []
+    // Straightened about the origin, the node fills an upright box; that box's middle, turned
+    // back, is the node's own middle.
+    const upright: Record<string, unknown> = { ...node }
+    for (const op of transformOps(doc, [node], { pivot: origin, rotation: -now }, registry)) {
+      if (op.op !== 'update_node' || op.id !== node.id) continue
+      for (const [key, value] of Object.entries(op.patch)) {
+        if (value === null) delete upright[key]
+        else upright[key] = value
+      }
+    }
+    const box = boundsOf(nodePrimitives(upright as Node, { doc, registry, depth: 0 }))
+    if (!box) return [{ op: 'update_node', id: node.id, patch: { rotation: turned(degrees) } }]
+    const middle = rotate({ x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }, now)
+    return transformOps(doc, [node], { pivot: middle, rotation: degrees - now }, registry)
   })
 }

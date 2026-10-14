@@ -1,6 +1,6 @@
 {
   "name": "opencalque",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@9.14.2",
@@ -14,6 +14,7 @@
     "typecheck": "pnpm -r typecheck",
     "opencalque": "tsx packages/cli/src/cli.ts",
     "schema": "tsx packages/cli/src/cli.ts schema --out schema",
+    "rooms:gallery": "tsx packages/core/test/rooms-gallery.ts",
     "smoke": "pnpm --filter @opencalque/desktop smoke",
     "e2e": "pnpm build:web && playwright test",
     "warehouse": "tsx packages/cli/src/build-warehouse.ts",

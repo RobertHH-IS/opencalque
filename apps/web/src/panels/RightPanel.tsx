@@ -1,15 +1,16 @@
-import { applyOps, dimensionStylePatch, newDimensionStyle, styledDimension, type Document, type NodeOf, childrenOf, paperRescaled, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, DEFAULT_INK, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
+import { applyOps, dimensionStylePatch, newDimensionStyle, styledDimension, type Document, type NodeOf, childrenOf, paperRescaled, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, DEFAULT_INK, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength, turnToOps, wallJustifyOps } from '@opencalque/core'
 import { executeById } from '../commands'
 import { useEffect, useRef, useState, useLayoutEffect, type ReactNode } from 'react'
-import { Pipette, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Undo2, SquareSplitHorizontal } from 'lucide-react'
-import { reorderSelection, addModifier, alignSelection, distributeSelection, editSheetContent } from '../actions'
+import { Pipette, ArrowDown, ArrowUp, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, Undo2, SquareSplitHorizontal } from 'lucide-react'
+import { addModifier, editSheetContent } from '../actions'
 import { showPanel } from '../dock'
 import { applyCalibration } from '../floorplan'
 import { language, msg, t } from '../i18n'
 import { apply, editComponent, registry, setTool, toast, useStore, selectCorner } from '../store'
 import { ColorChoice, PatternRows } from '../ColorChoice'
-import { DashPicker, Field, IconButton, labelOf, Section } from '../ui'
-import { dashIndex, DASHES, penOf, PENS, pixelsOf } from '../strokes'
+import { WeightChoice } from '../WeightChoice'
+import { DashPicker, Field, IconButton, JustifyPicker, labelOf, Section } from '../ui'
+import { dashIndex, DASHES } from '../strokes'
 import { formatLength, parseLength, unit } from '../units'
 
 interface Option {
@@ -43,6 +44,8 @@ export interface FieldSpec {
   pattern?: Pattern
   /** The options are the symbols of a line's end, shown as pictures to pick from: of its first end or of its last. */
   ends?: 'start' | 'end'
+  /** Set for one object at a time only, as a name: several are not given the same one at once. */
+  single?: boolean
 }
 
 const GEOMETRY = msg('Geometry')
@@ -55,7 +58,10 @@ const FONTS = options(['', msg('Sans-serif')], ['"Arial Narrow", sans-serif', ms
 const MARKERS = options(['tick', msg('Tick')], ['arrow', msg('Arrow')], ['open-arrow', msg('Open arrow')], ['dot', msg('Dot')], ['none', msg('None')])
 
 const AB = [len('a.x', msg('X1')), len('a.y', msg('Y1')), len('b.x', msg('X2')), len('b.y', msg('Y2'))]
-const PLACEMENT: FieldSpec[] = [len('x', msg('X')), len('y', msg('Y')), num('rotation', msg('Rotation'), 0), { path: 'flipX', label: msg('Mirror'), type: 'boolean', fallback: false }]
+// No "mirror" box: it could only say left to right (top to bottom is that and a half turn), so a
+// thing mirrored top to bottom read as mirrored and turned 180°. Mirroring is a command (Shift+H,
+// Shift+V), which knows both.
+const PLACEMENT: FieldSpec[] = [len('x', msg('X')), len('y', msg('Y')), num('rotation', msg('Rotation'), 0)]
 
 const stroke = (section: string): FieldSpec[] => [
   { path: 'style.stroke', label: msg('Color'), type: 'color', section, fallback: '#1f1f1f', unset: msg('from layer') },
@@ -71,8 +77,11 @@ const fill = (when?: FieldSpec['when']): FieldSpec[] => [
   { path: 'style.pattern', label: msg('Pattern'), type: 'pattern', section: FILL, when },
 ]
 const STYLE: FieldSpec[] = [...stroke(STROKE), ...fill()]
+/** A room in two parts: the name written in it (with its area), and its floor. */
+const ROOM_NAME = msg('Name')
+const FLOOR = msg('Floor')
 /** Where the look of a selection is changed, and so where it can be taken from another object. */
-const LOOK_SECTIONS = [STROKE, 'Style']
+const LOOK_SECTIONS = [STROKE, 'Style', FLOOR]
 
 export const DIMENSION: FieldSpec[] = [
   ...AB,
@@ -136,13 +145,18 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
   rect: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), ...STYLE],
   // A paper's size is its format and scale, and where it lies is typed at the top of its panel: it has no geometry section.
   paper: [],
+  // Its name is drawn, so it is set here rather than only in the Structure panel. Where the name is
+  // written is where the room is: its X and Y are the name's.
   room: [
-    len('x', msg('X')),
-    len('y', msg('Y')),
-    len('size', msg('Text size'), 250),
-    { path: 'showArea', label: msg('Show area'), type: 'boolean', fallback: true },
-    { path: 'style.fill', label: msg('Floor'), type: 'color', section: msg('Style'), fallback: '#dfe6f0', unset: msg('default') },
-    { path: 'style.stroke', label: msg('Text'), type: 'color', section: msg('Style'), fallback: '#1f1f1f', unset: msg('from layer') },
+    { path: 'name', label: msg('Name'), type: 'string', section: ROOM_NAME, optional: true, single: true },
+    len('x', msg('X'), undefined, ROOM_NAME),
+    len('y', msg('Y'), undefined, ROOM_NAME),
+    // Said as the text's: under "Name", a bare size or colour could be taken for the room's.
+    len('size', msg('Text size'), 250, ROOM_NAME),
+    { path: 'style.stroke', label: msg('Text colour'), type: 'color', section: ROOM_NAME, fallback: '#1f1f1f', unset: msg('from layer') },
+    { path: 'showArea', label: msg('Show area'), type: 'boolean', section: ROOM_NAME, fallback: true },
+    { path: 'style.fill', label: msg('Color'), type: 'color', section: FLOOR, fallback: '#dfe6f0', unset: msg('default') },
+    { path: 'style.pattern', label: msg('Pattern'), type: 'pattern', section: FLOOR },
   ],
   divider: AB,
   ellipse: [
@@ -218,7 +232,8 @@ function fieldsOf(node: Node): FieldSpec[] {
     type: p.type,
     length: p.unit === 'length',
     fallback: p.default,
-    options: p.options?.map((value) => ({ value, label: value })),
+    // A value may be said differently for one parameter: "Single" glazing is not a "Single" door.
+    options: p.options?.map((value) => ({ value, label: t(`${p.label}: ${value}`) !== `${p.label}: ${value}` ? `${p.label}: ${value}` : value })),
   }))
   return [...fields, ...own, ...STYLE]
 }
@@ -252,7 +267,15 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
   const mixed = nodes.some((n) => seen(n) !== seen(node))
   const stored = mixed ? undefined : read(node, field.path)
   const value = mixed ? undefined : (stored ?? field.fallback)
-  const commit = (next: unknown) => update((n) => patchFor(n, field.path, next))
+  const commit = (next: unknown) => {
+    // An angle turns each object about its own middle, as the knob above a box does, not about
+    // the point its position is measured from. Read afresh: dragging the number writes many times.
+    const now = useStore.getState().doc
+    if (field.path === 'rotation' && typeof next === 'number' && now.nodes[node.id]) {
+      return apply(turnToOps(now, nodes.map((n) => now.nodes[n.id]).filter(Boolean), next, registry))
+    }
+    update((n) => patchFor(n, field.path, next))
+  }
   if (field.type === 'number' || (field.type === 'string' && !field.options)) {
     return (
       <Field
@@ -299,9 +322,9 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
       </div>
     )
   }
-  // A colour's row is not a label: a label hands every click on it to the button inside, which
-  // would open the colour window again just as a click there closed it.
-  const Row = field.type === 'color' ? 'div' : 'label'
+  // A colour's row, or a weight's, is not a label: a label hands every click on it to the button
+  // inside, which would open its window again just as a click there closed it.
+  const Row = field.type === 'color' || field.type === 'weight' ? 'div' : 'label'
   return (
     <Row className="field">
       <span>{t(field.label)}</span>
@@ -317,14 +340,7 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
       )}
       {field.type === 'weight' && (
         // Chosen as what it prints at; kept in the drawing as pixels of screen.
-        <select value={mixed ? 'mixed' : penOf(value as number)} onChange={(e) => commit(pixelsOf(Number(e.target.value)))}>
-          {mixed && <option value="mixed">{t('Mixed')}</option>}
-          {(mixed || PENS.includes(penOf(value as number)) ? PENS : [...PENS, penOf(value as number)].sort((p, q) => p - q)).map((mm) => (
-            <option key={mm} value={mm}>
-              {mm} mm
-            </option>
-          ))}
-        </select>
+        <WeightChoice key={node.id} value={mixed ? undefined : (value as number)} mixed={mixed} label={t(field.label)} onPick={(pixels) => commit(pixels ?? undefined)} />
       )}
       {field.type === 'string' && (
         // A style that defines the plain font says so as "sans-serif", which is what no font means here.
@@ -353,14 +369,13 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
 
 /**
  * The layer a colour property can follow (`LAYER_COLOR`), when every object it is set for is on a
- * layer: its name when they share one, its colour, and whether no colour already means it, as for
- * a stroke, whose "from layer" is having none.
+ * layer: its colour, whether they are on different layers, and whether no colour already means it,
+ * as for a stroke, whose "from layer" is having none.
  */
-function layerChoice(doc: Document, nodes: Node[], field: FieldSpec): { name?: string; color: string; byDefault: boolean } | undefined {
+function layerChoice(doc: Document, nodes: Node[], field: FieldSpec): { color: string; several: boolean; byDefault: boolean } | undefined {
   const layers = nodes.map((n) => (n.layer === undefined ? undefined : doc.layers[n.layer]))
   if (layers.length === 0 || layers.some((layer) => !layer)) return undefined
-  const one = layers.every((layer) => layer === layers[0])
-  return { name: one ? layers[0]!.name : undefined, color: resolveColor(doc, layers[0]!.color) ?? DEFAULT_INK, byDefault: field.unset === 'from layer' }
+  return { color: resolveColor(doc, layers[0]!.color) ?? DEFAULT_INK, several: layers.some((layer) => layer !== layers[0]), byDefault: field.unset === 'from layer' }
 }
 
 /** What a wall type says for a property of a wall, by the path of that property; undefined when it leaves it to the wall. */
@@ -458,7 +473,7 @@ function EndPicker(props: { side: 'start' | 'end'; options: Option[]; value: str
 /** Fields grouped under their section headings, in the order the sections first appear. */
 function Sections({ node, nodes = [node], fields, update, pick }: { node: Node; nodes?: Node[]; fields: FieldSpec[]; update: Update; pick?: boolean }) {
   // A field that does not apply to every object selected is left out.
-  const shown = fields.filter((f) => !f.when || nodes.every(f.when))
+  const shown = fields.filter((f) => (!f.when || nodes.every(f.when)) && (!f.single || nodes.length === 1))
   const titles = [...new Set(shown.map((f) => f.section ?? GEOMETRY))]
   // A single wall can have its lines styled one by one; the view follows what the wall says, and the button opens it.
   const wall = nodes.length === 1 && node.type === 'wall' ? node : null
@@ -629,6 +644,36 @@ function ModifierStack({ node }: { node: Node }) {
  * The wall type of the selected walls: one of the drawing's types, none, or a new type made from
  * the wall as it is. A wall of a type is as thick as its type, whatever is typed for it.
  */
+/** What each line a wall can be drawn by does, said where it is chosen. */
+const WALL_LINES = {
+  left: msg('By its left face: the corners are on that face, and the wall lies to the other side of it'),
+  center: msg('By its middle: the wall lies equally on both sides of its corners'),
+  right: msg('By its right face: the corners are on that face, and the wall lies to the other side of it'),
+}
+
+/**
+ * Which line of the selected walls their corners are on: their middle, or one of their faces.
+ * Changing it keeps the line, and the corners and walls joined there, where they are: the wall
+ * moves to the other side of it. Pointing at a face shows it on the drawing, as left and right
+ * depend on the way the wall was drawn.
+ */
+function WallLine({ walls }: { walls: NodeOf<'wall'>[] }) {
+  const values = new Set(walls.map((wall) => wall.justify ?? 'center'))
+  const value = values.size === 1 ? [...values][0] : undefined
+  const give = (justify: 'left' | 'center' | 'right') => {
+    const { doc } = useStore.getState()
+    apply(walls.flatMap((wall) => (doc.nodes[wall.id]?.type === 'wall' ? wallJustifyOps(doc, doc.nodes[wall.id] as NodeOf<'wall'>, justify, registry) : [])))
+  }
+  const point = (justify: 'left' | 'center' | 'right' | null) =>
+    useStore.setState({ edgeHover: walls.length === 1 && (justify === 'left' || justify === 'right') ? { wall: walls[0].id, edge: justify } : null })
+  return (
+    <div className="field">
+      <span>{t('Reference line')}</span>
+      <JustifyPicker value={value} names={{ left: t(WALL_LINES.left), center: t(WALL_LINES.center), right: t(WALL_LINES.right) }} label={t('Reference line')} onPick={give} onHover={point} />
+    </div>
+  )
+}
+
 function WallTypeChoice({ walls }: { walls: Extract<Node, { type: 'wall' }>[] }) {
   const doc = useStore((s) => s.doc)
   const types = Object.values(doc.wallTypes ?? {})
@@ -727,7 +772,7 @@ function RoomFacts({ node }: { node: Extract<Node, { type: 'room' }> }) {
   return (
     <>
       <p className="hint">{t('Floor area: {area} m², measured inside the walls.', { area })}</p>
-      <p className="hint">{t('The room follows its walls. Drag its name to move the label; add a Hatch modifier below for a floor pattern.')}</p>
+      <p className="hint">{t('The room follows its walls. Drag its name to move it.')}</p>
     </>
   )
 }
@@ -888,7 +933,10 @@ function Selection({ nodes }: { nodes: Node[] }) {
   return (
     <>
       <Section title={single ? labelOf(doc, node) : t('{n} objects', { n: nodes.length })}>
-        {single && <Field label={t('Name')} value={node.name ?? ''} onCommit={(name) => update(() => ({ name: name || null }))} />}
+        {/* What a thing is called is changed in the Structure panel (double-click its row). A room
+            and a paper are the exceptions: their name is drawn, on the plan and in the title block.
+            A room's is in its Name section, with the rest of what is written. */}
+        {single && node.type === 'paper' && <Field label={t('Name')} value={node.name ?? ''} onCommit={(name) => update(() => ({ name: name || null }))} />}
         <label className="field">
           <span>{t('Layer')}</span>
           <select value={node.layer ?? ''} onChange={(e) => update(() => ({ layer: e.target.value }))}>
@@ -900,31 +948,15 @@ function Selection({ nodes }: { nodes: Node[] }) {
             ))}
           </select>
         </label>
-        {/* A paper is always beneath the drawing: stacking means nothing for it, where it lies does. */}
+        {/* Stacking, aligning and spacing are in the toolbar's Arrange menu, not here. */}
         {single && node.type === 'paper' && (
           <>
             <Field label={t('Position X')} numeric length value={node.x} onCommit={(x) => update(() => ({ x }))} />
             <Field label={t('Position Y')} numeric length value={node.y} onCommit={(y) => update(() => ({ y }))} />
           </>
         )}
-        {!(single && node.type === 'paper') && (
-          <div className="field">
-            <span>{t('Order')}</span>
-            <IconButton title={t('Bring to front')} onClick={() => reorderSelection('front')}>
-              <ArrowUpToLine size={14} />
-            </IconButton>
-            <IconButton title={t('Bring forward')} onClick={() => reorderSelection('forward')}>
-              <ArrowUp size={14} />
-            </IconButton>
-            <IconButton title={t('Send backward')} onClick={() => reorderSelection('backward')}>
-              <ArrowDown size={14} />
-            </IconButton>
-            <IconButton title={t('Send to back')} onClick={() => reorderSelection('back')}>
-              <ArrowDownToLine size={14} />
-            </IconButton>
-          </div>
-        )}
         {nodes.every((n) => n.type === 'wall') && <WallTypeChoice walls={nodes as Extract<Node, { type: 'wall' }>[]} />}
+        {nodes.every((n) => n.type === 'wall') && <WallLine walls={nodes as NodeOf<'wall'>[]} />}
         {nodes.every((n) => n.type === 'dimension') && <SelectedDimensionStyle dimensions={nodes as NodeOf<'dimension'>[]} />}
         {single && node.type === 'wall' && <WallEnds wall={node} />}
         {single && node.type === 'wall' && <WallCurve wall={node} />}
@@ -957,6 +989,12 @@ function Selection({ nodes }: { nodes: Node[] }) {
                 {t('Take off its own stroke and fill')}
               </button>
             )}
+            {(node.scaleX !== undefined || node.scaleY !== undefined) && (
+              // Stretched by the sides of its frame: back to the proportions of its component, its corner where it is.
+              <button className="text-button" onClick={() => update(() => ({ scaleX: null, scaleY: null }))}>
+                {t('Back to its own proportions')}
+              </button>
+            )}
           </>
         )}
       </Section>
@@ -974,40 +1012,6 @@ function Selection({ nodes }: { nodes: Node[] }) {
             </select>
           </label>
           <p className="hint">{t('A field is filled in by the drawing: written {page} in the text, it shows the name of the page it is on.')}</p>
-        </Section>
-      )}
-      {!single && (
-        <Section title={t('Arrange')}>
-          <div className="field">
-            <span>{t('Align')}</span>
-            <IconButton title={t('Align left')} onClick={() => alignSelection('left')}>
-              <AlignStartVertical size={14} />
-            </IconButton>
-            <IconButton title={t('Align centres, across')} onClick={() => alignSelection('center')}>
-              <AlignCenterVertical size={14} />
-            </IconButton>
-            <IconButton title={t('Align right')} onClick={() => alignSelection('right')}>
-              <AlignEndVertical size={14} />
-            </IconButton>
-            <IconButton title={t('Align top')} onClick={() => alignSelection('top')}>
-              <AlignStartHorizontal size={14} />
-            </IconButton>
-            <IconButton title={t('Align middles, up and down')} onClick={() => alignSelection('middle')}>
-              <AlignCenterHorizontal size={14} />
-            </IconButton>
-            <IconButton title={t('Align bottom')} onClick={() => alignSelection('bottom')}>
-              <AlignEndHorizontal size={14} />
-            </IconButton>
-          </div>
-          <div className="field">
-            <span>{t('Space evenly')}</span>
-            <IconButton title={t('Space evenly, across')} onClick={() => distributeSelection('x')} disabled={nodes.length < 3}>
-              <AlignHorizontalSpaceAround size={14} />
-            </IconButton>
-            <IconButton title={t('Space evenly, up and down')} onClick={() => distributeSelection('y')} disabled={nodes.length < 3}>
-              <AlignVerticalSpaceAround size={14} />
-            </IconButton>
-          </div>
         </Section>
       )}
       <Sections node={node} nodes={nodes} fields={single ? fieldsOf(node) : commonFields(nodes)} update={update} pick />
@@ -1258,13 +1262,13 @@ function WallEdges({ wall }: { wall: Extract<Node, { type: 'wall' }> }) {
                   'Weight',
                   edge?.strokeWidth !== undefined,
                   () => set(line.id, { strokeWidth: undefined }),
-                  <select className={edge?.strokeWidth === undefined ? 'faint-choice' : ''} value={penOf(edge?.strokeWidth ?? inherited.strokeWidth)} onChange={(e) => set(line.id, { strokeWidth: pixelsOf(Number(e.target.value)) })}>
-                    {(PENS.includes(penOf(edge?.strokeWidth ?? inherited.strokeWidth)) ? PENS : [...PENS, penOf(edge?.strokeWidth ?? inherited.strokeWidth)].sort((p, q) => p - q)).map((mm) => (
-                      <option key={mm} value={mm}>
-                        {mm} mm
-                      </option>
-                    ))}
-                  </select>,
+                  <WeightChoice
+                    key={`${wall.id} ${line.id}`}
+                    value={edge?.strokeWidth ?? inherited.strokeWidth}
+                    faint={edge?.strokeWidth === undefined}
+                    label={t('Weight')}
+                    onPick={(pixels) => set(line.id, { strokeWidth: pixels ?? undefined })}
+                  />,
                 )}
               </>
             )}

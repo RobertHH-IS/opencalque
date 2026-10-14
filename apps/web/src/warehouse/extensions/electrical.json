@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "id": "opencalque.electrical",
   "name": "Electrical symbols",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "OpenCalque",
   "description": "Sockets, switches and light points for electrical layouts.",
   "translations": {
@@ -71,6 +71,7 @@
   "objects": [
     {
       "kind": "elec.socket",
+      "category": "electrical",
       "label": "Socket",
       "description": "Place the flat side against the wall.",
       "params": [{ "key": "count", "label": "Count", "type": "number", "default": 1 }],
@@ -82,6 +83,7 @@
     },
     {
       "kind": "elec.switch",
+      "category": "electrical",
       "label": "Switch",
       "params": [{ "key": "twoWay", "label": "Two-way", "type": "boolean", "default": false }],
       "draw": [
@@ -92,6 +94,7 @@
     },
     {
       "kind": "elec.light",
+      "category": "electrical",
       "label": "Ceiling light",
       "params": [{ "key": "size", "label": "Size", "type": "number", "default": 240, "unit": "length" }],
       "draw": [
@@ -102,6 +105,7 @@
     },
     {
       "kind": "elec.walllight",
+      "category": "electrical",
       "label": "Wall light",
       "description": "Place the flat side against the wall.",
       "params": [{ "key": "size", "label": "Size", "type": "number", "default": 240, "unit": "length" }],

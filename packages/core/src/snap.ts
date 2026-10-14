@@ -1,6 +1,8 @@
 import { boundsContainPoint, dist, type Bounds, type Vec2 } from './geometry'
 import { kindOf } from './kinds'
-import { snapPointsOf, type SceneItem } from './scene'
+import type { Registry } from './registry'
+import { heldItems, sceneBounds, snapPointsOf, type SceneItem } from './scene'
+import type { Document, Node } from './schema'
 
 /**
  * Snapping: where a point being placed lands on what is already drawn, and how something being
@@ -147,6 +149,39 @@ export function snapTo(scene: SceneItem[], at: Vec2, reach: number, options: Sna
 export interface Alignable {
   bounds: Bounds
   points: Vec2[]
+}
+
+/** A thing with more points than this lines up by its box alone: matching them all would find a fit almost anywhere. */
+const ALIGN_POINTS = 12
+/** A group holding more things than this, of those kept, lines up by its own box alone, so that each movement stays quick. */
+const ALIGN_HELD = 2000
+
+/**
+ * What a move of the items `ids` of a scene lines up by, the box around them with their points,
+ * and with: each other item that `keep` keeps (in the editor, those in sight) by its box and its
+ * points. A group counts as itself and as each thing it holds, however deeply, so that a thing
+ * lines up with one wall of a plan whose walls were grouped together. Pictures to trace over are
+ * not lined up with.
+ */
+export function alignables(scene: SceneItem[], doc: Document, registry: Registry, ids: ReadonlySet<string>, keep: (bounds: Bounds) => boolean = () => true): { moving: Alignable | null; others: Alignable[] } {
+  const points = (items: SceneItem[]) => {
+    const all = items.flatMap(snapPointsOf)
+    return all.length > ALIGN_POINTS ? [] : all
+  }
+  // Something inside a group may be what is moved, picked in the Structure panel, or be in a group that is.
+  const moved = (node: Node, group: string) => {
+    for (let at: Node | undefined = node; at && at.id !== group; at = doc.nodes[at.parent ?? '']) if (ids.has(at.id)) return true
+    return false
+  }
+  const counts = (item: SceneItem): item is SceneItem & { bounds: Bounds } => !!item.bounds && item.node.type !== 'image' && keep(item.bounds)
+  const others = scene.flatMap((item): Alignable[] => {
+    if (ids.has(item.id) || !counts(item)) return []
+    const held = item.node.type === 'group' ? heldItems(doc, item.id, registry).filter((one) => !moved(one.node, item.id) && counts(one)) : []
+    return [item, ...(held.length > ALIGN_HELD ? [] : held)].map((one) => ({ bounds: one.bounds!, points: points([one]) }))
+  })
+  const mine = scene.filter((item) => ids.has(item.id))
+  const bounds = sceneBounds(mine)
+  return { moving: bounds && { bounds, points: points(mine) }, others }
 }
 
 export interface MoveSnap {

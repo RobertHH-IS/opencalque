@@ -27,8 +27,8 @@
       "type": "component",
       "description": "380 × 700"
     },
-    "n_95gsmspsqr": {
-      "id": "n_95gsmspsqr",
+    "bathroom_1_1": {
+      "id": "bathroom_1_1",
       "parent": "bathroom_1",
       "order": "a0",
       "type": "rect",
@@ -37,8 +37,8 @@
       "width": 380,
       "height": 200
     },
-    "n_rbpnoztner": {
-      "id": "n_rbpnoztner",
+    "bathroom_1_2": {
+      "id": "bathroom_1_2",
       "parent": "bathroom_1",
       "order": "a1",
       "type": "ellipse",
@@ -47,54 +47,16 @@
       "rx": 170,
       "ry": 250
     },
-    "bathroom_2": {
-      "id": "bathroom_2",
-      "name": "Washbasin",
-      "parent": null,
-      "order": "a2",
-      "type": "component",
-      "description": "600 × 450"
-    },
-    "n_e57pnz6iom": {
-      "id": "n_e57pnz6iom",
-      "parent": "bathroom_2",
-      "order": "a0",
-      "type": "rect",
-      "x": 0,
-      "y": 0,
-      "width": 600,
-      "height": 450
-    },
-    "n_9bnrwem9ub": {
-      "id": "n_9bnrwem9ub",
-      "parent": "bathroom_2",
-      "order": "a1",
-      "type": "ellipse",
-      "cx": 300,
-      "cy": 250,
-      "rx": 220,
-      "ry": 150
-    },
-    "n_gi08ymfcmr": {
-      "id": "n_gi08ymfcmr",
-      "parent": "bathroom_2",
-      "order": "a2",
-      "type": "ellipse",
-      "cx": 300,
-      "cy": 60,
-      "rx": 20,
-      "ry": 20
-    },
     "bathroom_3": {
       "id": "bathroom_3",
       "name": "Bathtub",
       "parent": null,
-      "order": "a3",
+      "order": "a2",
       "type": "component",
       "description": "1700 × 750"
     },
-    "n_l3zwvceg1h": {
-      "id": "n_l3zwvceg1h",
+    "bathroom_3_1": {
+      "id": "bathroom_3_1",
       "parent": "bathroom_3",
       "order": "a0",
       "type": "rect",
@@ -103,8 +65,8 @@
       "width": 1700,
       "height": 750
     },
-    "n_97ahv60uzk": {
-      "id": "n_97ahv60uzk",
+    "bathroom_3_2": {
+      "id": "bathroom_3_2",
       "parent": "bathroom_3",
       "order": "a1",
       "type": "rect",
@@ -113,8 +75,8 @@
       "width": 1580,
       "height": 630
     },
-    "n_a7xx3ygtne": {
-      "id": "n_a7xx3ygtne",
+    "bathroom_3_3": {
+      "id": "bathroom_3_3",
       "parent": "bathroom_3",
       "order": "a2",
       "type": "ellipse",
@@ -127,12 +89,12 @@
       "id": "bathroom_4",
       "name": "Shower tray",
       "parent": null,
-      "order": "a4",
+      "order": "a3",
       "type": "component",
       "description": "900 × 900"
     },
-    "n_fgixku0x9l": {
-      "id": "n_fgixku0x9l",
+    "bathroom_4_1": {
+      "id": "bathroom_4_1",
       "parent": "bathroom_4",
       "order": "a0",
       "type": "rect",
@@ -141,8 +103,8 @@
       "width": 900,
       "height": 900
     },
-    "n_9j9pm8q61m": {
-      "id": "n_9j9pm8q61m",
+    "bathroom_4_2": {
+      "id": "bathroom_4_2",
       "parent": "bathroom_4",
       "order": "a1",
       "type": "line",
@@ -155,8 +117,8 @@
         "y": 900
       }
     },
-    "n_pj83s2bh0o": {
-      "id": "n_pj83s2bh0o",
+    "bathroom_4_3": {
+      "id": "bathroom_4_3",
       "parent": "bathroom_4",
       "order": "a2",
       "type": "line",
@@ -169,8 +131,8 @@
         "y": 900
       }
     },
-    "n_8qslih9pl2": {
-      "id": "n_8qslih9pl2",
+    "bathroom_4_4": {
+      "id": "bathroom_4_4",
       "parent": "bathroom_4",
       "order": "a3",
       "type": "ellipse",
@@ -178,6 +140,117 @@
       "cy": 450,
       "rx": 30,
       "ry": 30
+    },
+    "bathroom_5": {
+      "id": "bathroom_5",
+      "name": "Toilet, wall-hung",
+      "parent": null,
+      "order": "a4",
+      "type": "component",
+      "description": "360 × 540"
+    },
+    "bathroom_5_1": {
+      "id": "bathroom_5_1",
+      "parent": "bathroom_5",
+      "order": "a0",
+      "type": "polyline",
+      "points": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 360,
+          "y": 0
+        },
+        {
+          "x": 360,
+          "y": 360
+        },
+        {
+          "x": 357,
+          "y": 395
+        },
+        {
+          "x": 346,
+          "y": 429
+        },
+        {
+          "x": 330,
+          "y": 460
+        },
+        {
+          "x": 307,
+          "y": 487
+        },
+        {
+          "x": 280,
+          "y": 510
+        },
+        {
+          "x": 249,
+          "y": 526
+        },
+        {
+          "x": 215,
+          "y": 537
+        },
+        {
+          "x": 180,
+          "y": 540
+        },
+        {
+          "x": 145,
+          "y": 537
+        },
+        {
+          "x": 111,
+          "y": 526
+        },
+        {
+          "x": 80,
+          "y": 510
+        },
+        {
+          "x": 53,
+          "y": 487
+        },
+        {
+          "x": 30,
+          "y": 460
+        },
+        {
+          "x": 14,
+          "y": 429
+        },
+        {
+          "x": 3,
+          "y": 395
+        },
+        {
+          "x": 0,
+          "y": 360
+        },
+        {
+          "x": 0,
+          "y": 0
+        }
+      ],
+      "closed": true
+    },
+    "bathroom_5_2": {
+      "id": "bathroom_5_2",
+      "parent": "bathroom_5",
+      "order": "a1",
+      "type": "line",
+      "a": {
+        "x": 0,
+        "y": 100
+      },
+      "b": {
+        "x": 360,
+        "y": 100
+      }
     }
   }
 }

@@ -1,7 +1,7 @@
-import { useState, type DragEvent, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Copy } from 'lucide-react'
-import { childrenOf, layersOf, pagesOf, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
-import { moveInOrder, duplicatePage } from '../actions'
+import { childrenOf, layersOf, pagesOf, type Document, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
+import { moveInOrder, duplicatePage, placeIn } from '../actions'
 import { ColorChoice } from '../ColorChoice'
 import { msg, t } from '../i18n'
 import { apply, editComponent, select, showPage, useStore } from '../store'
@@ -46,19 +46,25 @@ const ROW_DRAG = 'application/x-opencalque-node'
 /** The rows being dragged, and the list they come from: pages are not dropped among objects. */
 let dragged: { list: 'pages' | 'objects'; ids: string[] } | null = null
 
-const half = (e: DragEvent): 'above' | 'below' => {
+type Drop = 'above' | 'below' | 'into'
+
+/** Where over a row the pointer is: in its top or bottom half; or, on a row that can hold others, in its middle half, which is into it. */
+const where = (e: DragEvent, holds: boolean): Drop => {
   const box = e.currentTarget.getBoundingClientRect()
-  return e.clientY < box.top + box.height / 2 ? 'above' : 'below'
+  const at = (e.clientY - box.top) / box.height
+  return holds && at > 0.25 && at < 0.75 ? 'into' : at < 0.5 ? 'above' : 'below'
 }
 
 /**
  * Makes a row of a list draggable, taking `take()` along (the rows selected with it), and lets
- * rows of the same list be dropped above or below it; `place` is told which. A row being dragged
- * is not a place to drop.
+ * rows of the same list be dropped above or below it, or into it when it `holds` others (a
+ * group); `place` is told which. A row being dragged, or inside one (`within`), is not a place to drop.
  */
-function useRowDrag(list: 'pages' | 'objects', id: string, enabled: boolean, take: () => string[], place: (ids: string[], where: 'above' | 'below') => void) {
-  const [drop, setDrop] = useState<'above' | 'below' | null>(null)
-  const accepts = () => enabled && dragged?.list === list && !dragged.ids.includes(id)
+function useRowDrag(list: 'pages' | 'objects', id: string, enabled: boolean, take: () => string[], place: (ids: string[], where: Drop) => void, holds = false, within: (ids: string[]) => boolean = () => false) {
+  const [drop, setDrop] = useState<Drop | null>(null)
+  // Only a drag that carries rows: a row dragged out of sight in a long list is no longer drawn, so
+  // its dragend never comes and `dragged` may be left over from it.
+  const accepts = (e: DragEvent) => enabled && e.dataTransfer.types.includes(ROW_DRAG) && dragged?.list === list && !dragged.ids.includes(id) && !within(dragged.ids)
   return {
     drop,
     handlers: {
@@ -72,10 +78,10 @@ function useRowDrag(list: 'pages' | 'objects', id: string, enabled: boolean, tak
         dragged = null
       },
       onDragOver: (e: DragEvent) => {
-        if (!accepts()) return
+        if (!accepts(e)) return
         e.preventDefault()
         e.dataTransfer.dropEffect = 'move'
-        setDrop(half(e))
+        setDrop(where(e, holds))
       },
       // Going over the name or a button of the row is not leaving it.
       onDragLeave: (e: DragEvent) => {
@@ -83,9 +89,9 @@ function useRowDrag(list: 'pages' | 'objects', id: string, enabled: boolean, tak
       },
       onDrop: (e: DragEvent) => {
         setDrop(null)
-        if (!accepts()) return
+        if (!accepts(e)) return
         e.preventDefault()
-        place(dragged!.ids, half(e))
+        place(dragged!.ids, where(e, holds))
         dragged = null
       },
     },
@@ -98,7 +104,7 @@ function PageRow({ id, count }: { id: string; count: number }) {
   const scope = useStore((s) => s.scope)
   const page = doc.nodes[id]
   // The first page comes first: dropped above a page, a page goes before it.
-  const { drop, handlers } = useRowDrag('pages', id, count > 1, () => [id], (ids, where) => moveInOrder(ids, id, where === 'below'))
+  const { drop, handlers } = useRowDrag('pages', id, count > 1, () => [id], (ids, at) => moveInOrder(ids, id, at === 'below'))
   return (
     <div className={`row${id === scope ? ' selected' : ''}${drop ? ` drop-${drop}` : ''}`} onClick={() => showPage(id)} {...handlers}>
       <EditableText value={labelOf(doc, page)} onChange={rename(id)} />
@@ -174,43 +180,43 @@ export function Layers() {
  */
 let anchor: string | null = null
 
-/**
- * How many rows a list of objects lays out at first, and how many more each press on "Show more"
- * adds. A drawing imported from a DXF can hold tens of thousands of objects in one container, and
- * listing them all took seconds after every change.
- */
-const ROWS = 300
+/** The height of a row of the Structure list, as `.row` in styles.css sets it: rows are laid out by it. */
+const ROW_HEIGHT = 28
+/** Rows drawn beyond those in sight, above and below, so that scrolling shows no gap. */
+const OVERSCAN = 12
 
-/** The first rows of a long list, and the line that offers the rest. Opening another container starts again from the top. */
-function useRows<T>(items: T[], container: string): { rows: T[]; more: ReactNode } {
-  const [shown, setShown] = useState({ container, count: ROWS })
-  const count = shown.container === container ? shown.count : ROWS
-  if (items.length <= count) return { rows: items, more: null }
-  const left = items.length - count
-  return {
-    rows: items.slice(0, count),
-    more: (
-      <p className="hint more-rows">
-        {t('{n} more not listed.', { n: left })}{' '}
-        <button className="text-button" onClick={() => setShown({ container, count: count + Math.min(left, ROWS) })}>
-          {t('Show more')}
-        </button>
-      </p>
-    ),
+/** A row of the Structure list: a node, and how deep in opened groups it is. */
+interface Line {
+  node: Node
+  depth: number
+}
+
+/** The rows of the list, topmost first: what is in the container, each opened group followed by what it holds. */
+function linesOf(doc: Document, container: string, open: ReadonlySet<string>): Line[] {
+  const lines: Line[] = []
+  const walk = (parent: string, depth: number) => {
+    const children = childrenOf(doc, parent)
+    for (let i = children.length - 1; i >= 0; i--) {
+      const node = children[i]
+      lines.push({ node, depth })
+      if (node.type === 'group' && open.has(node.id)) walk(node.id, depth + 1)
+    }
   }
+  walk(container, 0)
+  return lines
 }
 
 /**
- * One object in the list, with what is inside it when it is an opened group. Rows directly in the
- * container being edited can be selected, and dragged up or down, with the rest of the selection,
- * to change the stacking order.
+ * One object in the list; a group can be opened to list what it holds under it. Rows directly in
+ * the container being edited can be selected. Any row can be dragged up or down, with the rest of
+ * the selection, to change the stacking order, or into another group, or out of one: dropped on
+ * the middle of a group's row it goes inside it, above or below a row it goes next to it, in
+ * whatever holds that row.
  */
-function ObjectRow({ node, depth }: { node: Node; depth: number }) {
+function ObjectRow({ node, depth, open, toggle, show }: { node: Node; depth: number; open: boolean; toggle: () => void; show: () => void }) {
   const doc = useStore((s) => s.doc)
   const scope = useStore((s) => s.scope)
   const selection = useStore((s) => s.selection)
-  const [open, setOpen] = useState(false)
-  const inside = useRows(open && node.type === 'group' ? [...childrenOf(doc, node.id)].reverse() : [], node.id)
   const top = node.parent === scope
   const selected = top && selection.includes(node.id)
 
@@ -235,78 +241,145 @@ function ObjectRow({ node, depth }: { node: Node; depth: number }) {
     select(toggling ? (selected ? selection.filter((id) => id !== node.id) : [...selection, node.id]) : [node.id])
   }
 
-  // A selected row takes the whole selection along; any other is picked up on its own. The list is
-  // topmost first, so dropped above a row, objects go just after it in the stacking order.
+  // A selected row takes the whole selection along; any other is picked up on its own (one inside a
+  // group without being selected, which would mean going into the group). The list is topmost
+  // first, so dropped above a row, objects go just after it in the stacking order.
   const { drop, handlers } = useRowDrag(
     'objects',
     node.id,
-    top,
+    true,
     () => {
       if (selected) return selection
+      if (!top) return [node.id]
       anchor = node.id
       select([node.id])
       return [node.id]
     },
-    (ids, where) => moveInOrder(ids, node.id, where === 'above'),
+    (ids, at) => {
+      if (at === 'into') {
+        placeIn(ids, node.id)
+        // What went in is shown there.
+        if (!open) show()
+      } else placeIn(ids, node.parent!, { id: node.id, after: at === 'above' })
+    },
+    node.type === 'group',
+    // A group is not dropped into what it holds.
+    (ids) => {
+      for (let up = node.parent; up; up = doc.nodes[up]?.parent ?? null) if (ids.includes(up)) return true
+      return false
+    },
   )
 
   return (
-    <>
-      <div
-        className={`row${selected ? ' selected' : ''}${drop ? ` drop-${drop}` : ''}`}
-        style={{ paddingLeft: 8 + depth * 14 }}
-        onClick={(e) => pick(e)}
-        onContextMenu={(e) => {
-          e.preventDefault()
-          if (!selected) pick()
-          useStore.setState({ contextMenu: { x: e.clientX, y: e.clientY } })
-        }}
-        {...handlers}
+    <div
+      className={`row${selected ? ' selected' : ''}${drop ? ` drop-${drop}` : ''}`}
+      style={{ paddingLeft: 8 + depth * 14 }}
+      onClick={(e) => pick(e)}
+      onContextMenu={(e) => {
+        e.preventDefault()
+        if (!selected) pick()
+        useStore.setState({ contextMenu: { x: e.clientX, y: e.clientY } })
+      }}
+      {...handlers}
+    >
+      {node.type === 'group' ? (
+        <IconButton title={open ? t('Hide what is inside') : t('Show what is inside')} onClick={toggle}>
+          {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </IconButton>
+      ) : (
+        <i className="twist" />
+      )}
+      <TypeIcon node={node} />
+      <EditableText value={labelOf(doc, node)} onChange={rename(node.id)} />
+      <IconButton
+        title={node.locked ? t('Unlock') : t('Lock so it cannot be selected or moved on the drawing')}
+        onClick={() => apply([{ op: 'update_node', id: node.id, patch: { locked: node.locked ? null : true } }])}
       >
-        {node.type === 'group' ? (
-          <IconButton title={open ? t('Hide what is inside') : t('Show what is inside')} onClick={() => setOpen(!open)}>
-            {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          </IconButton>
-        ) : (
-          <i className="twist" />
-        )}
-        <TypeIcon node={node} />
-        <EditableText value={labelOf(doc, node)} onChange={rename(node.id)} />
-        <IconButton
-          title={node.locked ? t('Unlock') : t('Lock so it cannot be selected or moved on the drawing')}
-          onClick={() => apply([{ op: 'update_node', id: node.id, patch: { locked: node.locked ? null : true } }])}
-        >
-          {node.locked ? <Lock size={13} /> : <LockOpen size={13} className="faint" />}
-        </IconButton>
-        <IconButton
-          title={node.visible === false ? t('Show') : t('Hide')}
-          onClick={() => apply([{ op: 'update_node', id: node.id, patch: { visible: node.visible === false } }])}
-        >
-          {node.visible === false ? <EyeOff size={13} /> : <Eye size={13} className="faint" />}
-        </IconButton>
-      </div>
-      {inside.rows.map((child) => (
-        <ObjectRow key={child.id} node={child} depth={depth + 1} />
-      ))}
-      {inside.more}
-    </>
+        {node.locked ? <Lock size={13} /> : <LockOpen size={13} className="faint" />}
+      </IconButton>
+      <IconButton
+        title={node.visible === false ? t('Show') : t('Hide')}
+        onClick={() => apply([{ op: 'update_node', id: node.id, patch: { visible: node.visible === false } }])}
+      >
+        {node.visible === false ? <EyeOff size={13} /> : <Eye size={13} className="faint" />}
+      </IconButton>
+    </div>
   )
 }
 
-/** What is on the page (or in the component or group) being edited, topmost first. */
+/**
+ * What is on the page (or in the component or group) being edited, topmost first. Only the rows in
+ * sight are laid out, in a list as tall as all of them: a drawing imported from a DXF can hold
+ * tens of thousands of objects in one container, and laying them all out took seconds after every
+ * change.
+ */
 export function Objects() {
   const doc = useStore((s) => s.doc)
   const scope = useStore((s) => s.scope)
-  const nodes = [...childrenOf(doc, scope)].reverse()
-  const { rows, more } = useRows(nodes, scope)
+  const selection = useStore((s) => s.selection)
+  const [open, setOpen] = useState<ReadonlySet<string>>(new Set())
+  const lines = useMemo(() => linesOf(doc, scope, open), [doc, scope, open])
+  const latest = useRef(lines)
+  latest.current = lines
+  const list = useRef<HTMLDivElement>(null)
+  const [sight, setSight] = useState({ first: 0, last: 40 })
+
+  /** The rows in sight, from where the list lies in the panel's scroll, and where the list's top is. */
+  const measure = () => {
+    const scroller = list.current?.closest<HTMLElement>('.dock-panel')
+    if (!list.current || !scroller) return null
+    const top = list.current.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+    return { scroller, top, first: Math.floor(-top / ROW_HEIGHT), last: Math.ceil((scroller.clientHeight - top) / ROW_HEIGHT) }
+  }
+
+  // Read again as the panel scrolls, and as it is resized or shown (hidden, it measures nothing).
+  useLayoutEffect(() => {
+    const scroller = list.current?.closest<HTMLElement>('.dock-panel')
+    if (!scroller) return
+    const update = () => {
+      const now = measure()
+      if (now) setSight((was) => (was.first === now.first && was.last === now.last ? was : { first: now.first, last: now.last }))
+    }
+    update()
+    scroller.addEventListener('scroll', update, { passive: true })
+    const resized = new ResizeObserver(update)
+    resized.observe(scroller)
+    return () => {
+      scroller.removeEventListener('scroll', update)
+      resized.disconnect()
+    }
+  }, [])
+
+  // What is selected on the drawing is scrolled to, however far down, unless some of the selection
+  // is in sight already (as when it was picked in the list, where a range picked with Shift must
+  // not jump back to its start).
+  useEffect(() => {
+    const now = measure()
+    const chosen = new Set(selection)
+    if (!now || chosen.size === 0 || now.scroller.clientHeight === 0) return
+    const rows = latest.current
+    for (let i = Math.max(0, now.first); i < Math.min(rows.length, now.last); i++) if (chosen.has(rows[i].node.id)) return
+    const index = rows.findIndex((line) => chosen.has(line.node.id))
+    if (index >= 0) now.scroller.scrollTop += now.top + index * ROW_HEIGHT - (now.scroller.clientHeight - ROW_HEIGHT) / 2
+  }, [selection, scope])
+
+  const from = Math.max(0, sight.first - OVERSCAN)
+  const to = Math.min(lines.length, Math.max(sight.last, 0) + OVERSCAN)
+  const toggle = (id: string) => () =>
+    setOpen((was) => {
+      const next = new Set(was)
+      if (!next.delete(id)) next.add(id)
+      return next
+    })
   return (
     <section className="section untitled">
-      {nodes.length === 0 && <p className="hint">{t('Nothing here yet. Pick a tool below the drawing and draw.')}</p>}
-      {rows.map((node) => (
-        <ObjectRow key={node.id} node={node} depth={0} />
-      ))}
-      {more}
-      {nodes.length > 1 && <p className="hint">{t('Topmost first. Drag a row to change what is drawn over what.')}</p>}
+      {lines.length === 0 && <p className="hint">{t('Nothing here yet. Pick a tool below the drawing and draw.')}</p>}
+      <div ref={list} style={{ height: lines.length * ROW_HEIGHT, paddingTop: from * ROW_HEIGHT, boxSizing: 'border-box' }}>
+        {lines.slice(from, to).map((line) => (
+          <ObjectRow key={line.node.id} node={line.node} depth={line.depth} open={open.has(line.node.id)} toggle={toggle(line.node.id)} show={() => setOpen((was) => new Set([...was, line.node.id]))} />
+        ))}
+      </div>
+      {lines.length > 1 && <p className="hint">{t('Topmost first. Drag a row to change what is drawn over what, or onto a group to put it in.')}</p>}
     </section>
   )
 }

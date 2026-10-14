@@ -181,6 +181,18 @@ export const DeclarativeExtensionSchema = z
             }),
           ),
           opening: z.object({ from: Expr, to: Expr }).optional().describe('Makes the object cut walls along this stretch of its X axis, like a door.'),
+          category: z
+            .string()
+            .optional()
+            .describe('Where the component library lists it: "furniture", "bathroom", "kitchen", "electrical", "architecture", "annotation", or a group of its own.'),
+          size: z
+            .object({ x: z.string() })
+            .optional()
+            .describe('The key of the length parameter that is its size along its X axis from the insertion point, such as a width. The object is then stretched on the canvas by the two ends of that size, rather than scaled.'),
+          box: z
+            .object({ width: z.string(), height: z.string() })
+            .optional()
+            .describe('The keys of the length parameters that are its width (along X) and height (along Y), the object filling the box from its insertion point to (width, height). It is then resized on the canvas by a frame, as a rectangle is: each side sets its parameter, in whole millimetres, and the knob above turns it.'),
           draw: z.array(ShapeSchema).min(1),
         }),
       )
@@ -194,6 +206,17 @@ export type DeclarativeExtension = z.infer<typeof DeclarativeExtensionSchema>
 const MAX_SHAPES = 5000
 
 /** Turns the JSON of a declarative extension into an extension. Throws, with the reason, when it is not valid. */
+/** The box of an object said as data: from its insertion point to the values of two of its length parameters. */
+function boxOf(width: string, height: string): NonNullable<ParametricKind['box']> {
+  return {
+    bounds: (props) => ({ left: 0, top: 0, right: Number(props[width]), bottom: Number(props[height]) }),
+    resize: (_, size) => ({
+      ...(size.width === undefined ? {} : { [width]: Math.round(Math.max(1, size.width)) }),
+      ...(size.height === undefined ? {} : { [height]: Math.round(Math.max(1, size.height)) }),
+    }),
+  }
+}
+
 export function declarativeExtension(json: unknown): Extension {
   const parsed = DeclarativeExtensionSchema.safeParse(json)
   if (!parsed.success) throw new Error(`Not a valid extension:\n${z.prettifyError(parsed.error)}`)
@@ -245,6 +268,9 @@ export function declarativeExtension(json: unknown): Extension {
       description: object.description,
       params: object.params,
       opening: from && to ? (props) => ({ from: Number(from({ ...props, wall: 0 })), to: Number(to({ ...props, wall: 0 })) }) : undefined,
+      size: object.size,
+      category: object.category,
+      box: object.box && boxOf(object.box.width, object.box.height),
       build(props, env) {
         const out: Primitive[] = []
         const scope = { ...props, wall: env.wallThickness ?? 0 }

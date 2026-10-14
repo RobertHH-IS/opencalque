@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { expect, test, type Page } from '@playwright/test'
 
 /**
@@ -171,9 +172,11 @@ test('fills a shape with the colour of its layer, chosen in the colour window, w
   const fill = page.locator('[data-panel="properties"] .field', { has: page.locator('.color-now') }).nth(1)
   await fill.locator('.color-now').click()
   await expect(page.locator('.color-menu .color-eyedropper')).toBeVisible()
-  await page.locator('.color-menu .color-option', { hasText: 'Colour of the layer “Layer 1”' }).click()
+  // Not the layer's name: the Layer field above says which it is.
+  await expect(page.locator('.color-menu')).not.toContainText('Layer 1')
+  await page.locator('.color-menu .color-option', { hasText: 'Colour of the layer' }).click()
   // The field says what it follows, the whole of it: colour fields were cut to 72 pixels.
-  await expect(fill.locator('.color-now')).toContainText('Layer 1')
+  await expect(fill.locator('.color-now')).toContainText('Layer')
   expect((await fill.locator('.color-now').boundingBox())!.width).toBeGreaterThan(120)
 })
 
@@ -238,6 +241,340 @@ test('resizes a rectangle by the middles of its sides and its corners', async ({
   await drag([600, 450], [900, 500], true)
   await expect(field('W')).toHaveValue('6000')
   await expect(field('H')).toHaveValue('3000')
+})
+
+test('makes a wall thicker from one face, the other face staying where it was', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  // At the first zoom (0.1 px/mm) a wall of 200 mm is 20 pixels thick: its middle line at y = 300, its faces at 290 and 310.
+  await drawWall(page, [300, 300], [700, 300])
+  await objectRows(page).first().click()
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('Thickness')).toHaveValue('200')
+  await expect(field('Y1')).toHaveValue('800')
+  const box = (await canvas(page).boundingBox())!
+  await page.mouse.move(box.x + 500, box.y + 291)
+  await expect(page.locator('.hint-bar')).toContainText('Drag the face to make the wall thicker or thinner on this side')
+  await page.mouse.down()
+  await page.mouse.move(box.x + 500, box.y + 270, { steps: 4 })
+  await page.mouse.move(box.x + 500, box.y + 250, { steps: 4 })
+  await expect(page.locator('.hint-bar')).toContainText('The other face stays where it is')
+  await page.mouse.up()
+  // The upper face went up 400 mm: 600 thick, its middle 200 mm higher, its lower face still at 900.
+  await expect(field('Thickness')).toHaveValue('600')
+  await expect(field('Y1')).toHaveValue('600')
+  await expect(field('Y2')).toHaveValue('600')
+  // One step to undo.
+  await page.keyboard.press('Control+z')
+  await expect(field('Thickness')).toHaveValue('200')
+  await expect(field('Y1')).toHaveValue('800')
+
+  const drag = async (to: number, key: 'Control' | 'Alt') => {
+    await page.mouse.move(box.x + 500, box.y + 291)
+    await page.mouse.down()
+    await page.keyboard.down(key)
+    await page.mouse.move(box.x + 500, box.y + to, { steps: 4 })
+    await page.mouse.up()
+    await page.keyboard.up(key)
+  }
+  // Ctrl grows it both ways: 300 mm either side of a middle line that stays put.
+  await drag(270, 'Control')
+  await expect(field('Thickness')).toHaveValue('600')
+  await expect(field('Y1')).toHaveValue('800')
+  await page.keyboard.press('Control+z')
+  // Alt, as everywhere, ignores the steps: 470 mm, where the steps of this zoom (50 mm) would give 450 or 500.
+  await drag(263, 'Alt')
+  await expect(field('Thickness')).toHaveValue('470')
+  await expect(field('Y1')).toHaveValue('665')
+})
+
+test('draws a wall by its face and keeps it: thicker, it grows away; given another line, its corners stay', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('w')
+  await page.getByTitle('Points along the right face of the wall').click()
+  // Running east at y = 300 (800 mm), its right face is the line clicked: the wall lies north of it, from 280 to 300.
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 700, box.y + 300)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('v')
+  await page.mouse.click(box.x + 500, box.y + 289)
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  const line = page.locator('.field', { has: page.locator('span:text-is("Reference line")') })
+  await expect(field('Y1')).toHaveValue('800')
+  await expect(line.locator('[aria-checked="true"]')).toHaveAttribute('title', /^By its right face/)
+  // Thicker, it grows away from its line, which stays where it was clicked.
+  await field('Thickness').fill('400')
+  await field('Thickness').press('Enter')
+  await expect(field('Y1')).toHaveValue('800')
+  await expect(field('Y2')).toHaveValue('800')
+  // By its middle now: the corners stay, the wall moves to straddle them.
+  await line.getByTitle(/^By its middle/).click()
+  await expect(line.locator('[aria-checked="true"]')).toHaveAttribute('title', /^By its middle/)
+  await expect(field('Y1')).toHaveValue('800')
+  await expect(field('Thickness')).toHaveValue('400')
+})
+
+test('stretches a window placed on a wall by either of its ends, the other staying put', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  // At the first zoom (0.1 px/mm, the origin at 320, 220), a wall along y = 800 mm from x = -200 to 3800 mm.
+  await drawWall(page, [300, 300], [700, 300])
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Window$/ }) }).click()
+  const box = (await canvas(page).boundingBox())!
+  // Centred on the wall under the pointer, at x = 1800 mm: 1200 mm wide, it runs from 1200 to 2400 (440 to 560 on screen).
+  await page.mouse.click(box.x + 500, box.y + 300)
+  await page.keyboard.press('Escape')
+  await objectRows(page).filter({ hasText: 'Window' }).click()
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('Width')).toHaveValue('1200')
+  await expect(field('X')).toHaveValue('1200')
+  const drag = async (from: number, to: number) => {
+    await page.mouse.move(box.x + from, box.y + 300)
+    await page.mouse.down()
+    await page.mouse.move(box.x + to, box.y + 305, { steps: 4 })
+    await page.mouse.up()
+  }
+  // Its end, along the wall: wider, the start where it was.
+  await drag(560, 600)
+  await expect(field('Width')).toHaveValue('1600')
+  await expect(field('X')).toHaveValue('1200')
+  // Its start: the end stays where it was.
+  await drag(440, 420)
+  await expect(field('Width')).toHaveValue('1800')
+  await expect(field('X')).toHaveValue('1000')
+})
+
+test('makes a stair longer by its top in whole steps, and wider by its side', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Stair, straight$/ }) }).click()
+  const box = (await canvas(page).boundingBox())!
+  // At the first zoom (0.1 px/mm, the origin at 320, 220): its foot at (1800, 3800) mm, 900 wide and 12 steps of 270 up,
+  // so on screen from x 500 to 590 and from y 276 to 600.
+  await page.mouse.click(box.x + 500, box.y + 600)
+  await page.keyboard.press('Escape')
+  await objectRows(page).filter({ hasText: 'Stair, straight' }).click()
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('Steps')).toHaveValue('12')
+  const drag = async (from: [number, number], to: [number, number]) => {
+    await page.mouse.move(box.x + from[0], box.y + from[1])
+    await page.mouse.down()
+    await page.mouse.move(box.x + to[0], box.y + to[1], { steps: 4 })
+    await page.mouse.up()
+  }
+  // Its top, up by a little over two treads: two more steps, its foot where it was.
+  await drag([545, 276], [545, 220])
+  await expect(field('Steps')).toHaveValue('14')
+  await expect(field('Y')).toHaveValue('3800')
+  // Its right side (whose middle is now at y = 411), 300 mm out.
+  await drag([590, 411], [620, 411])
+  await expect(field('Width')).toHaveValue('1200')
+  await expect(field('X')).toHaveValue('1800')
+})
+
+test('brings a washbasin against a wall of a plan whose walls are grouped', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  // A room of 5000 × 4000 mm whose walls, 200 thick, are grouped, the inside of its left wall at
+  // x = 100; and a washbasin outside the group, turned with its back to that wall, at x = 1530.
+  const wall = (id: string, order: string, a: [number, number], b: [number, number]) => ({ id, type: 'wall', parent: 'plan', order, a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] }, thickness: 200 })
+  const plan = drawing({
+    plan: { id: 'plan', type: 'group', parent: 'page_1', order: 'a1' },
+    left: wall('left', 'a0', [0, 0], [0, 4000]),
+    bottom: wall('bottom', 'a1', [0, 4000], [5000, 4000]),
+    right: wall('right', 'a2', [5000, 4000], [5000, 0]),
+    top: wall('top', 'a3', [5000, 0], [0, 0]),
+    basin: { id: 'basin', type: 'parametric', parent: 'page_1', order: 'a2', kind: 'arch.washbasin', props: {}, x: 1530, y: 2500, rotation: 270 },
+  })
+  await choose(page, () => page.keyboard.press('Control+o'), 'plan.opencalque', plan)
+  await expect(objectRows(page)).toHaveCount(2)
+  const box = (await canvas(page).boundingBox())!
+  // The drawing was brought into view as it opened: where it is on the canvas is read from the
+  // status bar, which says where the pointer is in millimetres.
+  const reading = async (x: number, y: number) => {
+    await page.mouse.move(box.x + x, box.y + y)
+    const text = (await page.locator('.status span').nth(1).textContent())!.replaceAll(String.fromCharCode(0x2212), '-').replace(/[^\d.,-]/g, '')
+    const [wx, wy] = text.split(',').map(Number)
+    return { x: wx, y: wy }
+  }
+  const p = await reading(100, 100)
+  const q = await reading(700, 500)
+  const zoom = 600 / (q.x - p.x)
+  const onScreen = (x: number, y: number): [number, number] => [box.x + 100 + (x - p.x) * zoom, box.y + 100 + (y - p.y) * zoom]
+  // The washbasin fills x 1530 to 1980, y 1900 to 2500. Taken by a point on it away from its grips
+  // and dragged 1410 mm to the left, its back comes 20 mm short of the wall's face: it goes against it.
+  await page.mouse.move(...onScreen(1930, 2050))
+  await page.mouse.down()
+  await page.mouse.move(...onScreen(520, 2050), { steps: 6 })
+  await page.mouse.up()
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('X')).toHaveValue('100')
+})
+
+test('resizes a table by its side, the furniture installed before it could be', async ({ page }) => {
+  // Installed as it was before it said how it is resized: the copy that ships now replaces it.
+  const furniture = JSON.parse(readFileSync('apps/web/src/warehouse/extensions/furniture.json', 'utf8'))
+  const old = { ...furniture, version: '1.0.0', objects: furniture.objects.map(({ box: _, ...object }: Record<string, unknown>) => object) }
+  await startWith(page, { extensions: { installed: { [old.id]: old }, disabled: [] } })
+  await page.goto('/')
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Table with chairs$/ }) }).click()
+  const box = (await canvas(page).boundingBox())!
+  // At the first zoom (0.1 px/mm, the origin at 320, 220): its corner at (1800, 2800) mm, 1800 long and 900 wide,
+  // so on screen from x 500 to 680 and from y 500 to 590.
+  await page.mouse.click(box.x + 500, box.y + 500)
+  await page.keyboard.press('Escape')
+  await objectRows(page).filter({ hasText: 'Table with chairs' }).click()
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('Length')).toHaveValue('1800')
+  await page.mouse.move(box.x + 680, box.y + 545)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 700, box.y + 548, { steps: 4 })
+  await page.mouse.up()
+  await expect(field('Length')).toHaveValue('2000')
+  await expect(field('Width')).toHaveValue('900')
+  await expect(field('X')).toHaveValue('1800')
+})
+
+test('stretches a placed component by a side of its frame, and gives it its proportions back', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  // A 2000 × 1000 rectangle from (-200, 800) mm, on screen from (300, 300) to (500, 400), made into a component placed there.
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  await page.keyboard.press('Control+Alt+k')
+  await expect(objectRows(page).first()).toContainText('Component 1')
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('X')).toHaveValue('-200')
+  const back = page.getByRole('button', { name: 'Back to its own proportions' })
+  await expect(back).toHaveCount(0)
+  // Its right side, 1000 mm further: half as wide again, its left side where it was.
+  await page.mouse.move(box.x + 500, box.y + 350)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 600, box.y + 352, { steps: 4 })
+  await page.mouse.up()
+  await expect(back).toBeVisible()
+  await expect(field('X')).toHaveValue('-200')
+  await back.click()
+  await expect(back).toHaveCount(0)
+})
+
+test('vectorizes a stair into a component of its shapes from the right-click menu', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Stair, straight$/ }) }).click()
+  const box = (await canvas(page).boundingBox())!
+  await page.mouse.click(box.x + 500, box.y + 600)
+  await page.keyboard.press('Escape')
+  await objectRows(page).filter({ hasText: 'Stair, straight' }).click()
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) })
+  await expect(field('Steps')).toHaveCount(1)
+  await page.mouse.click(box.x + 545, box.y + 450, { button: 'right' })
+  await page.getByRole('menuitem', { name: 'Vectorize' }).click()
+  // A component placed where the stair was: its shapes to edit, no steps to set.
+  await expect(field('Steps')).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Edit component' })).toBeVisible()
+  await expect(field('X').locator('input')).toHaveValue('1800')
+})
+
+test('turns a rectangle about its middle from the angle typed, and arranges it from the toolbar', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  const label = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) })
+  const field = (name: string) => label(name).locator('input')
+  // What it is called is changed in the Structure panel; stacking is in the toolbar.
+  await expect(label('Name')).toHaveCount(0)
+  await expect(label('Order')).toHaveCount(0)
+  const x = Number(await field('X').inputValue())
+  const y = Number(await field('Y').inputValue())
+  await field('Rotation').fill('90')
+  await field('Rotation').press('Enter')
+  // 2000 by 1000 turned a quarter about its middle: the corner it is placed by goes round it.
+  await expect(field('X')).toHaveValue(String(x + 1500))
+  await expect(field('Y')).toHaveValue(String(y - 500))
+  await page.getByTitle('Arrange: stacking order, align, space evenly').click()
+  await expect(page.getByRole('menuitem', { name: 'Bring to front' })).toBeEnabled()
+  await expect(page.getByRole('menuitem', { name: 'Align left' })).toBeDisabled()
+})
+
+test('shows in the Structure list what is picked on the drawing, however far down', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  // A floor at the bottom of the stacking order, so the last row, under 400 small squares.
+  const digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+  const key = (i: number) => `b${digits[Math.floor(i / 62)]}${digits[i % 62]}`
+  const nodes: Record<string, unknown> = {
+    floor: { id: 'floor', type: 'rect', name: 'Floor', parent: 'page_1', order: key(0), x: -20000, y: -20000, width: 40000, height: 40000, style: { fill: '#dddddd' } },
+  }
+  for (let i = 1; i <= 400; i++) nodes[`s${i}`] = { id: `s${i}`, type: 'rect', parent: 'page_1', order: key(i), x: 50000 + i * 10, y: 50000, width: 5, height: 5 }
+  await choose(page, () => page.keyboard.press('Control+o'), 'many.opencalque', drawing(nodes))
+  await page.locator('.dv-tab', { hasText: 'Structure' }).click()
+  expect(await objectRows(page).count()).toBeLessThan(100)
+  const box = (await canvas(page).boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  const floor = objectRows(page).filter({ hasText: 'Floor' })
+  await expect(floor).toHaveClass(/selected/)
+  await expect(floor).toBeInViewport()
+})
+
+test('changes the stacking order by dragging a row of the Structure list, and lists what an opened group holds', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const nodes = {
+    under: { id: 'under', type: 'rect', name: 'Under', parent: 'page_1', order: 'a1', x: 0, y: 0, width: 1000, height: 1000 },
+    over: { id: 'over', type: 'rect', name: 'Over', parent: 'page_1', order: 'a2', x: 2000, y: 0, width: 1000, height: 1000 },
+    set: { id: 'set', type: 'group', name: 'Set', parent: 'page_1', order: 'a3' },
+    inside: { id: 'inside', type: 'rect', name: 'Inside', parent: 'set', order: 'a0', x: 4000, y: 0, width: 500, height: 500 },
+  }
+  await choose(page, () => page.keyboard.press('Control+o'), 'order.opencalque', drawing(nodes))
+  await page.locator('.dv-tab', { hasText: 'Structure' }).click()
+  await expect(objectRows(page)).toHaveText(['Set', 'Over', 'Under'])
+  await objectRows(page).filter({ hasText: 'Set' }).getByTitle('Show what is inside').click()
+  await expect(objectRows(page)).toHaveText(['Set', 'Inside', 'Over', 'Under'])
+  const under = objectRows(page).filter({ hasText: 'Under' })
+  const over = objectRows(page).filter({ hasText: 'Over' })
+  await under.dragTo(over, { targetPosition: { x: 40, y: 4 } })
+  await expect(objectRows(page)).toHaveText(['Set', 'Inside', 'Under', 'Over'])
+})
+
+test('puts an object in a group by dropping its row on the group, and takes one out the same way', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const nodes = {
+    under: { id: 'under', type: 'rect', name: 'Under', parent: 'page_1', order: 'a1', x: 0, y: 0, width: 1000, height: 1000 },
+    over: { id: 'over', type: 'rect', name: 'Over', parent: 'page_1', order: 'a2', x: 2000, y: 0, width: 1000, height: 1000 },
+    set: { id: 'set', type: 'group', name: 'Set', parent: 'page_1', order: 'a3' },
+    inside: { id: 'inside', type: 'rect', name: 'Inside', parent: 'set', order: 'a0', x: 4000, y: 0, width: 500, height: 500 },
+  }
+  await choose(page, () => page.keyboard.press('Control+o'), 'groups.opencalque', drawing(nodes))
+  await page.locator('.dv-tab', { hasText: 'Structure' }).click()
+  await expect(objectRows(page)).toHaveText(['Set', 'Over', 'Under'])
+  // Dropped on the middle of the group's row: it goes in, on top of what the group holds, and the group opens to show it.
+  const row = (name: string) => objectRows(page).filter({ hasText: new RegExp(`^${name}$`) })
+  const height = (await row('Set').boundingBox())!.height
+  await row('Over').dragTo(row('Set'), { targetPosition: { x: 60, y: height / 2 } })
+  await expect(objectRows(page)).toHaveText(['Set', 'Over', 'Inside', 'Under'])
+  await expect(row('Over')).toHaveCSS('padding-left', '22px')
+  // A row inside the group, dropped below one on the page, comes out of it.
+  await row('Inside').dragTo(row('Under'), { targetPosition: { x: 60, y: height - 3 } })
+  await expect(objectRows(page)).toHaveText(['Set', 'Over', 'Under', 'Inside'])
+  await expect(row('Inside')).toHaveCSS('padding-left', '8px')
 })
 
 test('with Shift, a dimension keeps level and stops on the line it crosses', async ({ page }) => {
@@ -377,11 +714,15 @@ test('imports a DXF of twenty thousand lines in a few seconds', async ({ page })
   await choose(page, () => page.keyboard.press('Control+i'), 'big.dxf', dxf)
   await expect(page.locator('.toast')).toContainText('Imported 20000 objects from big.dxf', { timeout: 15000 })
   expect(Date.now() - start).toBeLessThan(15000)
-  // The structure lists the first rows only: laying out twenty thousand took seconds after every change.
+  // The structure lays out only the rows in sight, in a list as long as all twenty thousand:
+  // laying them all out took seconds after every change.
   await page.locator('.dv-tab', { hasText: 'Structure' }).click()
-  await expect(page.locator('.more-rows')).toContainText('19700 more not listed')
-  await page.locator('.more-rows button').click()
-  await expect(page.locator('.more-rows')).toContainText('19400 more not listed')
+  const panel = page.locator('.dock-panel[data-panel="objects"]')
+  expect(await objectRows(page).count()).toBeLessThan(100)
+  expect(await panel.evaluate((element) => element.scrollHeight)).toBeGreaterThan(20000 * 28)
+  await panel.evaluate((element) => (element.scrollTop = element.scrollHeight))
+  await expect(objectRows(page).last()).toBeInViewport()
+  expect(await objectRows(page).count()).toBeLessThan(100)
 })
 
 test('offers back unsaved work after the window crashed', async ({ page, context, browser }) => {

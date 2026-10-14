@@ -89,41 +89,41 @@
         "Bathroom": "Salle de bain",
         "Sanitary fittings.": "Appareils sanitaires.",
         "Toilet": "WC",
-        "Washbasin": "Lavabo",
         "Bathtub": "Baignoire",
-        "Shower tray": "Receveur de douche"
+        "Shower tray": "Receveur de douche",
+        "Toilet, wall-hung": "WC suspendu"
       },
       "es": {
         "Bathroom": "Baño",
         "Sanitary fittings.": "Aparatos sanitarios.",
         "Toilet": "Inodoro",
-        "Washbasin": "Lavabo",
         "Bathtub": "Bañera",
-        "Shower tray": "Plato de ducha"
+        "Shower tray": "Plato de ducha",
+        "Toilet, wall-hung": "Inodoro suspendido"
       },
       "de": {
         "Bathroom": "Bad",
         "Sanitary fittings.": "Sanitärobjekte.",
         "Toilet": "WC",
-        "Washbasin": "Waschbecken",
         "Bathtub": "Badewanne",
-        "Shower tray": "Duschwanne"
+        "Shower tray": "Duschwanne",
+        "Toilet, wall-hung": "Wand-WC"
       },
       "zh": {
         "Bathroom": "卫生间",
         "Sanitary fittings.": "卫生洁具。",
         "Toilet": "坐便器",
-        "Washbasin": "洗手盆",
         "Bathtub": "浴缸",
-        "Shower tray": "淋浴底盘"
+        "Shower tray": "淋浴底盘",
+        "Toilet, wall-hung": "壁挂式坐便器"
       },
       "ja": {
         "Bathroom": "浴室・トイレ",
         "Sanitary fittings.": "衛生器具。",
         "Toilet": "便器",
-        "Washbasin": "洗面器",
         "Bathtub": "浴槽",
-        "Shower tray": "シャワーパン"
+        "Shower tray": "シャワーパン",
+        "Toilet, wall-hung": "壁掛け便器"
       }
     }
   },

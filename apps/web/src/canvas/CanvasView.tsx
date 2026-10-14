@@ -17,7 +17,6 @@ import {
   openingSpan,
   perp,
   snapOpeningToWall,
-  snapPointsOf,
   sub,
   type Node,
   type NodeInput,
@@ -44,6 +43,7 @@ import {
   wallEndsAt,
   scale,
   add,
+  alignables,
   alignMove,
   moveGuides,
   snapTo,
@@ -51,12 +51,21 @@ import {
   wallMiddle,
   wallPoints,
   type Alignable,
+  type Bounds,
   type Snap,
   type SnapKind,
   canSplit,
   splitOps,
   splitPlace,
   wallEdgeLines,
+  wallArc,
+  wallParallel,
+  wallSpot,
+  wallThicknessOps,
+  wallSides,
+  distToSegment,
+  type Document,
+  type NodeOf,
 } from '@opencalque/core'
 import { dimensionToolLook, finishTextEdit, zoomToFit, pickStyle } from '../actions'
 import { onCommand } from '../commands'
@@ -92,7 +101,7 @@ type Gesture =
    * until it is released. `origin`, `segments` and `since` describe the run of chained shapes this
    * one continues: where it began, how many are drawn, and when the last one was finished.
    */
-  | { kind: 'draw'; id: string; start: Vec2; press: (Vec2 & { time: number }) | null; origin: Vec2; segments: number; since: number; prev?: WallRun; first?: WallRun }
+  | { kind: 'draw'; id: string; start: Vec2; press: (Vec2 & { time: number }) | null; origin: Vec2; segments: number; since: number }
   /** A dimension whose two points are set; the pointer now chooses how far its line stands off. */
   | { kind: 'offset'; id: string; a: Vec2; b: Vec2 }
   /** A live reading from `start`. Nothing is added to the drawing. */
@@ -102,6 +111,12 @@ type Gesture =
   | { kind: 'poly'; id: string; points: Vec2[]; since: number; press?: Vec2 & { time: number } }
   // The rotate tool: its pivot, then a point of the line the turn starts from.
   | { kind: 'turn'; nodes: Node[]; pivot: Vec2; from?: Vec2 }
+  /**
+   * A long face of the selected wall being dragged: the wall gets thicker or thinner from that
+   * side, the other face staying where it is. `moving` is what moves with it, which the face does
+   * not snap to.
+   */
+  | { kind: 'face'; wall: NodeOf<'wall'>; side: 'left' | 'right'; moving: string[] }
 
 /** The parts of a pointer event the canvas uses. */
 interface PointerAt {
@@ -109,6 +124,8 @@ interface PointerAt {
   clientY: number
   altKey: boolean
   shiftKey: boolean
+  ctrlKey: boolean
+  metaKey: boolean
 }
 
 const TWO_POINT: Tool[] = ['line', 'wall', 'divider', 'dimension', 'annotation', 'rect', 'ellipse', 'paper']
@@ -122,8 +139,6 @@ const CHAINED: Tool[] = ['wall', 'divider']
 /** How close, in screen pixels, the pointer must come to something for a point to snap to it, and for a moved object to line up with another. */
 const SNAP_REACH = 10
 const ALIGN_REACH = 6
-/** An object with more points than this lines up by its box alone: matching them all would find a fit almost anywhere. */
-const ALIGN_POINTS = 12
 
 /** What a snap is called beside its mark. A point of an object needs no name. */
 const snapName = (kind: SnapKind): string | undefined =>
@@ -235,51 +250,59 @@ function currentStyle(inkOnly = false): { style?: { stroke?: string; strokeWidth
   return Object.keys(style).length > 0 ? { style } : {}
 }
 
-/** A wall already drawn in the run under way, with the clicked points it goes between. */
-interface WallRun {
-  id: string
-  a: Vec2
-  b: Vec2
+/**
+ * Whether what is selected is only rooms. A room is its walls' and has nothing of its own to scale
+ * or turn (only its name, which is moved), so the box around it has no grips; nor is a press in
+ * it, on its floor, a press on it: the floor is not clickable, so that what is on it is.
+ */
+const roomsOnly = (doc: Document, selection: string[]) => selection.length > 0 && selection.every((id) => doc.nodes[id]?.type === 'room')
+
+/** The pointer that says a drag resizes along `d`, whichever way that points. */
+function resizeCursor(d: Vec2): string {
+  const angle = ((((Math.atan2(d.y, d.x) * 180) / Math.PI) % 180) + 180) % 180
+  const nearest = [0, 45, 90, 135, 180].reduce((best, a) => (Math.abs(angle - a) < Math.abs(angle - best) ? a : best), 0)
+  return nearest === 45 ? 'nwse-resize' : nearest === 90 ? 'ns-resize' : nearest === 135 ? 'nesw-resize' : 'ew-resize'
+}
+
+/** How thin a wall may be on screen, in pixels, and still have faces to drag: thinner, its faces and its middle are one. */
+const FACE_MIN = 8
+/** The steps a dragged face changes a thickness by: at least 3 pixels of screen each, so 1 mm close up and 25 mm far out. */
+const thicknessStep = (zoom: number) => [1, 5, 10, 25, 50, 100].find((step) => step * zoom >= 3) ?? 100
+
+/** The way across a wall towards its right face, where its middle line is nearest to `p`. */
+function wallNormal(wall: NodeOf<'wall'>, p: Vec2): Vec2 {
+  const arc = wallArc(wall)
+  return arc ? scale(norm(sub(p, arc.centre)), -Math.sign(arc.sweep)) : perp(norm(sub(wall.b, wall.a)))
+}
+
+/** Where a long face of a wall is across its line: to the right is positive. */
+const faceAcross = (wall: NodeOf<'wall'>, side: 'left' | 'right'): number => (side === 'right' ? wallSides(wall).right : -wallSides(wall).left)
+
+/**
+ * A long face of a wall as it is drawn: its stretches between doors and windows, each from where
+ * the corner at one end leaves it to where the corner at the other takes it, which at a mitre is
+ * past the end of the wall's line or short of it.
+ */
+const faceOf = (wall: NodeOf<'wall'>, doc: Document, side: 'left' | 'right'): Vec2[][] => wallEdgeLines(wall, doc, registry, side)
+
+/** The thickness of a wall, written outside the face that is dragged, halfway along it and the right way up. */
+function thicknessLabel(wall: NodeOf<'wall'>, side: 'left' | 'right'): SizeLabel {
+  const middle = wallMiddle(wall)
+  const out = scale(wallNormal(wall, middle), side === 'right' ? 1 : -1)
+  let turn = (Math.atan2(out.x, -out.y) * 180) / Math.PI
+  if (turn > 90 || turn <= -90) turn += 180
+  return { at: add(middle, scale(wallNormal(wall, middle), faceAcross(wall, side))), dx: out.x * 18, dy: out.y * 18, text: formatLength(wall.thickness), rotation: turn }
 }
 
 /**
- * The operations that add a wall between two clicked points. Drawn along its middle, that is the
- * wall itself. Drawn along a face, the wall lies half its thickness to one side, and where it
- * follows another wall of the run (`prev`), or closes the run onto its first wall (`first`), the
- * two are brought to the point where their middle lines cross, so the corner stays a corner.
+ * The operation that adds a wall between two clicked points. Drawn along a face, the wall keeps
+ * that face as its line (`justify`): the points clicked are its corners, and it lies to the other
+ * side of them, so the walls of a run drawn by their inner face keep it flush whatever their
+ * thicknesses.
  */
-function wallOps(id: string, a: Vec2, b: Vec2, prev?: WallRun, first?: WallRun): Op[] {
-  const { wallJustify, wallThickness } = get()
-  const node = shape('wall', id, a, b)
-  if (wallJustify === 'center' || dist(a, b) < 1e-6) return [{ op: 'add_node', node }]
-  // The side the wall's body is on, seen in the direction it is drawn: to the right of a left face.
-  const half = (wallThickness / 2) * (wallJustify === 'left' ? 1 : -1)
-  const side = (from: Vec2, to: Vec2) => perp(norm(sub(to, from)))
-  const n = side(a, b)
-  const tidy = (p: Vec2): Vec2 => ({ x: Math.round(p.x * 1000) / 1000, y: Math.round(p.y * 1000) / 1000 })
-  /** Where the middle lines of two walls meeting at the clicked point `at` cross, or null when they fold back on each other. */
-  const corner = (at: Vec2, other: Vec2): Vec2 | null => {
-    const k = 1 + other.x * n.x + other.y * n.y
-    return k > 0.05 ? tidy(add(at, scale(add(other, n), half / k))) : null
-  }
-  const ops: Op[] = []
-  let start = tidy(add(a, scale(n, half)))
-  let end = tidy(add(b, scale(n, half)))
-  if (prev && dist(prev.a, prev.b) > 1e-6) {
-    const c = corner(a, side(prev.a, prev.b))
-    if (c) {
-      start = c
-      ops.push({ op: 'update_node', id: prev.id, patch: { b: c } })
-    }
-  }
-  if (first && first.id !== prev?.id && dist(b, first.a) < 1e-6 && dist(first.a, first.b) > 1e-6) {
-    const c = corner(b, side(first.a, first.b))
-    if (c) {
-      end = c
-      ops.push({ op: 'update_node', id: first.id, patch: { a: c } })
-    }
-  }
-  return [...ops, { op: 'add_node', node: { ...node, a: start, b: end } as NodeInput }]
+function wallOps(id: string, a: Vec2, b: Vec2): Op[] {
+  const { wallJustify } = get()
+  return [{ op: 'add_node', node: { ...shape('wall', id, a, b), ...(wallJustify === 'center' ? {} : { justify: wallJustify }) } as NodeInput }]
 }
 
 /** The node a two-point tool makes from its two points. */
@@ -356,7 +379,7 @@ export function CanvasView() {
   /** When Space went down, and whether the view was dragged with it: let go quickly, unused, it was a tap. */
   const spaceTap = useRef<{ at: number; used: boolean } | null>(null)
   /** A run of walls just ended by clicking its last corner again, which the double-click of the system may still close. */
-  const ended = useRef<{ start: Vec2; origin: Vec2; prev?: WallRun; first?: WallRun; time: number } | null>(null)
+  const ended = useRef<{ start: Vec2; origin: Vec2; time: number } | null>(null)
   /** Where on the screen the last click of a drawing landed, before snapping moved its point. */
   const lastClick = useRef<Vec2 | null>(null)
   /** A line of several segments just ended by clicking its last point again, which the double-click of the system may still close. */
@@ -366,7 +389,7 @@ export function CanvasView() {
 
   const handles = useMemo(() => {
     const node = selection.length === 1 ? doc.nodes[selection[0]] : undefined
-    return node ? (kindOf(node).handles?.(node) ?? []) : []
+    return node ? (kindOf(node).handles?.(node, registry) ?? []) : []
   }, [doc, selection])
 
   /**
@@ -375,7 +398,7 @@ export function CanvasView() {
    */
   const frame = useMemo(() => {
     const node = tool === 'select' && selection.length === 1 ? doc.nodes[selection[0]] : undefined
-    const box = node ? resizeFrame(node) : null
+    const box = node ? resizeFrame(node, registry, doc) : null
     if (!node || !box) return null
     const grips = frameGrips(box)
     // The knob stands off the middle of the top side, away from the box, at the same distance on screen at any zoom.
@@ -388,12 +411,16 @@ export function CanvasView() {
     const node = tool === 'select' && selection.length === 1 ? doc.nodes[selection[0]] : undefined
     if (node?.type === 'paper') return paperLabel(node)
     if (node?.type === 'rect' && !node.rotation) return boxLabels(node)
+    // An object resized as a box, a stair, has its sizes written beside it like a rectangle.
+    if ((node?.type === 'parametric' || node?.type === 'instance') && frame && !frame.box.rotation) return boxLabels({ ...frame.box.origin, width: frame.box.width, height: frame.box.height })
     if (node?.type === 'ellipse') return boxLabels({ x: node.cx - node.rx, y: node.cy - node.ry, width: node.rx * 2, height: node.ry * 2 })
     // A curved wall is as long as its curve, which is written at the top of it.
     if (node?.type === 'wall' && node.bulge) return [{ at: wallMiddle(node), dx: 0, dy: -18, text: formatLength(wallLength(node)) }]
     if (node?.type === 'line' || node?.type === 'wall') return sizes('line', node.a, node.b).labels
+    // A door or a window: the width its two ends stretch.
+    if (node?.type === 'parametric' && handles.length === 2) return sizes('line', handles[0], handles[1]).labels
     return []
-  }, [doc, selection, tool])
+  }, [doc, selection, tool, handles, frame])
 
   // The name of each paper, written above its corner. It is a label of the editor, not part of the drawing.
   const titles = useMemo(
@@ -450,31 +477,19 @@ export function CanvasView() {
 
   /**
    * What a move of `nodes` can be lined up by: the box around them with their points, and the
-   * same for each other thing in view, taken once, as the move begins.
+   * same for each other thing in view, inside groups too, taken once, as the move begins.
    */
-  const alignables = (nodes: Node[]): { moving: Alignable | null; others: Alignable[] } => {
-    const { view, viewport } = get()
-    const ids = new Set(nodes.map((n) => n.id))
-    const points = (items: SceneItem[]) => {
-      const all = items.flatMap(snapPointsOf)
-      return all.length > ALIGN_POINTS ? [] : all
-    }
-    const mine = sceneRef.current.filter((item) => ids.has(item.id))
-    const bounds = sceneBounds(mine)
+  const lineUp = (nodes: Node[]): { moving: Alignable | null; others: Alignable[] } => {
+    const { view, viewport, base, doc } = get()
     const seen = { minX: -view.x / view.zoom, minY: -view.y / view.zoom, maxX: (viewport.width - view.x) / view.zoom, maxY: (viewport.height - view.y) / view.zoom }
-    const others = sceneRef.current.flatMap((item): Alignable[] => {
-      const box = item.bounds
-      // A picture to trace over is not something to line up with, and nor is what is out of sight.
-      if (!box || ids.has(item.id) || item.node.type === 'image' || box.maxX < seen.minX || box.minX > seen.maxX || box.maxY < seen.minY || box.minY > seen.maxY) return []
-      return [{ bounds: box, points: points([item]) }]
-    })
-    return { moving: bounds && { bounds, points: points(mine) }, others }
+    const inSight = (box: Bounds) => box.maxX >= seen.minX && box.minX <= seen.maxX && box.maxY >= seen.minY && box.minY <= seen.maxY
+    return alignables(sceneRef.current, base ?? doc, registry, new Set(nodes.map((n) => n.id)), inSight)
   }
 
   /** The box around the selection, when it is one that carries grips: a single object with handles of its own has none. */
   const gripBox = () => {
     const s = get()
-    if (s.tool !== 'select' || s.selection.length === 0 || (s.selection.length === 1 && (handles.length > 0 || frame))) return null
+    if (s.tool !== 'select' || s.selection.length === 0 || (s.selection.length === 1 && (handles.length > 0 || frame)) || roomsOnly(s.doc, s.selection)) return null
     return sceneBounds(sceneRef.current.filter((item) => s.selection.includes(item.id)))
   }
   /** Which grip of that box is under a point of the canvas: a corner (0 to 3), the knob, or none. */
@@ -504,12 +519,25 @@ export function CanvasView() {
     return index >= 0 ? index : null
   }
   /** The pointer that says which way a grip of the frame resizes, whatever the frame's turn. */
-  const frameCursor = (grip: number): string => {
-    if (!frame) return 'move'
-    const d = sub(frame.grips[grip], frame.centre)
-    const angle = (((Math.atan2(d.y, d.x) * 180) / Math.PI) % 180 + 180) % 180
-    const nearest = [0, 45, 90, 135, 180].reduce((best, a) => (Math.abs(angle - a) < Math.abs(angle - best) ? a : best), 0)
-    return nearest === 45 ? 'nwse-resize' : nearest === 90 ? 'ns-resize' : nearest === 135 ? 'nesw-resize' : 'ew-resize'
+  const frameCursor = (grip: number): string => (frame ? resizeCursor(sub(frame.grips[grip], frame.centre)) : 'move')
+
+  /**
+   * The long face of the one selected wall under a point of the canvas, which a press drags to
+   * change the wall's thickness from that side. A wall too thin on screen to tell its faces from
+   * its middle offers none: it is moved, and zoomed in on to be made thicker.
+   */
+  const faceAt = (at: Vec2): { wall: NodeOf<'wall'>; side: 'left' | 'right' } | null => {
+    const s = get()
+    const wall = s.tool === 'select' && s.selection.length === 1 ? s.doc.nodes[s.selection[0]] : undefined
+    if (wall?.type !== 'wall' || wall.thickness * s.view.zoom < FACE_MIN) return null
+    if (sceneRef.current.find((item) => item.id === wall.id)?.locked) return null
+    // Within a few pixels of the face, and never so far in that nothing of the middle is left to move the wall by.
+    const reach = Math.min(5, (wall.thickness * s.view.zoom) / 4) / s.view.zoom
+    // The nearer face, as it is drawn: along its whole length to the corners, and not across doors.
+    const p = toWorld(at, s.view)
+    const off = (side: 'left' | 'right') => Math.min(Infinity, ...faceOf(wall, s.doc, side).flatMap((line) => line.slice(1).map((q, i) => distToSegment(p, line[i], q))))
+    const side = off('right') <= off('left') ? 'right' : 'left'
+    return off(side) <= reach ? { wall, side } : null
   }
 
   /** The pointer shown over a grip, so it says what dragging there does. */
@@ -525,6 +553,7 @@ export function CanvasView() {
   const reset = () => {
     cancel()
     if (get().axisLock) useStore.setState({ axisLock: null })
+    if (get().wallFace) useStore.setState({ wallFace: null })
     gesture.current = { kind: 'idle' }
     setOverlay({})
     syncStep()
@@ -561,7 +590,7 @@ export function CanvasView() {
       canvas.height = viewport.height * dpr
     }
     // The words being typed are shown by their editor instead; the rest of the object stays drawn.
-    drawScene(canvas.getContext('2d')!, { ...viewport, dpr }, view, editingId ? scene.map((item) => (item.id === editingId ? { ...item, prims: item.prims.filter((p) => p.kind !== 'text') } : item)) : scene, selection, handles, { ...overlay, labels: overlay.labels ?? selectionLabels, titles, frames, corner, grips: tool === 'select', frame: frame && { grips: frame.grips, up: frame.up }, edgeHover: edgeLines }, showGrid, palette)
+    drawScene(canvas.getContext('2d')!, { ...viewport, dpr }, view, editingId ? scene.map((item) => (item.id === editingId ? { ...item, prims: item.prims.filter((p) => p.kind !== 'text') } : item)) : scene, selection, handles, { ...overlay, labels: overlay.labels ?? selectionLabels, titles, frames, corner, grips: tool === 'select' && !roomsOnly(doc, selection), boxless: roomsOnly(doc, selection), frame: frame && { grips: frame.grips, up: frame.up }, edgeHover: edgeLines }, showGrid, palette)
   }, [scene, view, viewport, selection, handles, frame, selectionLabels, titles, frames, corner, overlay, showGrid, palette, pictures, editingId, tool, edgeLines])
 
   /**
@@ -741,9 +770,9 @@ export function CanvasView() {
       const closable = tool === 'wall' && g.segments >= 2 && dist(g.start, g.origin) > 1e-6
       const closes = closable && performance.now() - g.since < 500
       reset()
-      if (closes) apply(wallOps(newId(), g.start, g.origin, g.prev, g.first))
+      if (closes) apply(wallOps(newId(), g.start, g.origin))
       // A slower double-click is still one when the system says so (its own timing, set by the user): see onDoubleClick.
-      ended.current = closable && !closes ? { start: g.start, origin: g.origin, prev: g.prev, first: g.first, time: performance.now() } : null
+      ended.current = closable && !closes ? { start: g.start, origin: g.origin, time: performance.now() } : null
       return
     }
     p = constrain(tool, g.start, p, lastWorld.current.altKey)
@@ -763,14 +792,11 @@ export function CanvasView() {
       setOverlay({})
       return
     }
-    if (preview(tool === 'wall' ? wallOps(g.id, g.start, p, g.prev, g.first) : [{ op: 'add_node', node: shape(tool, g.id, g.start, p) }])) commit()
+    if (preview(tool === 'wall' ? wallOps(g.id, g.start, p) : [{ op: 'add_node', node: shape(tool, g.id, g.start, p) }])) commit()
     else cancel()
-    const run: WallRun = { id: g.id, a: g.start, b: p }
     // A run that arrives back at its first point is complete.
     const continues = chain && CHAINED.includes(tool) && !(g.segments >= 1 && dist(p, g.origin) < 1e-6)
-    gesture.current = continues
-      ? { kind: 'draw', id: newId(), start: p, press: null, origin: g.origin, segments: g.segments + 1, since: performance.now(), prev: run, first: g.first ?? run }
-      : { kind: 'idle' }
+    gesture.current = continues ? { kind: 'draw', id: newId(), start: p, press: null, origin: g.origin, segments: g.segments + 1, since: performance.now() } : { kind: 'idle' }
   }
 
   const polyline = (id: string, points: Vec2[], closed: boolean): NodeInput => {
@@ -876,8 +902,8 @@ export function CanvasView() {
       // While drawing, the right button stops; otherwise it opens the menu for what is under it.
       if (s.tool !== 'select' || gesture.current.kind !== 'idle') return reset()
       const under = titleAt(at) ?? hitTest(sceneRef.current, world, 5 / s.view.zoom)
-      // Anywhere in the box around the selection is a click on the selection, not beside it.
-      const box = sceneBounds(sceneRef.current.filter((item) => s.selection.includes(item.id)))
+      // Anywhere in the box around the selection is a click on the selection, not beside it. Rooms have none: their floor is not clickable.
+      const box = roomsOnly(s.doc, s.selection) ? null : sceneBounds(sceneRef.current.filter((item) => s.selection.includes(item.id)))
       const onSelection = !under && box !== null && boundsContainPoint(box, world, 6 / s.view.zoom)
       if (!onSelection && (under ? !s.selection.includes(under.id) : s.selection.length > 0)) select(under ? [under.id] : [])
       useStore.setState({ contextMenu: { x: e.clientX, y: e.clientY }, menuPoint: world })
@@ -933,6 +959,13 @@ export function CanvasView() {
       const index = handles.findIndex((h) => dist({ x: h.x * s.view.zoom + s.view.x, y: h.y * s.view.zoom + s.view.y }, at) < 7)
       if (index >= 0) {
         gesture.current = { kind: 'handle', node: s.doc.nodes[s.selection[0]], index }
+        return
+      }
+      const face = faceAt(at)
+      if (face) {
+        const moving = (wallThicknessOps(s.doc, face.wall, face.wall.thickness + 10, face.side, registry) ?? []).flatMap((op) => (op.op === 'update_node' ? [op.id] : []))
+        gesture.current = { kind: 'face', wall: face.wall, side: face.side, moving }
+        useStore.setState({ wallFace: 'drag' })
         return
       }
       const hit = titleAt(at) ?? hitTest(sceneRef.current, world, 5 / s.view.zoom)
@@ -1072,7 +1105,7 @@ export function CanvasView() {
 
   /** Everything that follows the pointer. Also called without it having moved, to redraw after a size is typed. */
   const moveTo = (e: PointerAt) => {
-    lastPointer.current = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey }
+    lastPointer.current = { clientX: e.clientX, clientY: e.clientY, altKey: e.altKey, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey }
     const s = get()
     const at = local(e)
     const world = toWorld(at, s.view)
@@ -1095,11 +1128,12 @@ export function CanvasView() {
     let measure: Overlay['measure']
     let cut: Overlay['cut']
     let angleReading: Overlay['angleReading']
+    let face: Overlay['face']
     let status = `${formatNumber(world.x)}, ${formatNumber(world.y)} ${unitSuffix()}`.trim()
     let previewed = true
     switch (g.kind) {
       case 'press':
-        if (dist(at, g.at) > 3) gesture.current = { kind: 'move', start: g.start, nodes: g.nodes, ...alignables(g.nodes) }
+        if (dist(at, g.at) > 3) gesture.current = { kind: 'move', start: g.start, nodes: g.nodes, ...lineUp(g.nodes) }
         break
       case 'move': {
         const step = e.altKey ? 0.001 : gridStep(s.view.zoom)
@@ -1137,7 +1171,7 @@ export function CanvasView() {
           // A corner of a paper sets its scale: the sheet stays the sheet it is, so the corner keeps
           // to the diagonal, which is shown running across the view. Alt gives it any size instead.
           const patch = paperScaleTo(g.node, g.index, world)
-          const fixed = kindOf(g.node).handles!(g.node)[(g.index + 2) % 4]
+          const fixed = kindOf(g.node).handles!(g.node, registry)[(g.index + 2) % 4]
           guide = { at: fixed, angle: Math.atan2(g.node.height, g.node.width) * (g.index % 2 === 0 ? 1 : -1) }
           labels = paperLabel(patch)
           status = labels[0].text
@@ -1151,7 +1185,7 @@ export function CanvasView() {
         // The end that stays put is where a perpendicular onto another line would be dropped from.
         // Held level or upright by an arrow key, the point stays on that line through where it was,
         // and may be brought level with something pointed at elsewhere.
-        const was: Vec2 | undefined = s.axisLock ? kindOf(g.node).handles?.(g.node)[g.index] : undefined
+        const was: Vec2 | undefined = s.axisLock ? kindOf(g.node).handles?.(g.node, registry)[g.index] : undefined
         const target: { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } = was
           ? lineEnd(world, e, [g.node.id], was)
           : line !== null && ends
@@ -1163,7 +1197,7 @@ export function CanvasView() {
         marker = target.marker
         // The other walls that end at a wall's corner come along with it, unless Alt is held.
         const joined = e.altKey ? [] : wallEndFollowOps(s.base ?? s.doc, g.node, g.index, target.p)
-        previewed = preview([{ op: 'update_node', id: g.node.id, patch: kindOf(g.node).moveHandle!(g.node, g.index, target.p) }, ...joined])
+        previewed = preview([{ op: 'update_node', id: g.node.id, patch: kindOf(g.node).moveHandle!(g.node, g.index, target.p, registry) }, ...joined])
         break
       }
       case 'corner': {
@@ -1193,6 +1227,30 @@ export function CanvasView() {
         if (previewed) useStore.setState({ corner: g.only ? null : target.p })
         break
       }
+      case 'face': {
+        // The face follows the pointer across the wall, or a point or line of something else the
+        // pointer is near, to line it up; otherwise the thickness goes by steps that suit the zoom.
+        // Alt, as everywhere, leaves out both. With Ctrl (Cmd on a Mac) the wall grows both ways,
+        // its middle line staying put, as Ctrl resizes from the middle in office programs.
+        const both = e.ctrlKey || e.metaKey
+        const hit = !e.altKey && usePrefs.getState().snapToObjects ? snapTo(sceneRef.current, world, SNAP_REACH / s.view.zoom, { exclude: g.moving }) : null
+        const across = wallSpot(g.wall, hit ? hit.p : world).across
+        // From the face that stays to the pointer; or, both ways, twice as far as the pointer is from the middle of the thickness.
+        const middle = (faceAcross(g.wall, 'right') + faceAcross(g.wall, 'left')) / 2
+        const raw = both ? 2 * Math.abs(across - middle) : g.side === 'right' ? across - faceAcross(g.wall, 'left') : faceAcross(g.wall, 'right') - across
+        const step = thicknessStep(s.view.zoom)
+        const thickness = Math.max(1, hit || e.altKey ? round(raw) : Math.round(raw / step) * step)
+        if (hit) marker = { p: hit.p, kind: hit.kind }
+        const ops = wallThicknessOps(s.base ?? s.doc, g.wall, thickness, both ? null : g.side, registry)
+        if (ops) previewed = preview(ops)
+        const now = get().doc.nodes[g.wall.id]
+        if (now?.type === 'wall') {
+          face = faceOf(now, get().doc, g.side)
+          labels = [thicknessLabel(now, g.side)]
+          status = t('Thickness {value}', { value: formatLength(now.thickness) })
+        }
+        break
+      }
       case 'crop': {
         const target = snap(world, e, [g.node.id])
         marker = target.marker
@@ -1207,11 +1265,12 @@ export function CanvasView() {
         // The grip follows the pointer, snapped as a point would be; Shift keeps the proportions from a corner.
         const target = snap(world, { altKey: e.altKey, shiftKey: false }, [g.node.id])
         marker = target.marker
-        const patch = resizePatch(g.node, g.grip, target.p, e.shiftKey)
+        const patch = resizePatch(g.node, g.grip, target.p, e.shiftKey, registry, s.base ?? s.doc)
         if (patch) {
           previewed = preview([{ op: 'update_node', id: g.node.id, patch }])
-          const size = g.node.type === 'ellipse' ? { w: 2 * Number(patch.rx), h: 2 * Number(patch.ry) } : { w: Number(patch.width), h: Number(patch.height) }
-          status = `${formatLength(size.w)} × ${formatLength(size.h)}`
+          // The box as it now is, rounded as the object rounds it (a stair to whole steps).
+          const size = resizeFrame({ ...g.node, ...patch } as Node, registry, s.base ?? s.doc)
+          if (size) status = `${formatLength(size.width)} × ${formatLength(size.height)}`
         }
         break
       }
@@ -1253,7 +1312,7 @@ export function CanvasView() {
         const end = constrain(s.tool, g.start, target.p, e.altKey)
         // The formats on offer follow the pointer itself, so one stays lit while the paper is held on it.
         if (s.tool === 'paper' && s.drawLocks.a === undefined && s.drawLocks.b === undefined && !e.altKey) ghosts = paperFormats(g.start, target.p)
-        previewed = preview(s.tool === 'wall' ? wallOps(g.id, g.start, end, g.prev, g.first) : [{ op: 'add_node', node: shape(s.tool, g.id, g.start, end) }])
+        previewed = preview(s.tool === 'wall' ? wallOps(g.id, g.start, end) : [{ op: 'add_node', node: shape(s.tool, g.id, g.start, end) }])
         const d = sub(end, g.start)
         if (constrained) axis = axisOf(g.start, end)
         status = constrained ? t('Length {value}', { value: formatLength(len(d)) }) : `${formatNumber(Math.abs(d.x))} × ${formatLength(Math.abs(d.y))}`
@@ -1313,8 +1372,14 @@ export function CanvasView() {
           const own = onCorner ? 0 : s.tool === 'select' ? handles.findIndex((h) => dist({ x: h.x * s.view.zoom + s.view.x, y: h.y * s.view.zoom + s.view.y }, at) < 7) : -1
           const boxed = ['rect', 'paper'].includes(s.doc.nodes[s.selection[0]]?.type ?? '')
           const diagonal = (corner: number) => (corner % 2 === 0 ? 'nwse-resize' : 'nesw-resize')
-          const pointer = framed !== null ? (framed === 'knob' ? 'grab' : frameCursor(framed)) : grip ? (grip.corner === 'knob' ? 'grab' : diagonal(grip.corner)) : own >= 0 ? (boxed ? diagonal(own) : 'move') : null
-          if (pointer !== gripCursor) setGripCursor(pointer)
+          const stretched = s.doc.nodes[s.selection[0]]?.type === 'parametric' && handles.length === 2
+          const pointer = framed !== null ? (framed === 'knob' ? 'grab' : frameCursor(framed)) : grip ? (grip.corner === 'knob' ? 'grab' : diagonal(grip.corner)) : own >= 0 ? (boxed ? diagonal(own) : stretched ? resizeCursor(sub(handles[1], handles[0])) : 'move') : null
+          // On a face of the selected wall, a press makes it thicker or thinner: the face is shown, and the pointer says across.
+          const faced = pointer === null ? faceAt(at) : null
+          if (faced) face = faceOf(faced.wall, s.doc, faced.side)
+          const shown = pointer ?? (faced ? resizeCursor(wallNormal(faced.wall, world)) : null)
+          if (shown !== gripCursor) setGripCursor(shown)
+          if (s.wallFace !== (faced ? 'hover' : null)) useStore.setState({ wallFace: faced ? 'hover' : null })
         }
         if (s.tool === 'room') {
           // A room is offered wherever the pointer is inside closed walls, as it would be: floor, name and area.
@@ -1350,7 +1415,7 @@ export function CanvasView() {
           if (aim) {
             marker = aim.marker
             const { place, node } = aim
-            const half = (node.type === 'wall' ? node.thickness / 2 : 0) + 8 / s.view.zoom
+            const half = (node.type === 'wall' ? Math.max(wallSides(node).left, wallSides(node).right) : 0) + 8 / s.view.zoom
             // Each length beside a line with arrows that runs along what it measures, from an end to the cut.
             const gap = half * s.view.zoom + 6
             cut = { at: place.at, dir: place.dir, half, parts: place.parts, gap }
@@ -1370,7 +1435,7 @@ export function CanvasView() {
       const next = [...new Set([...g.keep, ...inside])]
       if (next.length !== s.selection.length || next.some((id, i) => id !== s.selection[i])) select(next)
     }
-    setOverlay((o) => ({ cut, marker: marker && { ...marker, label: snapName(marker.kind) }, smart, link, labels, angle, axis, guide, ghosts, marquee: g.kind === 'marquee' ? { a: g.start, b: world } : undefined, measure: measure ?? o.measure, angleReading: angleReading ?? o.angleReading }))
+    setOverlay((o) => ({ cut, face, marker: marker && { ...marker, label: snapName(marker.kind) }, smart, link, labels, angle, axis, guide, ghosts, marquee: g.kind === 'marquee' ? { a: g.start, b: world } : undefined, measure: measure ?? o.measure, angleReading: angleReading ?? o.angleReading }))
     // A failed preview has put its reason in the status bar; keep it there.
     if (previewed) useStore.setState({ status, drawLive: live })
   }
@@ -1398,9 +1463,11 @@ export function CanvasView() {
       case 'scale':
       case 'resize':
       case 'rotate':
+      case 'face':
         // The box has changed under the pointer; the next movement works out what is there now.
         setGripCursor(null)
         if (s.axisLock) useStore.setState({ axisLock: null })
+        if (s.wallFace) useStore.setState({ wallFace: null })
         commit()
         gesture.current = { kind: 'idle' }
         setOverlay({})
@@ -1441,7 +1508,7 @@ export function CanvasView() {
     if (s.tool === 'wall' && run && performance.now() - run.time < 1500 && gesture.current.kind === 'idle') {
       // The run of walls ended by the second click of this double-click: close it back to where it started.
       ended.current = null
-      apply(wallOps(newId(), run.start, run.origin, run.prev, run.first))
+      apply(wallOps(newId(), run.start, run.origin))
       return
     }
     if (s.tool !== 'select') return
@@ -1531,6 +1598,12 @@ export function CanvasView() {
       onPointerDown={(e) => (onPointerDown(e), syncStep())}
       onPointerMove={onPointerMove}
       onPointerUp={(e) => (onPointerUp(e), syncStep())}
+      onPointerLeave={() => {
+        // A face pointed at is no longer once the pointer has gone, to the panels or elsewhere.
+        if (gesture.current.kind !== 'idle' || !get().wallFace) return
+        useStore.setState({ wallFace: null })
+        setOverlay((o) => ({ ...o, face: undefined }))
+      }}
       onDoubleClick={(e) => (onDoubleClick(e), syncStep())}
       onContextMenu={(e) => e.preventDefault()}
     />

@@ -117,7 +117,7 @@ ${JSON.stringify(nodeJsonSchema())}
 
 # Things that are not obvious from the schema
 
-Walls are defined by their centre line from "a" to "b" plus a thickness. Two walls join cleanly only when their ends are exactly the same point, so reuse the same coordinates for a shared corner. A typical interior wall is 100 mm thick and an exterior one 200 to 300 mm. "bulge" bends a wall into an arc. "joins" chooses how an end meets one other wall: "round" or "bevel" on both ends of the corner, or "through" on the wall that runs past and "butt" on the one that stops against it; without it the corner is mitred.
+Walls are defined by a line from "a" to "b" plus a thickness. The line is the wall's middle, or with "justify": "left" or "right" that face of it (as it runs from a to b), the whole thickness then lying on the other side: draw outside walls by their inner face so that rooms keep their size and walls of different thicknesses stay flush inside. Two walls join cleanly only when their ends are exactly the same point, so reuse the same coordinates for a shared corner. A typical interior wall is 100 mm thick and an exterior one 200 to 300 mm. "bulge" bends a wall into an arc. "joins" chooses how an end meets one other wall: "round" or "bevel" on both ends of the corner, or "through" on the wall that runs past and "butt" on the one that stops against it; without it the corner is mitred.
 
 A wall type (the document's "wallTypes", managed with add_wall_type, update_wall_type and remove_wall_type) is a way of building walls: whichever of thickness, height, fill, pattern, stroke and layers it defines. A wall takes it with "wallType": "<id>", and its thickness then follows the type; to give one wall another thickness, list "thickness" in its "overrides". A dimension style (the document's "dimensionStyles", managed with add_dimension_style, update_dimension_style and remove_dimension_style) does the same for dimensions, which take it with "dimensionStyle": "<id>".
 
@@ -125,11 +125,11 @@ A "parametric" node is an object drawn from parameters. These kinds are availabl
 
 ${JSON.stringify(kinds)}
 
-Kinds with "cutsWalls" are doors and windows. One cuts an opening when it lies on a wall: put its insertion point (x, y) on the wall's centre line and set its rotation to the wall's direction, the angle from the wall's "a" to "b". The opening then runs along the wall from the insertion point for its width. It adapts to the wall's thickness by itself, and moves with the wall only by being on it.
+Kinds with "cutsWalls" are doors and windows. One cuts an opening when it lies on a wall: put its insertion point (x, y) in the middle of the wall's thickness (on its line for a wall without "justify", half its thickness off it towards the wall otherwise) and set its rotation to the wall's direction, the angle from the wall's "a" to "b". The opening then runs along the wall from the insertion point for its width. It adapts to the wall's thickness by itself, and moves with the wall only by being on it.
 
 A "group" holds several nodes so they are selected, moved and stacked as one. It has no coordinates of its own: to group nodes, add a group and set their "parent" to its id; to move a group, move the nodes inside it.
 
-A "component" is a reusable definition and an "instance" places it, with "x", "y", "rotation", "scale" and "flipX". To repeat the same furniture or symbol several times, make one component and place instances of it; changing the component changes them all. An instance has no look of its own: what its component draws without a colour takes the colour of the instance's layer, so to show placed furniture grey (existing) or red (to demolish), put the instances on a layer of that colour rather than giving them a style.
+A "component" is a reusable definition and an "instance" places it, with "x", "y", "rotation", "scale" and "flipX", and "scaleX" and "scaleY" to stretch it wider or taller than it is drawn. To repeat the same furniture or symbol several times, make one component and place instances of it; changing the component changes them all. An instance has no look of its own: what its component draws without a colour takes the colour of the instance's layer, so to show placed furniture grey (existing) or red (to demolish), put the instances on a layer of that colour rather than giving them a style.
 
 A shared colour (the document's "colors", managed with add_color, update_color and remove_color) is used by setting a colour property, such as style.stroke, style.fill or a layer's color, to "var(--<id>)"; changing the shared colour then recolours everything that refers to it. A colour property may also be "var(--layer)": the colour of the layer the node is on, for a fill or a text that should follow its layer as a stroke with no colour of its own already does.
 
@@ -169,7 +169,7 @@ const span = (b: Bounds) => `x from ${mm(b.minX)} to ${mm(b.maxX)}, y from ${mm(
 /** What a selected node measures, in a few words the model would otherwise have to work out. */
 function measure(doc: Document, node: Node, registry: Registry | undefined): string[] {
   const facts: string[] = []
-  if (node.type === 'wall') facts.push(`length ${mm(wallLength(node))} mm along its centre line, ${mm(node.thickness)} mm thick, from ${point(node.a)} to ${point(node.b)}`)
+  if (node.type === 'wall') facts.push(`length ${mm(wallLength(node))} mm along its line, ${mm(node.thickness)} mm thick, from ${point(node.a)} to ${point(node.b)}${node.justify === 'left' || node.justify === 'right' ? `, drawn by its ${node.justify} face` : ''}`)
   if (node.type === 'line' || node.type === 'divider' || node.type === 'dimension') facts.push(`length ${mm(Math.hypot(node.b.x - node.a.x, node.b.y - node.a.y))} mm`)
   if (node.type === 'room') {
     const floor = roomAt(doc, node.parent, node)

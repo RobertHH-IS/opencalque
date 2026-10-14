@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "id": "opencalque.annotation",
   "name": "Plan annotations",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "OpenCalque",
   "description": "North arrow, scale bar and level marker.",
   "translations": {
@@ -71,6 +71,7 @@
   "objects": [
     {
       "kind": "note.north",
+      "category": "annotation",
       "label": "North arrow",
       "params": [{ "key": "size", "label": "Size", "type": "number", "default": 800, "unit": "length" }],
       "draw": [
@@ -81,6 +82,7 @@
     },
     {
       "kind": "note.scalebar",
+      "category": "annotation",
       "label": "Scale bar",
       "params": [
         { "key": "length", "label": "Length", "type": "number", "default": 5000, "unit": "length" },
@@ -107,6 +109,7 @@
     },
     {
       "kind": "note.level",
+      "category": "annotation",
       "label": "Level marker",
       "params": [
         { "key": "level", "label": "Level", "type": "string", "default": "+0.00" },

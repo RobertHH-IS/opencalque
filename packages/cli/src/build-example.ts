@@ -91,7 +91,7 @@ doc = applyOps(doc, [
   kitchen('Sink unit', 950, 6250),
   kitchen('Hob', 2250, 6250),
   kitchen('Base unit', 2950, 6250),
-  bathroom('Washbasin', 7850, 3900),
+  add({ type: 'parametric', layer: 'furniture', kind: 'arch.washbasin', x: 7850, y: 3900, rotation: 0, props: { width: 600, depth: 450, bowls: 1 } }),
   bathroom('Toilet', 8950, 3950),
   bathroom('Shower tray', 8950, 5950),
 ])

@@ -71,6 +71,32 @@ export function duplicatePageOps(doc: Document, pageId: string, name: string): {
 }
 
 /**
+ * The operations that put nodes in `parent` (a page, a component or a group), next to `target`,
+ * one of what it holds, just before or just after it in the stacking order, or on top of what it
+ * holds when there is no target. They may come from anywhere in the same page or component; they
+ * keep their order among themselves, and their coordinates (a group has no geometry of its own).
+ * A node that `parent` is inside of, or `parent` itself, is left where it is: a group cannot go
+ * inside itself. Nothing is done when they would end up where they are.
+ */
+export function placeInOps(doc: Document, ids: string[], parent: string, target?: { id: string; after: boolean }): Op[] {
+  const above = new Set<string>()
+  for (let up: string | null = parent; up !== null; up = doc.nodes[up]?.parent ?? null) above.add(up)
+  const moving = ids.map((id) => doc.nodes[id]).filter((n): n is NonNullable<typeof n> => !!n && n.parent !== null && !above.has(n.id))
+  if (moving.length === 0 || (target && moving.some((n) => n.id === target.id))) return []
+  // In their order on the drawing: below one another as they were, where they shared a parent.
+  moving.sort((p, q) => (p.parent === q.parent ? (p.order < q.order ? -1 : 1) : 0))
+  const going = new Set(moving.map((n) => n.id))
+  const siblings = childrenOf(doc, parent)
+  const rest = siblings.filter((n) => !going.has(n.id))
+  const at = target ? rest.findIndex((n) => n.id === target.id) + (target.after ? 1 : 0) : rest.length
+  if (target && at < (target.after ? 1 : 0)) return []
+  const result = [...rest.slice(0, at), ...moving, ...rest.slice(at)]
+  if (result.length === siblings.length && result.every((n, i) => n === siblings[i])) return []
+  const orders = generateNKeysBetween(rest[at - 1]?.order ?? null, rest[at]?.order ?? null, moving.length)
+  return moving.map((n, i): Op => ({ op: 'update_node', id: n.id, patch: { ...(n.parent === parent ? {} : { parent }), order: orders[i] } }))
+}
+
+/**
  * The operations that move sibling nodes next to `target`, just before or just after it in their
  * parent's order, keeping their order among themselves. Pages are put among the pages. Nothing is
  * done when they would end up where they are, or when the target is one of them.

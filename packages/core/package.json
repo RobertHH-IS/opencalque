@@ -1,6 +1,6 @@
 {
   "name": "@opencalque/core",
-  "version": "1.0.0-rc.2",
+  "version": "1.0.0-rc.3",
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "clipper-lib": "6.4.2",
     "fractional-indexing": "^4.0.0",
     "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/clipper-lib": "6.4.0"
   }
 }

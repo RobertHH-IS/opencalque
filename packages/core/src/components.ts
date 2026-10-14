@@ -8,6 +8,7 @@ import type { Registry } from './registry'
 import { boundsOf } from './scene'
 import type { Document, Node } from './schema'
 import { transformOps } from './transform'
+import { placedShapes, primitiveNodes } from './vectorize'
 
 /**
  * Turns nodes into a component and leaves an instance in their place. The component's origin
@@ -64,6 +65,19 @@ export function detachInstance(doc: Document, instanceId: string, registry: Regi
   if (instance?.type !== 'instance' || instance.parent === null) throw new OpError('Select a component to detach')
   const component = doc.nodes[instance.component]
   if (component?.type !== 'component') throw new OpError(`Component "${instance.component}" does not exist`)
+  // Stretched, what it holds would no longer be what it is (a turned rectangle stretched is no
+  // rectangle): its shapes are taken as they are drawn, as lines, shapes and texts in a group.
+  if ((instance.scaleX ?? 1) !== 1 || (instance.scaleY ?? 1) !== 1) {
+    const group = newId('group')
+    const { name = component.name, layer, style, modifiers } = instance
+    const own = { ...(name ? { name } : {}), ...(layer ? { layer } : {}), ...(style ? { style } : {}), ...(modifiers ? { modifiers } : {}) }
+    const ops: Op[] = [
+      { op: 'add_node', node: { type: 'group', id: group, parent: instance.parent, order: instance.order, ...own } },
+      ...primitiveNodes(placedShapes(doc, instance, registry), group, layer).map((node): Op => ({ op: 'add_node', node })),
+      { op: 'remove_node', id: instanceId },
+    ]
+    return { doc: applyOps(doc, ops), ids: [group] }
+  }
   const parts = childrenOf(doc, component.id)
   const kept = instance.style !== undefined || (instance.modifiers?.length ?? 0) > 0
   const ops: Op[] = []
