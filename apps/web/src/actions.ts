@@ -27,6 +27,11 @@ import {
   NewerFormatError,
   paperContents,
   pasteNodes,
+  pasteOffset,
+  clipPlacement,
+  relocateClip,
+  withPlacement,
+  type Transform,
   sceneBounds,
   serializeDocument,
   toDXF,
@@ -246,23 +251,54 @@ export function withPaperContents(ids: string[]): string[] {
 }
 
 /** Copies the selection as JSON text, so it can be pasted into another drawing or another window. */
+/**
+ * The component placements, outermost first, through which what is being edited is seen on its
+ * page: none on a page (or in a group on one); for a component opened by double-clicking one of its
+ * placements, that placement and the ones it is inside. Null for a component opened some other
+ * way (from the library), which is seen nowhere in particular.
+ */
+function scopePlacement(): Transform[] | null {
+  const { doc, scope, through } = get()
+  if (rootOf(doc, scope)?.type === 'page') return []
+  const chain = (through ?? []).map((id) => doc.nodes[id])
+  if (chain.length === 0 || chain.some((node) => node?.type !== 'instance')) return null
+  return chain.map((node) => {
+    const { x, y, rotation, flipX, scale } = node as Extract<Node, { type: 'instance' }>
+    return { x, y, rotation, flipX, scale }
+  })
+}
+
 export const copySelection = () =>
   guarded(async () => {
     const { doc, selection } = get()
     if (selection.length === 0) return
-    lastCopy = JSON.stringify(copyNodes(doc, withPaperContents(selection)))
+    // It says where it was seen, so that pasted elsewhere (out of a component, onto the page) it lands there.
+    lastCopy = JSON.stringify(withPlacement(copyNodes(doc, withPaperContents(selection)), scopePlacement()))
     await navigator.clipboard?.writeText(lastCopy).catch(() => {})
   })
 
 export const cutSelection = () =>
   guarded(async () => {
-    await copySelection()
-    // What was copied is what goes: a paper is cut together with what is on it.
-    apply(withPaperContents(get().selection).map((id): Op => ({ op: 'remove_node', id })))
+    // What was copied is what goes: a paper is cut together with what is on it. It goes at once:
+    // only the system clipboard is waited for, and a key pressed meanwhile (Esc, to leave a
+    // component) must not find it still there, nor change what is cut.
+    const ids = withPaperContents(get().selection)
+    if (ids.length === 0) return
+    const writing = copySelection()
+    apply(ids.map((id): Op => ({ op: 'remove_node', id })))
+    await writing
   })
 
-export const paste = () =>
-  guarded(async () => {
+/**
+ * Pastes what is on the clipboard where the person is looking (see `pasteOffset`): where it was
+ * when that is in view, beside it when the original is still there, else in the middle of the
+ * view; chosen from the right-click menu, where the menu was opened. `inPlace` puts it exactly
+ * where it was copied from, in view or not, which carries a thing to the same place on another page.
+ */
+export const paste = (inPlace = false) => {
+  // Read now, before the clipboard is: the menu that set it is gone by the time that answers.
+  const at = get().menuPoint ?? undefined
+  return guarded(async () => {
     const text = (await navigator.clipboard?.readText().catch(() => '')) || lastCopy
     let clip: Document
     try {
@@ -271,12 +307,20 @@ export const paste = () =>
       return toast(t('There is nothing from OpenCalque on the clipboard.'))
     }
     if (!isClipboard(clip)) return toast(t('There is nothing from OpenCalque on the clipboard.'))
-    const { doc, scope, activeLayer } = get()
-    // Pasting into the drawing it came from would land exactly on the original, so it is shifted.
-    const result = pasteNodes(doc, clip, scope, { x: 200, y: 200 }, activeLayer)
+    // Taken from where it was seen to the same place as seen from here: out of a component it was cut from, onto the page.
+    const from = clipPlacement(clip)
+    const to = scopePlacement()
+    if (from && to) clip = relocateClip(clip, from, to, registry)
+    const { doc, scope, activeLayer, view, viewport } = get()
+    // What is on screen, in millimetres: the canvas's corners taken back through the view.
+    const visible = viewport.width > 0 ? { minX: -view.x / view.zoom, minY: -view.y / view.zoom, maxX: (viewport.width - view.x) / view.zoom, maxY: (viewport.height - view.y) / view.zoom } : null
+    // A step that shows at any zoom (two grid steps are at least 16 pixels) and keeps the grid.
+    const offset = inPlace ? { x: 0, y: 0 } : pasteOffset(doc, clip, scope, registry, { visible, step: 2 * gridStep(view.zoom), at })
+    const result = pasteNodes(doc, clip, scope, offset, activeLayer)
     replaceDoc(result.doc)
     select(result.ids)
   })
+}
 
 /**
  * Exports what a page holds as a table for a spreadsheet: rooms and their areas, walls with their
@@ -598,9 +642,12 @@ export function distributeSelection(along: 'x' | 'y'): void {
  * with none, it becomes the look of what is drawn next.
  */
 export function pickStyle(source: Node): void {
-  const { selection } = get()
-  const targets = selection.filter((id) => id !== source.id)
-  if (targets.length > 0) {
+  const { selection, doc } = get()
+  // A placed component looks as its component does and takes no look of its own.
+  const targets = selection.filter((id) => id !== source.id && doc.nodes[id]?.type !== 'instance')
+  if (targets.length === 0 && selection.some((id) => doc.nodes[id]?.type === 'instance')) {
+    toast(t('A component looks as it is drawn, in the colour of its layer: change the component, or put it on another layer.'))
+  } else if (targets.length > 0) {
     if (apply(targets.map((id): Op => ({ op: 'update_node', id, patch: { style: source.style ?? null } })))) toast(tn(targets.length, 'Style given to {n} object', 'Style given to {n} objects'))
   } else {
     useStore.setState({ drawColor: source.style?.stroke ?? null, drawWeight: source.style?.strokeWidth ?? null, drawDash: source.style?.dash ?? null })

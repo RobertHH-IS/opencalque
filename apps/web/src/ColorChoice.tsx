@@ -1,39 +1,44 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Check, Link2, Plus, Unlink } from 'lucide-react'
+import { Check, Layers, Link2, Pipette, Plus, Unlink } from 'lucide-react'
 import { create } from 'zustand'
-import { colorRef, colorRefOf, colorsOf, newId, parseColor, PATTERN_DEFAULTS, resolveColor, type Pattern } from '@opencalque/core'
+import { colorRef, colorRefOf, colorsOf, LAYER_COLOR, newId, parseColor, PATTERN_DEFAULTS, resolveColor, type Pattern } from '@opencalque/core'
 import { msg, t } from './i18n'
 import { apply, collapseHistory, useStore } from './store'
 import { Field } from './ui'
 
-/** Hue in degrees, then how vivid and how bright, each from 0 to 1. */
+/** Hue in degrees, then how vivid and how bright, each from 0 to 1, and how opaque, from 0 (not at all) to 1. */
 interface Hsv {
   h: number
   s: number
   v: number
+  a: number
 }
 
 function toHsv(color: string): Hsv {
-  const { r, g, b } = parseColor(color) ?? { r: 0, g: 0, b: 0 }
+  const { r, g, b, a } = parseColor(color) ?? { r: 0, g: 0, b: 0, a: 1 }
   const max = Math.max(r, g, b)
   const spread = max - Math.min(r, g, b)
   const h = spread === 0 ? 0 : max === r ? ((g - b) / spread + 6) % 6 : max === g ? (b - r) / spread + 2 : (r - g) / spread + 4
-  return { h: h * 60, s: max === 0 ? 0 : spread / max, v: max }
+  return { h: h * 60, s: max === 0 ? 0 : spread / max, v: max, a }
 }
 
-function toHex({ h, s, v }: Hsv): string {
+/** A colour as its code: six hex digits, and two more for its opacity when it is not opaque. */
+function toHex({ h, s, v, a }: Hsv): string {
+  const hex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0')
   const part = (n: number) => {
     const k = (n + h / 60) % 6
-    return Math.round((v - v * s * Math.max(0, Math.min(k, 4 - k, 1))) * 255)
-      .toString(16)
-      .padStart(2, '0')
+    return hex(v - v * s * Math.max(0, Math.min(k, 4 - k, 1)))
   }
-  return `#${part(5)}${part(3)}${part(1)}`
+  return `#${part(5)}${part(3)}${part(1)}${a < 1 ? hex(a) : ''}`
 }
 
+/** A small square of colour over a checkerboard, so that how see-through a colour is shows. */
+export const swatch = (color: string) => ({ background: `linear-gradient(${color}, ${color}), repeating-conic-gradient(#d4d4d4 0% 25%, #ffffff 0% 50%) 50% / 8px 8px` })
+
 const RECENT_KEY = 'opencalque.recentColors'
-const RECENT_MAX = 12
+/** As many as fill one row of the colour window (`.color-swatches`, eight columns): one row is enough to find a colour again. */
+const RECENT_MAX = 8
 
 /** The colours picked lately, newest first, kept on this computer across drawings. */
 const useRecent = create<{ colors: string[] }>(() => {
@@ -60,7 +65,7 @@ function remember(color: string): void {
  * colour's code to read or type. `onChange` is called all along a drag; `onSettle` once it ends,
  * with the colour it ended on.
  */
-function Picker({ value, onChange, onSettle }: { value: string; onChange: (color: string) => void; onSettle: (color: string) => void }) {
+function Picker({ value, onChange, onSettle, actions }: { value: string; onChange: (color: string) => void; onSettle: (color: string) => void; actions?: ReactNode }) {
   const [hsv, setHsv] = useState(() => toHsv(value))
   const [code, setCode] = useState(value)
   // Follows a colour set from outside (a recent one, a reset) without losing the hue of a grey being dragged.
@@ -91,11 +96,30 @@ function Picker({ value, onChange, onSettle }: { value: string; onChange: (color
   const drag = (e: React.PointerEvent<HTMLDivElement>) => {
     const area = e.currentTarget.getBoundingClientRect()
     const within = (n: number) => Math.max(0, Math.min(1, n))
-    set({ h: hsv.h, s: within((e.clientX - area.left) / area.width), v: 1 - within((e.clientY - area.top) / area.height) })
+    set({ h: hsv.h, s: within((e.clientX - area.left) / area.width), v: 1 - within((e.clientY - area.top) / area.height), a: hsv.a })
   }
+  /** Takes a colour from anywhere on the screen, where the browser can (Chrome, Edge and the desktop app). */
+  const pickFromScreen = async () => {
+    try {
+      const { sRGBHex } = await new (window as unknown as { EyeDropper: new () => { open(): Promise<{ sRGBHex: string }> } }).EyeDropper().open()
+      begin()
+      // What is on the screen has no opacity of its own: the colour keeps the one it had.
+      const next = { ...toHsv(sRGBHex), a: latest.current.a }
+      set(next)
+      settle(toHex(next))
+    } catch {
+      // Esc, or a click that picked nothing: the colour stays as it was.
+    }
+  }
+  // Whether the code was typed in since it was last taken. Leaving the field takes it only then:
+  // otherwise a press on a slider, which the browser handles before the field is left, would be
+  // undone by the code as it was before the press.
+  const edited = useRef(false)
   const typed = () => {
+    if (!edited.current) return
+    edited.current = false
     const text = code.trim().startsWith('#') ? code.trim() : `#${code.trim()}`
-    if (!/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(text)) return setCode(toHex(hsv))
+    if (!/^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(text)) return setCode(toHex(latest.current))
     begin()
     const next = toHsv(text)
     set(next)
@@ -139,9 +163,31 @@ function Picker({ value, onChange, onSettle }: { value: string; onChange: (color
         onChange={(e) => set({ ...hsv, h: Number(e.target.value) })}
         onPointerUp={() => settle(toHex(latest.current))}
       />
+      <div className="color-opacity">
+        <input
+          className="color-alpha"
+          type="range"
+          min={0}
+          max={100}
+          value={Math.round(hsv.a * 100)}
+          title={t('Opacity')}
+          aria-label={t('Opacity')}
+          style={{ background: `linear-gradient(to right, transparent, ${toHex({ ...hsv, a: 1 })}), repeating-conic-gradient(#d4d4d4 0% 25%, #ffffff 0% 50%) 50% / 8px 8px` }}
+          onPointerDown={begin}
+          onChange={(e) => set({ ...hsv, a: Number(e.target.value) / 100 })}
+          onPointerUp={() => settle(toHex(latest.current))}
+        />
+        <span>{Math.round(hsv.a * 100)} %</span>
+      </div>
       <div className="color-code">
-        <i style={{ background: toHex(hsv) }} />
-        <input value={code} spellCheck={false} aria-label={t('Colour code')} title={t('Colour code')} onChange={(e) => setCode(e.target.value)} onBlur={typed} onKeyDown={(e) => e.key === 'Enter' && typed()} />
+        <i style={swatch(toHex(hsv))} />
+        <input value={code} spellCheck={false} aria-label={t('Colour code')} title={t('Colour code')} onChange={(e) => ((edited.current = true), setCode(e.target.value))} onBlur={typed} onKeyDown={(e) => e.key === 'Enter' && typed()} />
+        {actions}
+        {'EyeDropper' in window && (
+          <button type="button" className="color-eyedropper" title={t('Pick a colour from the screen')} aria-label={t('Pick a colour from the screen')} onClick={pickFromScreen}>
+            <Pipette size={14} />
+          </button>
+        )}
       </div>
     </div>
   )
@@ -220,7 +266,31 @@ export function PatternRows({ label, value, onChange, none = true, mixed = false
  * swatch, for a row of a list or a bar, where there is no room for the name. A fill's pattern is
  * not chosen here but on rows of its own, under the fill's colour (`PatternRows`).
  */
-export function ColorChoice({ stored, fallback, unset, commit, compact, title }: { stored: string | undefined; fallback: string; unset?: string; commit: (value: unknown) => void; compact?: boolean; title?: string }) {
+export function ColorChoice({
+  stored,
+  fallback,
+  unset,
+  commit,
+  compact,
+  title,
+  layer,
+  plain,
+}: {
+  stored: string | undefined
+  fallback: string
+  unset?: string
+  commit: (value: unknown) => void
+  compact?: boolean
+  title?: string
+  /**
+   * The layer of what the colour is for, offered as a colour to follow (`LAYER_COLOR`): its name
+   * (none when several objects on different layers are being set), its colour, and whether no
+   * colour at all already means it (a stroke's does).
+   */
+  layer?: { name?: string; color: string; byDefault: boolean }
+  /** Only a colour of its own: no shared colours to link to, as for the value of a shared colour itself. */
+  plain?: boolean
+}) {
   const doc = useStore((s) => s.doc)
   const recent = useRecent((s) => s.colors)
   const [open, setOpen] = useState(false)
@@ -277,8 +347,11 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title }:
 
   const linked = colorRefOf(stored)
   const shared = linked === null ? undefined : doc.colors?.[linked]
-  // What is painted: the shared colour's value, the property's own colour, or what it falls back on.
-  const shown = resolveColor(doc, stored) ?? fallback
+  // Following the layer: said so, or meant by having no colour where that is what no colour means.
+  const followsLayer = layer !== undefined && (stored === LAYER_COLOR || (stored === undefined && layer.byDefault))
+  const layerTitle = layer && (layer.name ? t('Follows the colour of the layer “{name}”', { name: layer.name }) : t('Follows the colour of each one’s layer'))
+  // What is painted: the shared colour's value, the layer's, the property's own colour, or what it falls back on.
+  const shown = followsLayer ? layer!.color : (resolveColor(doc, stored) ?? fallback)
   const colors = colorsOf(doc)
 
   /** Makes a shared colour out of the one shown and links this property to it. */
@@ -293,16 +366,22 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title }:
       <button
         type="button"
         className={`color-now${linked ? ' linked' : ''}`}
-        title={linked ? `${title ? `${title}: ` : ''}${shared?.name ?? t('Missing colour')}. ${t('Linked to a shared colour: it changes when that colour does')}` : (title ?? t('Choose a colour'))}
+        title={linked ? `${title ? `${title}: ` : ''}${shared?.name ?? t('Missing colour')}. ${t('Linked to a shared colour: it changes when that colour does')}` : followsLayer ? `${title ? `${title}: ` : ''}${layerTitle}` : (title ?? t('Choose a colour'))}
         onClick={() => {
           // The end of the press that closed it, as on the name of a row that hands its clicks to this button.
           if (closing.current) return
           setOpen(!open)
         }}
       >
-        <i style={{ backgroundColor: shown }} />
+        {/* A layer with no colour of its own shows an empty swatch, crossed out, rather than black. */}
+        {compact && stored === undefined && unset && !followsLayer ? <i className="none" /> : <i style={swatch(shown)} />}
         {compact ? (
           linked && <Link2 size={9} />
+        ) : stored === LAYER_COLOR ? (
+          <>
+            <Layers size={12} />
+            <span>{layer?.name ?? t('Layer')}</span>
+          </>
         ) : linked ? (
           <>
             <Link2 size={12} />
@@ -319,11 +398,30 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title }:
         // transform would otherwise take the window along and put it somewhere else.
         createPortal(
           <div className="color-menu" ref={menu} style={place ? { left: place.left, top: place.top, maxHeight: `calc(100vh - ${place.top + 8}px)` } : { visibility: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-            <Picker value={shown} onChange={commit} onSettle={remember} />
-            {linked && (
-              <button type="button" className="color-option" title={t('Linked to a shared colour: it changes when that colour does')} onClick={() => commit(shown)}>
-                <Unlink size={12} />
-                <span>{t('Unlink from “{name}”', { name: shared?.name ?? t('Missing colour') })}</span>
+            <Picker
+              value={shown}
+              onChange={commit}
+              onSettle={remember}
+              actions={
+                // Linked, as the ticked shared colour below shows: one button, beside the eyedropper, lets it go.
+                linked && (
+                  <button
+                    type="button"
+                    className="color-eyedropper"
+                    title={`${t('Unlink from “{name}”', { name: shared?.name ?? t('Missing colour') })}. ${t('It keeps this colour, as its own, and no longer follows the shared one.')}`}
+                    aria-label={t('Unlink from “{name}”', { name: shared?.name ?? t('Missing colour') })}
+                    onClick={() => commit(shown)}
+                  >
+                    <Unlink size={14} />
+                  </button>
+                )
+              }
+            />
+            {layer && (
+              <button type="button" className={`color-option${followsLayer ? ' active' : ''}`} title={layerTitle} onClick={() => (commit(layer.byDefault ? undefined : LAYER_COLOR), setOpen(false))}>
+                <i style={swatch(layer.color)} />
+                <span>{layer.name ? t('Colour of the layer “{name}”', { name: layer.name }) : t('Colour of the layer')}</span>
+                {followsLayer && <Check size={12} />}
               </button>
             )}
             {recent.length > 0 && (
@@ -331,26 +429,26 @@ export function ColorChoice({ stored, fallback, unset, commit, compact, title }:
                 <h4>{t('Recent')}</h4>
                 <div className="color-swatches">
                   {recent.map((color) => (
-                    <button key={color} type="button" title={color} aria-label={color} className={!linked && color === shown ? 'active' : ''} style={{ background: color }} onClick={() => (commit(color), remember(color))} />
+                    <button key={color} type="button" title={color} aria-label={color} className={!linked && color === shown ? 'active' : ''} style={swatch(color)} onClick={() => (commit(color), remember(color))} />
                   ))}
                 </div>
               </>
             )}
-            <h4>{t('Shared colours')}</h4>
-            {colors.map((color) => (
+            {!plain && <h4>{t('Shared colours')}</h4>}
+            {!plain && colors.map((color) => (
               <button key={color.id} type="button" className={`color-option${color.id === linked ? ' active' : ''}`} title={t('Link to this shared colour')} onClick={() => commit(colorRef(color.id))}>
-                <i style={{ background: color.value }} />
+                <i style={swatch(color.value)} />
                 <span>{color.name}</span>
                 {color.id === linked && <Check size={12} />}
               </button>
             ))}
-            {!linked && (
+            {!linked && !plain && (
               <button type="button" className="color-option" onClick={share}>
                 <Plus size={12} />
                 <span>{t('New shared colour')}</span>
               </button>
             )}
-            {stored !== undefined && (
+            {stored !== undefined && !plain && (
               <button type="button" className="color-option color-reset" onClick={() => (commit(undefined), setOpen(false))}>
                 <span>
                   {t('Reset')}

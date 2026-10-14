@@ -13,16 +13,29 @@ const REFERENCES = /var\(--([\w-]+)\)/g
 /** What is drawn for a reference to a colour that is no longer there. */
 const MISSING = '#1f1f1f'
 
+/**
+ * The colour of the layer the node is on, as a colour property can ask for it: a fill, a text or
+ * the lines of a pattern then follow their layer, as a stroke with no colour of its own does.
+ * Written like a reference to a shared colour, whose ids it can never be ("layer" is refused).
+ */
+export const LAYER_COLOR = 'var(--layer)'
+
 /** The way a colour property refers to the shared colour `id`. */
 export const colorRef = (id: string) => `var(--${id})`
 
-/** The id of the shared colour a value refers to, or null when it is a colour in its own right. */
+/** The id of the shared colour a value refers to, or null when it is a colour in its own right (or the layer's). */
 export function colorRefOf(value: unknown): string | null {
-  return typeof value === 'string' ? (REFERENCE.exec(value)?.[1] ?? null) : null
+  const id = typeof value === 'string' ? (REFERENCE.exec(value)?.[1] ?? null) : null
+  return id === 'layer' ? null : id
 }
 
-/** A colour as it is to be painted: the shared colour's value for a reference, the value itself otherwise. */
-export function resolveColor<T extends string | undefined>(doc: Document, value: T): T {
+/**
+ * A colour as it is to be painted: the shared colour's value for a reference, `layer` for the
+ * layer's colour (what the node's layer gives, worked out by whoever draws the node), the value
+ * itself otherwise.
+ */
+export function resolveColor<T extends string | undefined>(doc: Document, value: T, layer?: string): T {
+  if (value === LAYER_COLOR) return (layer ?? MISSING) as T
   const id = colorRefOf(value)
   return id === null ? value : ((doc.colors?.[id]?.value ?? MISSING) as T)
 }
@@ -32,7 +45,7 @@ export const colorsOf = (doc: Document): SharedColor[] => Object.values(doc.colo
 
 /** The ids of the shared colours something refers to, wherever in it the references are. */
 export function colorRefsIn(value: unknown): string[] {
-  return [...new Set([...JSON.stringify(value ?? null).matchAll(REFERENCES)].map((match) => match[1]))]
+  return [...new Set([...JSON.stringify(value ?? null).matchAll(REFERENCES)].map((match) => match[1]))].filter((id) => id !== 'layer')
 }
 
 /** How many nodes and layers refer to a shared colour. */

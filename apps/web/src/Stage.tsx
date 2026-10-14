@@ -263,6 +263,10 @@ type Hint = [key: string, text: string]
  */
 function hintsFor(tool: Tool, step: number, opening: boolean, selected = false): Hint[] {
   const free: Hint = ['Alt', t('ignores the grid and snapping')]
+  // What measures the drawing never takes a point from the grid (MEASURING in CanvasView.tsx).
+  const unsnapped: Hint = ['Alt', t('ignores snapping')]
+  const onDrawing: Hint = ['', t('points go on what is drawn, not on the grid')]
+  const heldStraight: Hint = ['Shift', t('keeps to 45° steps and stops on the lines it crosses')]
   const angles: Hint = ['Shift', t('keeps to 45° steps')]
   const typed: Hint = ['0-9', t('type an exact length')]
   const held: Hint = ['↑ ←', t('holds it upright or level')]
@@ -285,7 +289,7 @@ function hintsFor(tool: Tool, step: number, opening: boolean, selected = false):
     case 'paper':
       return step === 0 ? [['', t('Click a corner of the sheet')]] : [['', t('Pull towards a format to take it, or click anywhere for a size of your own')], ['Alt', t('any size')]]
     case 'dimension':
-      return step === 0 ? [['', t('Click the first point to measure from')]] : step === 1 ? [['', t('Click the second point')], angles, free] : [['', t('Click where the dimension line should sit')], free]
+      return step === 0 ? [['', t('Click the first point to measure from')], onDrawing] : step === 1 ? [['', t('Click the second point')], onDrawing, heldStraight, unsnapped] : [['', t('Click where the dimension line should sit')], free]
     case 'rotate':
       if (!selected) return [['', t('Select what to turn first: click it')]]
       if (step === 0) return [['', t('Click the point to turn it about')]]
@@ -294,9 +298,9 @@ function hintsFor(tool: Tool, step: number, opening: boolean, selected = false):
     case 'split':
       return [['', t('Click a wall, a line or a polyline where it should be cut')], ['', t('the lengths either side are shown')], ['Alt', t('ignores the grid')]]
     case 'measure':
-      return step === 0 ? [['', t('Click the first point')]] : [['', t('Click the second point')], angles, free]
+      return step === 0 ? [['', t('Click the first point')], onDrawing] : [['', t('Click the second point')], onDrawing, heldStraight, unsnapped]
     case 'angle':
-      return step === 0 ? [['', t('Click the corner of the angle')]] : step === 1 ? [['', t('Click a point along its first side')], free] : [['', t('Click a point along its second side')], free]
+      return step === 0 ? [['', t('Click the corner of the angle')], onDrawing] : step === 1 ? [['', t('Click a point along its first side')], unsnapped] : [['', t('Click a point along its second side')], unsnapped]
     case 'text':
       return [['', t('Click where the text starts, then type')]]
     case 'annotation':
@@ -318,6 +322,8 @@ function Hints() {
   // With the select tool, a preview in progress is an object being moved, reshaped, scaled or turned.
   const dragging = useStore((s) => s.tool === 'select' && s.base !== null && !s.editingText)
   const walls = useStore((s) => s.selection.some((id) => s.doc.nodes[id]?.type === 'wall'))
+  // A rectangle or an ellipse alone is resized by the frame around it (resize.ts).
+  const boxed = useStore((s) => s.tool === 'select' && s.selection.length === 1 && ['rect', 'ellipse'].includes(s.doc.nodes[s.selection[0]]?.type ?? ''))
   let hints: Hint[]
   if (typing) hints = [['', t('Type the text')], ['Enter', t('starts a new line')], ['Esc', t('finishes')]]
   else if (tool === 'eyedropper') hints = [['', selected ? t('Click an object to give its look to what is selected') : t('Click an object to draw the next shapes with its look')]]
@@ -329,6 +335,8 @@ function Hints() {
         ? [['', t('Click the first of two points whose real distance you know')]]
         : [['', t('Click the second point')], ['Shift', t('keeps it level, upright or at 45°')]]
   }
+  else if (dragging && boxed) hints = [['Shift', t('keeps its proportions, from a corner')], ['Alt', t('ignores the grid and snapping')]]
+  else if (boxed) hints = [['', t('Drag the middle of a side to change one size, a corner to change both')], ['', t('the knob above turns it')]]
   else if (dragging) hints = walls ? [['', t('Joined walls stretch to stay joined')], ['↑ ←', t('holds it upright or level')], ['Alt', t('moves it alone, off the grid')]] : [['Shift', t('keeps an end on its own line')], ['↑ ←', t('holds it upright or level')], ['Alt', t('ignores the grid and snapping')]]
   else hints = hintsFor(tool, step, opening, selected)
   if (hints.length === 0) return null

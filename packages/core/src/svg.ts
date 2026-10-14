@@ -1,3 +1,4 @@
+import { parseColor } from './pdf'
 import { buildScene, paintOrder, sceneBounds, type PaintStep } from './scene'
 import type { Registry } from './registry'
 import type { Document } from './schema'
@@ -5,11 +6,19 @@ import type { Document } from './schema'
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const num = (n: number) => String(Math.round(n * 1000) / 1000)
 
+/** A colour attribute, with its opacity written apart when it has one: not every SVG reader knows colours of eight hex digits. */
+function colour(name: 'fill' | 'stroke', value: string): string {
+  const parsed = parseColor(value)
+  if (!parsed || parsed.a >= 1) return ` ${name}="${esc(value)}"`
+  const hex = (n: number) => Math.round(n * 255).toString(16).padStart(2, '0')
+  return ` ${name}="#${hex(parsed.r)}${hex(parsed.g)}${hex(parsed.b)}" ${name}-opacity="${num(parsed.a)}"`
+}
+
 function stepToSvg({ prim, stroke, fill, widthScale, widthExtra, seam }: PaintStep): string {
   if (prim.kind === 'text') {
     const turn = prim.rotation ? ` transform="rotate(${num(prim.rotation)} ${num(prim.x)} ${num(prim.y)})"` : ''
     const anchor = (prim.align === 'center' ? ' text-anchor="middle"' : prim.align === 'right' ? ' text-anchor="end"' : '') + (prim.font ? ` font-family="${esc(prim.font)}"` : '') + (prim.bold ? ' font-weight="bold"' : '')
-    return `<text x="${num(prim.x)}" y="${num(prim.y)}" font-size="${num(prim.size)}" fill="${esc(prim.stroke ?? 'black')}"${anchor}${turn}>${esc(prim.text)}</text>`
+    return `<text x="${num(prim.x)}" y="${num(prim.y)}" font-size="${num(prim.size)}"${colour('fill', prim.stroke ?? 'black')}${anchor}${turn}>${esc(prim.text)}</text>`
   }
   if (prim.kind === 'image') {
     const turn = prim.rotation ? ` transform="rotate(${num(prim.rotation)} ${num(prim.x)} ${num(prim.y)})"` : ''
@@ -18,14 +27,14 @@ function stepToSvg({ prim, stroke, fill, widthScale, widthExtra, seam }: PaintSt
   }
   const filled = fill && prim.fill && prim.fill !== 'none'
   const paint =
-    ` fill="${filled ? esc(prim.fill!) : 'none'}"` +
+    (filled ? colour('fill', prim.fill!) : ' fill="none"') +
     (stroke && prim.stroke !== 'none'
-      ? ` stroke="${esc(prim.stroke ?? 'black')}" stroke-width="${num((prim.strokeWidth ?? 1) * widthScale + widthExtra)}"` +
+      ? `${colour('stroke', prim.stroke ?? 'black')} stroke-width="${num((prim.strokeWidth ?? 1) * widthScale + widthExtra)}"` +
         (prim.dash ? ` stroke-dasharray="${prim.dash.join(' ')}"` : '') +
         (widthExtra > 0 ? ' stroke-linejoin="round"' : '') +
         ' vector-effect="non-scaling-stroke"'
       : filled && seam > 0
-        ? ` stroke="${esc(prim.fill!)}" stroke-width="${num(seam)}" vector-effect="non-scaling-stroke"`
+        ? `${colour('stroke', prim.fill!)} stroke-width="${num(seam)}" vector-effect="non-scaling-stroke"`
         : '')
   if (prim.kind === 'ellipse') {
     const turn = prim.rotation ? ` transform="rotate(${num(prim.rotation)} ${num(prim.cx)} ${num(prim.cy)})"` : ''

@@ -30,6 +30,12 @@ export interface KindContext {
   doc: Document
   registry: Registry
   depth: number
+  /**
+   * The colour of what says none of its own, in place of the default ink: inside a component
+   * placement, the colour of the layer the placement is on, so that a chair put on a grey layer
+   * ("existing") is drawn grey, as a block is in CAD programs. Unset elsewhere.
+   */
+  ink?: string
   /** The paper being drawn on, for what the drawing puts on every sheet: text fields are filled in for that sheet and the page it lies on. */
   sheet?: { name: string; scale: number; format: string; page: string | null }
 }
@@ -462,11 +468,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
   rect: {
     primitives: (node) => [{ kind: 'path', points: rectCorners(node), closed: true }],
     move: moveXY,
-    handles: (node) => (node.rotation ? [] : rectCorners(node)),
-    moveHandle: (node, index, p) => {
-      const fixed = rectCorners(node)[(index + 2) % 4]
-      return { x: Math.min(p.x, fixed.x), y: Math.min(p.y, fixed.y), width: Math.abs(p.x - fixed.x), height: Math.abs(p.y - fixed.y) }
-    },
+    // No points of its own to drag: it is resized as a box, by a frame that turns with it (resize.ts).
   },
   room: {
     primitives: (node, ctx) => {
@@ -597,7 +599,9 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       if (ctx.depth >= MAX_INSTANCE_DEPTH) return []
       const component = ctx.doc.nodes[node.component]
       if (component?.type !== 'component') return placeholder('missing component').map((p) => transformPrimitive(p, node))
-      const inner = { ...ctx, depth: ctx.depth + 1 }
+      // What the component draws without a colour of its own takes that of the layer it is placed on.
+      const placed = node.layer === undefined ? undefined : resolveColor(ctx.doc, ctx.doc.layers[node.layer]?.color)
+      const inner = { ...ctx, depth: ctx.depth + 1, ink: placed ?? ctx.ink }
       return childrenOf(ctx.doc, component.id)
         .filter((child) => isVisible(ctx.doc, child))
         .flatMap((child) => nodePrimitives(child, inner))
@@ -659,9 +663,10 @@ export const OBJECT_FILL = '#ffffff'
  * specified, then the layer color, then the default ink. Primitives marked `own` skip the first step.
  */
 export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
-  // References to shared colours are followed here, once, for whatever the kind and the style say.
-  const paint = (value: string | undefined) => resolveColor(ctx.doc, value)
-  const layerColor = paint(node.layer === undefined ? undefined : ctx.doc.layers[node.layer]?.color)
+  // References to shared colours are followed here, once, for whatever the kind and the style say;
+  // so is "the layer's colour", which is that of the node's layer, or what it would be drawn in without one.
+  const layerColor = resolveColor(ctx.doc, node.layer === undefined ? undefined : ctx.doc.layers[node.layer]?.color)
+  const paint = (value: string | undefined) => resolveColor(ctx.doc, value, layerColor ?? ctx.ink ?? DEFAULT_INK)
   // A wall takes from its type what the type defines, and keeps what it says for itself; a dimension likewise from its style.
   const type = node.type === 'wall' && node.wallType ? ctx.doc.wallTypes?.[node.wallType] : undefined
   const typed = type && {
@@ -677,7 +682,7 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
       // A merged shape that is only filled, or only drawn, stays so whatever the style says: it is
       // one half of a wall whose outline is drawn edge by edge.
       const split = p.kind === 'path' && p.union !== undefined
-      const stroke = split && p.stroke === 'none' ? 'none' : (paint(p.own ? p.stroke : p.over ? (p.stroke ?? style?.stroke) : (style?.stroke ?? p.stroke)) ?? layerColor ?? DEFAULT_INK)
+      const stroke = split && p.stroke === 'none' ? 'none' : (paint(p.own ? p.stroke : p.over ? (p.stroke ?? style?.stroke) : (style?.stroke ?? p.stroke)) ?? layerColor ?? ctx.ink ?? DEFAULT_INK)
       const fill = split && p.fill === 'none' ? 'none' : paint(p.own ? p.fill : (style?.fill ?? p.fill))
       return {
         ...p,

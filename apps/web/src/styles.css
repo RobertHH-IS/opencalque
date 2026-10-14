@@ -407,6 +407,11 @@ select {
   margin: 0;
 }
 
+.more-rows .text-button {
+  margin: 0;
+  padding: 0;
+}
+
 .inline-input {
   flex: 1;
   min-width: 0;
@@ -2481,8 +2486,36 @@ body.scrubbing .quick-field input[title] {
   padding: 0;
 }
 
-.type-prop > .field > span {
+/* Only its name, the first thing in it: a colour chooser after it is a span too, and must stay. */
+.type-prop > .field > span:first-child {
   display: none;
+}
+
+/*
+ * In a narrow column (the panels at the side are about 250 px wide), a value next to its name
+ * would be cut to a few letters ("Sans empatt…"): it goes under the name instead, with the whole
+ * width. A tick box stays where it is, beside its name.
+ */
+.dock-panel {
+  container-type: inline-size;
+}
+
+@container (max-width: 320px) {
+  .type-prop {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+
+  /* With its value under it, the name is as wide as it needs, up to the whole row. */
+  .type-prop > span {
+    flex: 0 1 auto;
+    width: auto;
+  }
+
+  .type-prop > :nth-child(n + 3):not(.field:has(> input[type='checkbox'])) {
+    flex: 1 0 calc(100% - 21px);
+    margin-left: 21px;
+  }
 }
 
 .type-prop.off > span {
@@ -2763,4 +2796,81 @@ select.faint-choice,
 /* A date, unlike a path, reads from its start. */
 .welcome-recover-row button .faint {
   direction: ltr;
+}
+
+/* A colour that is not set, in a row's swatch: empty, crossed out (a layer with no colour of its own) */
+.color-now > i.none {
+  background: linear-gradient(to top right, transparent calc(50% - 0.75px), var(--danger) calc(50% - 0.75px), var(--danger) calc(50% + 0.75px), transparent calc(50% + 0.75px)), var(--bg);
+}
+
+/* The eyedropper beside the colour's code in the colour window */
+.color-eyedropper {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.color-eyedropper:hover {
+  background: var(--hover);
+}
+
+/* A colour chooser in a row takes the rest of the row, like any other value: `.field > span` is
+   meant for the row's name, and the chooser happens to be a span too. */
+.field > .color-choice {
+  flex: 1;
+  width: auto;
+  color: inherit;
+}
+
+/* How opaque a colour is, under its hue in the colour window: a band over a checkerboard */
+.color-opacity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.color-opacity > span {
+  flex: none;
+  width: 34px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.color-alpha {
+  flex: 1;
+  min-width: 0;
+  height: 10px;
+  margin: 0;
+  border-radius: 5px;
+  appearance: none;
+  cursor: pointer;
+}
+
+.color-alpha::-webkit-slider-thumb {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+  appearance: none;
+}
+
+.color-alpha::-moz-range-thumb {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
 }

@@ -154,7 +154,8 @@ const STATIC: Command[] = [
   { id: 'edit.delete', title: msg('Delete selection'), category: 'Edit', keys: ['Delete', 'Backspace'], interrupts: true, run: deleteSelection },
   { id: 'edit.cut', title: msg('Cut'), category: 'Edit', keys: ['Mod+X'], interrupts: true, when: selected, run: cutSelection },
   { id: 'edit.copy', title: msg('Copy'), category: 'Edit', keys: ['Mod+C'], when: selected, run: copySelection },
-  { id: 'edit.paste', title: msg('Paste'), category: 'Edit', keys: ['Mod+V'], interrupts: true, run: paste },
+  { id: 'edit.paste', title: msg('Paste'), category: 'Edit', keys: ['Mod+V'], interrupts: true, run: () => paste() },
+  { id: 'edit.pasteInPlace', title: msg('Paste in place'), category: 'Edit', keys: ['Mod+Shift+V'], interrupts: true, keywords: 'same position page floor', run: () => paste(true) },
   { id: 'edit.duplicate', title: msg('Duplicate selection'), category: 'Edit', keys: ['Mod+D'], interrupts: true, run: duplicateSelection },
   {
     id: 'edit.selectAll',

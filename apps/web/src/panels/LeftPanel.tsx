@@ -1,9 +1,9 @@
-import { useState, type DragEvent } from 'react'
+import { useState, type DragEvent, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Copy } from 'lucide-react'
 import { childrenOf, layersOf, pagesOf, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
 import { moveInOrder, duplicatePage } from '../actions'
 import { ColorChoice } from '../ColorChoice'
-import { t } from '../i18n'
+import { msg, t } from '../i18n'
 import { apply, editComponent, select, showPage, useStore } from '../store'
 import { EditableText, IconButton, labelOf, Section, TypeIcon } from '../ui'
 
@@ -24,7 +24,8 @@ export function Colors() {
         const uses = colorUses(doc, color.id)
         return (
           <div key={color.id} className="row">
-            <input type="color" className="swatch" title={t('Changes every object linked to it')} value={color.value} onChange={(e) => update(color.id, { value: e.target.value })} />
+            {/* The app's own colour window, which has an opacity, as the browser's does not. */}
+            <ColorChoice compact plain title={t('Changes every object linked to it')} stored={color.value} fallback={color.value} commit={(value) => typeof value === 'string' && update(color.id, { value })} />
             <EditableText value={color.name} onChange={(name) => update(color.id, { name })} />
             <span className="faint uses" title={t('Objects and layers linked to this colour')}>
               {uses}
@@ -141,7 +142,14 @@ export function Layers() {
           title={t('New objects go on the highlighted layer')}
           onClick={() => useStore.setState({ activeLayer: layer.id })}
         >
-          <ColorChoice compact title={t('Layer color')} stored={layer.color} fallback="#1f1f1f" commit={(color) => update(layer.id, { color: (color as string | undefined) ?? null })} />
+          <ColorChoice
+            compact
+            title={t('Colour of the layer: the lines on it that have none of their own, and the components placed on it, take it')}
+            stored={layer.color}
+            fallback="#1f1f1f"
+            unset={msg('none')}
+            commit={(color) => update(layer.id, { color: (color as string | undefined) ?? null })}
+          />
           <EditableText value={layer.name} onChange={(name) => update(layer.id, { name })} />
           {layers.length > 1 && (
             <IconButton title={t('Delete layer')} onClick={() => apply([{ op: 'remove_layer', id: layer.id }])}>
@@ -167,6 +175,32 @@ export function Layers() {
 let anchor: string | null = null
 
 /**
+ * How many rows a list of objects lays out at first, and how many more each press on "Show more"
+ * adds. A drawing imported from a DXF can hold tens of thousands of objects in one container, and
+ * listing them all took seconds after every change.
+ */
+const ROWS = 300
+
+/** The first rows of a long list, and the line that offers the rest. Opening another container starts again from the top. */
+function useRows<T>(items: T[], container: string): { rows: T[]; more: ReactNode } {
+  const [shown, setShown] = useState({ container, count: ROWS })
+  const count = shown.container === container ? shown.count : ROWS
+  if (items.length <= count) return { rows: items, more: null }
+  const left = items.length - count
+  return {
+    rows: items.slice(0, count),
+    more: (
+      <p className="hint more-rows">
+        {t('{n} more not listed.', { n: left })}{' '}
+        <button className="text-button" onClick={() => setShown({ container, count: count + Math.min(left, ROWS) })}>
+          {t('Show more')}
+        </button>
+      </p>
+    ),
+  }
+}
+
+/**
  * One object in the list, with what is inside it when it is an opened group. Rows directly in the
  * container being edited can be selected, and dragged up or down, with the rest of the selection,
  * to change the stacking order.
@@ -176,6 +210,7 @@ function ObjectRow({ node, depth }: { node: Node; depth: number }) {
   const scope = useStore((s) => s.scope)
   const selection = useStore((s) => s.selection)
   const [open, setOpen] = useState(false)
+  const inside = useRows(open && node.type === 'group' ? [...childrenOf(doc, node.id)].reverse() : [], node.id)
   const top = node.parent === scope
   const selected = top && selection.includes(node.id)
 
@@ -250,7 +285,10 @@ function ObjectRow({ node, depth }: { node: Node; depth: number }) {
           {node.visible === false ? <EyeOff size={13} /> : <Eye size={13} className="faint" />}
         </IconButton>
       </div>
-      {open && node.type === 'group' && [...childrenOf(doc, node.id)].reverse().map((child) => <ObjectRow key={child.id} node={child} depth={depth + 1} />)}
+      {inside.rows.map((child) => (
+        <ObjectRow key={child.id} node={child} depth={depth + 1} />
+      ))}
+      {inside.more}
     </>
   )
 }
@@ -260,12 +298,14 @@ export function Objects() {
   const doc = useStore((s) => s.doc)
   const scope = useStore((s) => s.scope)
   const nodes = [...childrenOf(doc, scope)].reverse()
+  const { rows, more } = useRows(nodes, scope)
   return (
     <section className="section untitled">
       {nodes.length === 0 && <p className="hint">{t('Nothing here yet. Pick a tool below the drawing and draw.')}</p>}
-      {nodes.map((node) => (
+      {rows.map((node) => (
         <ObjectRow key={node.id} node={node} depth={0} />
       ))}
+      {more}
       {nodes.length > 1 && <p className="hint">{t('Topmost first. Drag a row to change what is drawn over what.')}</p>}
     </section>
   )

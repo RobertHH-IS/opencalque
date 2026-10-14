@@ -97,6 +97,8 @@ export function detachInstance(doc: Document, instanceId: string, registry: Regi
  * and dimensions their type or style, unless the target has one of that id already; nodes go to
  * the target layer with the same name as theirs, else to `fallbackLayer`, else to none.
  * `components` maps the source's component ids to the target's, for the instances among them.
+ * With `onTop`, the nodes copied directly into `to` go on top of what is there, in the order they
+ * had among themselves, rather than at the places in the stacking order they had where they came from.
  * Returns the ids given to the nodes copied directly into `to`.
  */
 export function transplantOps(
@@ -104,7 +106,7 @@ export function transplantOps(
   source: Document,
   from: string,
   to: string,
-  options: { components: Record<string, string>; only?: Set<string>; fallbackLayer?: string },
+  options: { components: Record<string, string>; only?: Set<string>; fallbackLayer?: string; onTop?: boolean },
 ): { ops: Op[]; top: string[] } {
   const layerByName = new Map(layersOf(target).map((l) => [l.name, l.id]))
   const ops: Op[] = []
@@ -133,6 +135,8 @@ export function transplantOps(
       const layer = (sourceLayer && layerByName.get(sourceLayer.name)) ?? options.fallbackLayer
       const node = { ...child, id: newId(child.type === 'group' ? 'group' : 'n'), parent: into, layer }
       if (node.layer === undefined) delete node.layer
+      // Added without an order, each goes on top of the last: the children are taken bottom first.
+      if (depth === 0 && options.onTop) delete (node as { order?: string }).order
       if (node.type === 'instance') {
         const component = options.components[node.component]
         if (!component) throw new OpError(`The component "${node.component}" was not copied`)

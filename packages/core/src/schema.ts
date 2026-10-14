@@ -25,9 +25,9 @@ export type Pattern = z.infer<typeof PatternSchema>
 
 export const StyleSchema = z
   .object({
-    stroke: z.string().optional().describe("CSS color of lines and text, or 'none'."),
+    stroke: z.string().optional().describe("CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer."),
     strokeWidth: z.number().positive().optional().describe('Line weight in screen pixels (does not scale with zoom). On paper one pixel prints as 0.25 mm, so 2 is a 0.5 mm line.'),
-    fill: z.string().optional().describe("CSS fill color, or 'none'."),
+    fill: z.string().optional().describe("CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer."),
     pattern: PatternSchema.optional(),
     dash: z.array(z.number().positive()).optional().describe('Dash pattern in screen pixels.'),
   })

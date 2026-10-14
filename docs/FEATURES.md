@@ -24,12 +24,12 @@ Last updated: 2026-10-13 (1.0.0-rc.1).
 - **Papers**: sheets like frames, drawn at a standard format (A5 to A0, upright or lying, at a drawing scale) or any size, named above their corner, moved on their own over the drawing to frame it, and copied or duplicated with what is drawn on them.
 - Walls stay joined: moving a wall or a corner stretches the walls that meet it, and its doors and windows follow.
 - Numbers in the panels change by holding Alt and dragging sideways.
-- **Transforming** any selection: turn about a clicked point with the Rotate tool (by a base line, or a typed angle), mirror horizontally or vertically, scale and nudge, by dragging the grips of the selection box, from the menus or the keyboard.
+- **Transforming** any selection: turn about a clicked point with the Rotate tool (by a base line, or a typed angle), mirror horizontally or vertically, scale and nudge, by dragging the grips of the selection box, from the menus or the keyboard. A rectangle or an ellipse is resized like a box, by its corners and the middles of its sides, turned or not, Shift keeping its proportions.
 - **Annotations**: a note with a curved, straight or elbowed leader to what it is about, typed in place, with a choice of symbol at each end.
 - **Corners**: a wall end is a selectable corner shared by the walls that meet there; drag it and they all follow. A corner of two walls can be mitred, rounded, cut off, or have one wall run through. Each line of a wall (its faces, its ends) can have its own look. A wall is cut in two with the Split tool; the two halves show the line between them.
 - **Rooms**: click inside closed walls to name a space; its floor, outline and area follow the walls. **Dividers** split an open space into rooms without a wall.
 - **Floor patterns**: a Hatch modifier (lines, planks, tiles) for rooms and any closed shape.
-- **Shared colours**: named colours that objects and layers link to; change one and everything linked follows.
+- **Shared colours**: named colours that objects and layers link to; change one and everything linked follows. Any colour may be see-through (an opacity in the colour window), and may follow the colour of the object's layer.
 - **Wall types**: a thickness, a fill and layers, shared by the walls built as them and drawn as lines inside the wall.
 - **Dimension chains** along a wall through its doors and windows, made on demand.
 - **Quantities** exported as CSV: room areas, wall lengths, faces less openings and volumes, doors and windows by kind, wall types by layer.
@@ -139,7 +139,7 @@ Not ranked within an area.
 - Trim, extend, offset and fillet for plain lines (walls have extend and trim); boolean operations on shapes.
 - Smart guides while drawing and resizing; snapping to tangents and the quarter points of circles.
 - Select similar; select by layer or type; find and replace text.
-- Lock aspect ratio; non-uniform scaling; numeric move and copy.
+- ~~Lock aspect ratio; non-uniform scaling~~ (done for rectangles and ellipses; a selection of several still scales in proportion); numeric move and copy.
 
 **Architecture**
 - Columns, beams, slabs, roofs in plan; curtain walls.

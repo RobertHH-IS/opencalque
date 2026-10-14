@@ -1,4 +1,4 @@
-import { applyOps, dimensionStylePatch, newDimensionStyle, styledDimension, type Document, type NodeOf, childrenOf, paperRescaled, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
+import { applyOps, dimensionStylePatch, newDimensionStyle, styledDimension, type Document, type NodeOf, childrenOf, paperRescaled, rootOf, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, layersOf, lengthOf, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, modifierKind, modifierKinds, modifierParams, type Modifier, roomAt, colorRef, colorRefOf, colorsOf, newId, resolveColor, DEFAULT_INK, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, TEXT_FIELDS, titleBlockHidden, titleBlockValues, type TitleField, type WallType, type Pattern, wallArc, wallLength } from '@opencalque/core'
 import { executeById } from '../commands'
 import { useEffect, useRef, useState, useLayoutEffect, type ReactNode } from 'react'
 import { Pipette, ArrowDown, ArrowDownToLine, ArrowUp, ArrowUpToLine, Eye, EyeOff, Trash2, Check, Link2, Plus, Unlink, AlignCenterHorizontal, AlignCenterVertical, AlignEndHorizontal, AlignEndVertical, AlignHorizontalSpaceAround, AlignStartHorizontal, AlignStartVertical, AlignVerticalSpaceAround, Undo2, SquareSplitHorizontal } from 'lucide-react'
@@ -175,7 +175,9 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
     ...fill((node) => node.type === 'polyline' && !!node.closed),
   ],
   image: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), num('opacity', msg('Opacity'), 1)],
-  instance: [...PLACEMENT, ...STYLE],
+  // A placed component looks as the component does, in the colour of its layer where the
+  // component gives none: it has no stroke or fill of its own to set (see fieldsOf).
+  instance: PLACEMENT,
   parametric: PLACEMENT,
 }
 
@@ -206,6 +208,8 @@ function commonFields(nodes: Node[]): FieldSpec[] {
 
 function fieldsOf(node: Node): FieldSpec[] {
   const fields = FIELDS[node.type] ?? []
+  // One that was given a look of its own by an earlier version keeps it, shown so that it can be changed or taken off.
+  if (node.type === 'instance') return node.style ? [...fields, ...STYLE] : fields
   if (node.type !== 'parametric') return fields
   const params = registry.parametric.get(node.kind)?.params ?? []
   const own = params.map((p): FieldSpec => ({
@@ -241,6 +245,7 @@ export type Update = (patch: (node: Node) => Record<string, unknown>) => void
 const SIZES = /(^|\.)(width|height|thickness|rx|ry|size|markerSize|extensionGap|strokeWidth|opacity|decimals)$/
 
 export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: Node[]; field: FieldSpec; update: Update }) {
+  const doc = useStore((s) => s.doc)
   // With several objects selected, a property they do not all agree on is shown as mixed, with no
   // value of its own; setting it gives them all the same.
   const seen = (n: Node) => JSON.stringify(read(n, field.path) ?? field.fallback ?? null)
@@ -339,10 +344,23 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
           fallback={(value as string | undefined) ?? '#ffffff'}
           unset={mixed ? msg('Mixed') : field.unset}
           commit={commit}
+          layer={layerChoice(doc, nodes, field)}
         />
       )}
     </Row>
   )
+}
+
+/**
+ * The layer a colour property can follow (`LAYER_COLOR`), when every object it is set for is on a
+ * layer: its name when they share one, its colour, and whether no colour already means it, as for
+ * a stroke, whose "from layer" is having none.
+ */
+function layerChoice(doc: Document, nodes: Node[], field: FieldSpec): { name?: string; color: string; byDefault: boolean } | undefined {
+  const layers = nodes.map((n) => (n.layer === undefined ? undefined : doc.layers[n.layer]))
+  if (layers.length === 0 || layers.some((layer) => !layer)) return undefined
+  const one = layers.every((layer) => layer === layers[0])
+  return { name: one ? layers[0]!.name : undefined, color: resolveColor(doc, layers[0]!.color) ?? DEFAULT_INK, byDefault: field.unset === 'from layer' }
 }
 
 /** What a wall type says for a property of a wall, by the path of that property; undefined when it leaves it to the wall. */
@@ -929,9 +947,17 @@ function Selection({ nodes }: { nodes: Node[] }) {
           </>
         )}
         {single && node.type === 'instance' && (
-          <button className="text-button" onClick={() => editComponent(node.component, node)}>
-            {t('Edit component')}
-          </button>
+          <>
+            <p className="hint">{t('It looks as its component does. Lines the component gives no colour take the colour of the layer it is placed on.')}</p>
+            <button className="text-button" onClick={() => editComponent(node.component, node)}>
+              {t('Edit component')}
+            </button>
+            {node.style && (
+              <button className="text-button" onClick={() => update(() => ({ style: null }))}>
+                {t('Take off its own stroke and fill')}
+              </button>
+            )}
+          </>
         )}
       </Section>
       {single && (node.type === 'text' || node.type === 'annotation') && (

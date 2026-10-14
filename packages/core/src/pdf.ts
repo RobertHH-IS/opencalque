@@ -214,7 +214,8 @@ function pageContent(doc: Document, paper: Paper, registry: Registry, resources:
       const back = prim.align === 'center' ? wide / 2 : prim.align === 'right' ? wide : 0
       const x = (prim.x - paper.x) * perMm - back * cos
       const y = height - (prim.y - paper.y) * perMm + back * sin
-      alpha(ink.a, 1)
+      // Letters drawn bold are outlined in their own colour, and see-through as they are.
+      alpha(ink.a, ink.a)
       out.push(`BT${setting} ${n(ink.r)} ${n(ink.g)} ${n(ink.b)} rg ${n(cos)} ${n(-sin)} ${n(sin)} ${n(cos)} ${n(x)} ${n(y)} Tm ${shown} ET`)
     } else if (prim.kind === 'image') {
       const [, format, data] = /^data:image\/(jpeg|png);base64,(.*)$/s.exec(prim.href) ?? []

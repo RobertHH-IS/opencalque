@@ -327,6 +327,7 @@ function applyOp(d: Document, op: Op, batch: Batch): void {
     case 'add_color': {
       const id = op.color.id ?? newId('color')
       if (d.colors?.[id]) throw new OpError(`Colour "${id}" already exists`)
+      if (id === 'layer') throw new OpError('"layer" cannot be the id of a shared colour: "var(--layer)" means the colour of the layer a node is on.')
       d.colors = { ...d.colors, [id]: parse(SharedColorSchema, { ...op.color, id }, 'colour') }
       return
     }

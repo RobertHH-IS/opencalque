@@ -2,6 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   boundsOfPoints,
   buildScene,
+  frameGrips,
+  resizeFrame,
+  resizePatch,
+  rotate,
   dist,
   hitTest,
   itemsInside,
@@ -78,6 +82,8 @@ type Gesture =
   | { kind: 'crop'; node: Node; index: number; fixed: Vec2 }
   /** A corner of the box around the selection being dragged: everything scales about the opposite corner. */
   | { kind: 'scale'; nodes: Node[]; pivot: Vec2; corner: Vec2 }
+  /** A box-shaped node (a rectangle, an ellipse) resized by grip `grip` of its frame (see resize.ts). */
+  | { kind: 'resize'; node: Node; grip: number }
   /** The knob of that box being dragged: everything turns about the middle of the box. `from` is the angle the drag started at. */
   | { kind: 'rotate'; nodes: Node[]; pivot: Vec2; from: number }
   | { kind: 'marquee'; start: Vec2; keep: string[] }
@@ -106,6 +112,8 @@ interface PointerAt {
 }
 
 const TWO_POINT: Tool[] = ['line', 'wall', 'divider', 'dimension', 'annotation', 'rect', 'ellipse', 'paper']
+/** The tools that measure what is drawn: their points snap to it, never to the grid. A dimension's line is still placed by grid steps. */
+export const MEASURING: Tool[] = ['dimension', 'measure', 'angle']
 /** Tools whose two typed sizes are a width and a height. */
 const BOXES: Tool[] = ['rect', 'ellipse', 'paper']
 /** How close, in screen pixels, the pointer must come to a standard format's corner for a paper to take that format. */
@@ -361,6 +369,20 @@ export function CanvasView() {
     return node ? (kindOf(node).handles?.(node) ?? []) : []
   }, [doc, selection])
 
+  /**
+   * The frame a single box-shaped object (a rectangle, an ellipse) is resized by, turning with it:
+   * its eight grips on the drawing and where its knob is. It takes the place of the selection box.
+   */
+  const frame = useMemo(() => {
+    const node = tool === 'select' && selection.length === 1 ? doc.nodes[selection[0]] : undefined
+    const box = node ? resizeFrame(node) : null
+    if (!node || !box) return null
+    const grips = frameGrips(box)
+    // The knob stands off the middle of the top side, away from the box, at the same distance on screen at any zoom.
+    const up = rotate({ x: 0, y: -1 }, box.rotation)
+    return { node, box, grips, corners: grips.slice(0, 4), centre: { x: (grips[0].x + grips[2].x) / 2, y: (grips[0].y + grips[2].y) / 2 }, up }
+  }, [doc, selection, tool])
+
   // The sizes of the one selected shape, shown beside it while nothing is being drawn.
   const selectionLabels = useMemo((): SizeLabel[] => {
     const node = tool === 'select' && selection.length === 1 ? doc.nodes[selection[0]] : undefined
@@ -452,7 +474,7 @@ export function CanvasView() {
   /** The box around the selection, when it is one that carries grips: a single object with handles of its own has none. */
   const gripBox = () => {
     const s = get()
-    if (s.tool !== 'select' || s.selection.length === 0 || (s.selection.length === 1 && handles.length > 0)) return null
+    if (s.tool !== 'select' || s.selection.length === 0 || (s.selection.length === 1 && (handles.length > 0 || frame))) return null
     return sceneBounds(sceneRef.current.filter((item) => s.selection.includes(item.id)))
   }
   /** Which grip of that box is under a point of the canvas: a corner (0 to 3), the knob, or none. */
@@ -464,6 +486,32 @@ export function CanvasView() {
     const corner = corners.findIndex((p) => dist(p, at) < 8)
     return corner >= 0 ? { box, corner } : null
   }
+  /** Where on the screen a point of the drawing is. */
+  const onScreen = (p: Vec2) => {
+    const { view } = get()
+    return { x: p.x * view.zoom + view.x, y: p.y * view.zoom + view.y }
+  }
+  /** Where the frame's knob is on the screen. */
+  const frameKnob = (f: NonNullable<typeof frame>) => {
+    const top = onScreen(f.grips[4])
+    return { x: top.x + f.up.x * 22, y: top.y + f.up.y * 22 }
+  }
+  /** Which grip of the frame of the selected box is under a point of the canvas: one of the eight, the knob, or none. */
+  const frameGripAt = (at: Vec2): number | 'knob' | null => {
+    if (!frame || get().tool !== 'select') return null
+    if (dist(frameKnob(frame), at) < 8) return 'knob'
+    const index = frame.grips.findIndex((p) => dist(onScreen(p), at) < 7)
+    return index >= 0 ? index : null
+  }
+  /** The pointer that says which way a grip of the frame resizes, whatever the frame's turn. */
+  const frameCursor = (grip: number): string => {
+    if (!frame) return 'move'
+    const d = sub(frame.grips[grip], frame.centre)
+    const angle = (((Math.atan2(d.y, d.x) * 180) / Math.PI) % 180 + 180) % 180
+    const nearest = [0, 45, 90, 135, 180].reduce((best, a) => (Math.abs(angle - a) < Math.abs(angle - best) ? a : best), 0)
+    return nearest === 45 ? 'nwse-resize' : nearest === 90 ? 'ns-resize' : nearest === 135 ? 'nesw-resize' : 'ew-resize'
+  }
+
   /** The pointer shown over a grip, so it says what dragging there does. */
   const [gripCursor, setGripCursor] = useState<string | null>(null)
 
@@ -513,33 +561,91 @@ export function CanvasView() {
       canvas.height = viewport.height * dpr
     }
     // The words being typed are shown by their editor instead; the rest of the object stays drawn.
-    drawScene(canvas.getContext('2d')!, { ...viewport, dpr }, view, editingId ? scene.map((item) => (item.id === editingId ? { ...item, prims: item.prims.filter((p) => p.kind !== 'text') } : item)) : scene, selection, handles, { ...overlay, labels: overlay.labels ?? selectionLabels, titles, frames, corner, grips: tool === 'select', edgeHover: edgeLines }, showGrid, palette)
-  }, [scene, view, viewport, selection, handles, selectionLabels, titles, frames, corner, overlay, showGrid, palette, pictures, editingId, tool, edgeLines])
+    drawScene(canvas.getContext('2d')!, { ...viewport, dpr }, view, editingId ? scene.map((item) => (item.id === editingId ? { ...item, prims: item.prims.filter((p) => p.kind !== 'text') } : item)) : scene, selection, handles, { ...overlay, labels: overlay.labels ?? selectionLabels, titles, frames, corner, grips: tool === 'select', frame: frame && { grips: frame.grips, up: frame.up }, edgeHover: edgeLines }, showGrid, palette)
+  }, [scene, view, viewport, selection, handles, frame, selectionLabels, titles, frames, corner, overlay, showGrid, palette, pictures, editingId, tool, edgeLines])
 
   /**
    * Where a point lands after snapping: on what is drawn nearby (a point, the middle of a line, a
    * crossing, the foot of a perpendicular from `from`, or the line itself), else on the grid.
    * Shift constrains to 45° steps from `from`; Alt turns snapping off.
    */
-  const snap = (world: Vec2, e: { altKey: boolean; shiftKey: boolean }, exclude: string[], from?: Vec2): { p: Vec2; marker: Snap | null } => {
+  const snap = (world: Vec2, e: { altKey: boolean; shiftKey: boolean }, exclude: string[], from?: Vec2): { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } => {
     const { zoom } = get().view
     const { snapToGrid, snapToObjects } = usePrefs.getState()
     if (e.altKey) return { p: world, marker: null }
+    // What measures the drawing takes its points from what is drawn, never from the grid: a grid
+    // point near a corner would give a length that is not the drawing's, with nothing to show it.
+    const measuring = MEASURING.includes(get().tool)
+    const onGrid = snapToGrid && !measuring
     const step = gridStep(zoom)
     if (e.shiftKey && from) {
       const d = sub(world, from)
       const angle = Math.round(Math.atan2(d.y, d.x) / (Math.PI / 4)) * (Math.PI / 4)
-      const length = Math.round(len(d) / step) * step
+      if (measuring) return heldMeasure(world, from, angle, exclude)
+      const length = onGrid ? Math.round(len(d) / step) * step : len(d) * Math.cos(Math.atan2(d.y, d.x) - angle)
       return { p: { x: round(from.x + Math.cos(angle) * length), y: round(from.y + Math.sin(angle) * length) }, marker: null }
     }
     const gridded = { x: Math.round(world.x / step) * step, y: Math.round(world.y / step) * step }
-    const hit = snapToObjects ? snapTo(sceneRef.current, world, SNAP_REACH / zoom, { exclude, from, gridded: snapToGrid ? gridded : undefined }) : null
+    const hit = snapToObjects ? snapTo(sceneRef.current, world, SNAP_REACH / zoom, { exclude, from, gridded: onGrid ? gridded : undefined }) : null
     if (hit) {
       // A point of an object is taken exactly as it is; a place worked out on a line is tidied.
       const p = hit.kind === 'point' ? hit.p : { x: round(hit.p.x), y: round(hit.p.y) }
       return { p, marker: { p, kind: hit.kind } }
     }
-    return { p: snapToGrid ? gridded : world, marker: null }
+    return { p: onGrid ? gridded : world, marker: null }
+  }
+
+  /**
+   * Where a measured point goes while Shift holds its direction from `from` (`angle`, a multiple
+   * of 45°): on that line, at what the pointer meets there. A point pointed at elsewhere (a corner,
+   * a middle, a crossing) brings it level with that point, with a link to show what it was taken
+   * from; otherwise it stops where the line crosses a drawn line near the pointer (the face of a
+   * wall, the side of a rectangle), which is what a dimension measures to; otherwise it is where
+   * the pointer is along the line. Never on the grid (see MEASURING).
+   */
+  const heldMeasure = (world: Vec2, from: Vec2, angle: number, exclude: string[]): { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } => {
+    const { zoom } = get().view
+    const dir = { x: Math.cos(angle), y: Math.sin(angle) }
+    const along = (q: Vec2) => (q.x - from.x) * dir.x + (q.y - from.y) * dir.y
+    const at = (t: number) => ({ x: round(from.x + dir.x * t), y: round(from.y + dir.y * t) })
+    const pointed = along(world)
+    if (usePrefs.getState().snapToObjects) {
+      // A place merely somewhere along a line is not something pointed at; a point, a middle or a crossing is.
+      const target = snapTo(sceneRef.current, world, SNAP_REACH / zoom, { exclude })
+      if (target && target.kind !== 'edge') {
+        const p = at(along(target.p))
+        return { p, marker: target, ...(dist(p, target.p) > 1e-6 ? { link: [target.p, p] as [Vec2, Vec2] } : {}) }
+      }
+      // The drawn lines the held line crosses, the nearest to the pointer within reach.
+      let reach = SNAP_REACH / zoom
+      let crossing: number | null = null
+      for (const item of sceneRef.current) {
+        if (exclude.includes(item.id)) continue
+        for (const prim of item.prims) {
+          // Hatching and the sheets and floors things lie on are not what is measured.
+          if (prim.kind !== 'path' || prim.texture || prim.backdrop) continue
+          const points = prim.points
+          const count = prim.closed ? points.length : points.length - 1
+          for (let i = 0; i < count; i++) {
+            const a = points[i]
+            const edge = sub(points[(i + 1) % points.length], a)
+            const denom = dir.x * edge.y - dir.y * edge.x
+            if (Math.abs(denom) < 1e-9) continue
+            const between = sub(a, from)
+            const t = (between.x * edge.y - between.y * edge.x) / denom
+            const u = (between.x * dir.y - between.y * dir.x) / denom
+            if (u < -1e-9 || u > 1 + 1e-9 || Math.abs(t - pointed) >= reach) continue
+            reach = Math.abs(t - pointed)
+            crossing = t
+          }
+        }
+      }
+      if (crossing !== null) {
+        const p = at(crossing)
+        return { p, marker: { p, kind: 'crossing' } }
+      }
+    }
+    return { p: at(pointed), marker: null }
   }
 
   /**
@@ -792,6 +898,14 @@ export function CanvasView() {
       const cropped = frameCornerAt(at)
       if (cropped) {
         gesture.current = { kind: 'crop', node: s.doc.nodes[s.selection[0]], index: cropped.index, fixed: cropped.outline[(cropped.corner + 2) % 4] }
+        return
+      }
+      const framed = frameGripAt(at)
+      if (framed !== null && frame) {
+        if (framed === 'knob') {
+          setGripCursor('grabbing')
+          gesture.current = { kind: 'rotate', nodes: [frame.node], pivot: frame.centre, from: Math.atan2(world.y - frame.centre.y, world.x - frame.centre.x) }
+        } else gesture.current = { kind: 'resize', node: frame.node, grip: framed }
         return
       }
       const grip = gripAt(at)
@@ -1089,6 +1203,18 @@ export function CanvasView() {
         status = `${formatNumber(width)} × ${formatLength(height)}`
         break
       }
+      case 'resize': {
+        // The grip follows the pointer, snapped as a point would be; Shift keeps the proportions from a corner.
+        const target = snap(world, { altKey: e.altKey, shiftKey: false }, [g.node.id])
+        marker = target.marker
+        const patch = resizePatch(g.node, g.grip, target.p, e.shiftKey)
+        if (patch) {
+          previewed = preview([{ op: 'update_node', id: g.node.id, patch }])
+          const size = g.node.type === 'ellipse' ? { w: 2 * Number(patch.rx), h: 2 * Number(patch.ry) } : { w: Number(patch.width), h: Number(patch.height) }
+          status = `${formatLength(size.w)} × ${formatLength(size.h)}`
+        }
+        break
+      }
       case 'scale': {
         // How far along the box's diagonal the pointer is, measured from the corner that stays put.
         const diagonal = sub(g.corner, g.pivot)
@@ -1170,6 +1296,7 @@ export function CanvasView() {
       case 'measure': {
         const target = s.tool === 'calibrate' ? { p: e.shiftKey ? straighten(g.start, world) : world, marker: null } : snap(world, e, [], g.start)
         marker = target.marker
+        if ('link' in target) link = target.link
         measure = { a: g.start, b: target.p }
         axis = axisOf(g.start, target.p)
         const d = sub(target.p, g.start)
@@ -1180,12 +1307,13 @@ export function CanvasView() {
       case 'idle':
         {
           // The pointer says what a press here would do: resize along a diagonal, turn, or move a point.
-          const grip = frameCornerAt(at) ?? gripAt(at)
-          const onCorner = s.tool === 'select' && !grip && cornerAt(at) !== null
+          const framed = frameCornerAt(at) ? null : frameGripAt(at)
+          const grip = framed !== null ? null : (frameCornerAt(at) ?? gripAt(at))
+          const onCorner = s.tool === 'select' && framed === null && !grip && cornerAt(at) !== null
           const own = onCorner ? 0 : s.tool === 'select' ? handles.findIndex((h) => dist({ x: h.x * s.view.zoom + s.view.x, y: h.y * s.view.zoom + s.view.y }, at) < 7) : -1
           const boxed = ['rect', 'paper'].includes(s.doc.nodes[s.selection[0]]?.type ?? '')
           const diagonal = (corner: number) => (corner % 2 === 0 ? 'nwse-resize' : 'nesw-resize')
-          const pointer = grip ? (grip.corner === 'knob' ? 'grab' : diagonal(grip.corner)) : own >= 0 ? (boxed ? diagonal(own) : 'move') : null
+          const pointer = framed !== null ? (framed === 'knob' ? 'grab' : frameCursor(framed)) : grip ? (grip.corner === 'knob' ? 'grab' : diagonal(grip.corner)) : own >= 0 ? (boxed ? diagonal(own) : 'move') : null
           if (pointer !== gripCursor) setGripCursor(pointer)
         }
         if (s.tool === 'room') {
@@ -1268,6 +1396,7 @@ export function CanvasView() {
       case 'corner':
       case 'crop':
       case 'scale':
+      case 'resize':
       case 'rotate':
         // The box has changed under the pointer; the next movement works out what is there now.
         setGripCursor(null)

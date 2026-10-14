@@ -129,9 +129,9 @@ Kinds with "cutsWalls" are doors and windows. One cuts an opening when it lies o
 
 A "group" holds several nodes so they are selected, moved and stacked as one. It has no coordinates of its own: to group nodes, add a group and set their "parent" to its id; to move a group, move the nodes inside it.
 
-A "component" is a reusable definition and an "instance" places it, with "x", "y", "rotation", "scale" and "flipX". To repeat the same furniture or symbol several times, make one component and place instances of it; changing the component changes them all.
+A "component" is a reusable definition and an "instance" places it, with "x", "y", "rotation", "scale" and "flipX". To repeat the same furniture or symbol several times, make one component and place instances of it; changing the component changes them all. An instance has no look of its own: what its component draws without a colour takes the colour of the instance's layer, so to show placed furniture grey (existing) or red (to demolish), put the instances on a layer of that colour rather than giving them a style.
 
-A shared colour (the document's "colors", managed with add_color, update_color and remove_color) is used by setting a colour property, such as style.stroke, style.fill or a layer's color, to "var(--<id>)"; changing the shared colour then recolours everything that refers to it.
+A shared colour (the document's "colors", managed with add_color, update_color and remove_color) is used by setting a colour property, such as style.stroke, style.fill or a layer's color, to "var(--<id>)"; changing the shared colour then recolours everything that refers to it. A colour property may also be "var(--layer)": the colour of the layer the node is on, for a fill or a text that should follow its layer as a stroke with no colour of its own already does.
 
 "modifiers" is a list of non-destructive changes to how a node is drawn, applied in order: {"type":"crop","frame":{"x":…,"y":…},"params":{"width":…,"height":…}} shows only what is inside that rectangle; {"type":"hatch","params":{"pattern":"Lines"|"Planks"|"Tiles","spacing":…,"angle":…}} gives a closed shape or a room a floor pattern; {"type":"repeat",…} draws copies in rows and columns. Setting "modifiers" replaces the whole list.
 

@@ -4,6 +4,33 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 1.0.0-rc.2 — 2026-10-14
+
+### New
+- Any colour can follow the layer: the colour window offers "Colour of the layer", for a fill, a text, a pattern, as a stroke without a colour of its own already does. Change the layer's colour and they all follow.
+- An eyedropper in the colour window takes a colour from anywhere on the screen (in Chrome, Edge and the desktop app).
+- Colours can be see-through: the colour window has an opacity slider under the hue, and its code takes two more digits for it (`#e5484d80` is half see-through). A shared colour can have one too, and the SVG and PDF exports keep it.
+- Paste in place (Ctrl+Shift+V, and in the right-click menu): pasted exactly where it was copied from, to put the same thing at the same place on another page.
+
+### Improved
+- A rectangle or an ellipse is resized as a box: the middle of a side changes one size, a corner both (Shift keeps the proportions), the opposite side staying put, and the knob above turns it. A turned rectangle keeps this frame; its corners were points to drag before, and it lost them once turned.
+- Something taken out of a component (double-click the component, cut what is inside, Esc, paste) lands on the page where the component drew it, turned, mirrored and sized as it was seen; and something copied on the page and pasted into a component opened from one of its placements lands where it was seen too.
+- The colour window shows one row of recent colours, the last eight, instead of two, and unlinking from a shared colour is a button beside the eyedropper (its tooltip says what it does) rather than a row of its own: the ticked shared colour already shows the link.
+- A shared colour is changed in the app's own colour window, with the recent colours, the eyedropper and the opacity, instead of the system's colour picker. Swatches show a see-through colour over a checkerboard.
+- The Structure panel lists the first 300 objects and shows the rest on demand: after importing a large DXF, it took several seconds to list every line, and again after each change.
+- Paste puts things where you are looking. A cut thing comes back exactly where it was; a copy goes beside its original when that is in view, and each further paste beside the last instead of on top of it; otherwise it lands in the middle of the view. Paste from the right-click menu puts it where you clicked.
+- A placed component takes the colour of its layer for what the component itself leaves uncoloured, as blocks do in CAD programs: put furniture on a grey "Existing" layer and it is grey. It no longer offers a stroke and a fill of its own, which repainted the whole component and hid the changes made to it; one that has them from before keeps them, with a button to take them off. The eyedropper leaves components alone.
+- The points of a dimension, and those of the measure and angle tools, snap to what is drawn (ends, corners, middles, crossings, the lines themselves) but no longer to the grid: a grid point near a corner gave a length that was not the drawing's, with nothing to show it. Holding Shift keeps the direction to 45° steps, and the point then stops on the drawn line the direction crosses near the pointer (the face of a wall, the side of a rectangle), or comes level with a corner pointed at elsewhere. The dimension line is still placed by grid steps.
+
+### Fixed
+- Ctrl+X followed quickly by Esc cut nothing: the selection was let go before the cut took it away, which made it a copy (and kept Esc from leaving a component).
+- Something cut or copied, then pasted, took back its old place in the stacking order, often under what had been drawn after it: it now goes on top, as anything new does, keeping the order it had among the other things pasted with it.
+- In the colour window, the first press on the slider or the colour area right after typing a code was lost: the code was saved again over it.
+- Colour fields in the properties panel were cut to a few letters ("du ca…"): they take the width of the panel.
+- A layer with no colour of its own showed a black swatch, as if it were black: it shows an empty, crossed-out one, and its tooltip says what the layer's colour does.
+- A colour defined by a dimension style (its line, its text, its extension lines) could not be seen or chosen: once ticked, its row stayed empty.
+- In the narrow panels at the side, the values of a dimension style or a wall type go under their names, whole, instead of being cut to a few letters ("Sans empatt…").
+
 ## 1.0.0-rc.1 — 2026-10-13
 
 The release candidate for 1.0. From this version on, drawings are kept readable: what a newer version adds is kept by older ones, and nothing they cannot read is half-read and saved back.

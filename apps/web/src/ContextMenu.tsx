@@ -26,9 +26,10 @@ const ON_SELECTION = [
   'edit.flipHorizontal',
   'edit.flipVertical',
 ]
-const ON_NOTHING = ['edit.paste', 'edit.selectAll', null, 'view.zoomToFit', null, 'warehouse.components', 'file.importPlan']
+const ON_NOTHING = ['edit.paste', 'edit.pasteInPlace', 'edit.selectAll', null, 'view.zoomToFit', null, 'warehouse.components', 'file.importPlan']
 
-const close = () => useStore.setState({ contextMenu: null })
+/** Closes the menu without doing anything: the point it was opened at is forgotten too, so that no later command acts there. */
+const close = () => useStore.setState({ contextMenu: null, menuPoint: null })
 
 /** The menu shown where the user right-clicked, on the drawing or on a row of the object list. */
 export function ContextMenu() {
@@ -91,8 +92,10 @@ export function ContextMenu() {
             key={item.id}
             role="menuitem"
             onClick={() => {
-              close()
+              // The command may use the point the menu was opened at (Paste, Split here), and reads it as it starts.
+              useStore.setState({ contextMenu: null })
               execute(item)
+              useStore.setState({ menuPoint: null })
             }}
           >
             <span className="menu-title">{t(item.title)}</span>

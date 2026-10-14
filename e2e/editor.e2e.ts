@@ -123,6 +123,251 @@ test('opens a drawing that needs repairs, and says so; refuses one from a newer 
   await expect(objectRows(page)).toHaveCount(2)
 })
 
+test('pastes where one is looking: a cut thing back in place, a copy beside it, else in the middle of the view', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  await drawWall(page, [300, 300], [700, 300])
+  const x1 = page.locator('label.field', { has: page.locator('span:text-is("X1")') }).locator('input')
+  await objectRows(page).first().click()
+  await expect(x1).toHaveValue('-200')
+
+  // Cut and pasted while in view, it comes back exactly where it was.
+  await page.keyboard.press('Control+x')
+  await expect(objectRows(page)).toHaveCount(0)
+  await page.keyboard.press('Control+v')
+  await expect(objectRows(page)).toHaveCount(1)
+  await expect(x1).toHaveValue('-200')
+
+  // Copied, it is pasted beside the original, and the next paste beside that one: two steps of the 100 mm grid each time.
+  await page.keyboard.press('Control+c')
+  await page.keyboard.press('Control+v')
+  await expect(x1).toHaveValue('0')
+  await page.keyboard.press('Control+v')
+  await expect(x1).toHaveValue('200')
+
+  // Looked at from elsewhere, it lands in the middle of the view.
+  await page.mouse.move(box.x + 600, box.y + 400)
+  await page.mouse.down({ button: 'middle' })
+  await page.mouse.move(box.x + 1200, box.y + 400, { steps: 5 })
+  await page.mouse.up({ button: 'middle' })
+  await page.keyboard.press('Control+v')
+  await expect(objectRows(page)).toHaveCount(4)
+  const pasted = Number((await x1.inputValue()).replace(/\s/g, ''))
+  // The view moved 600 px, 6 m at this zoom: the wall's place is now off to the right, out of sight.
+  expect(pasted).toBeLessThan(-4000)
+})
+
+test('fills a shape with the colour of its layer, chosen in the colour window, which also has an eyedropper', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  const fill = page.locator('[data-panel="properties"] .field', { has: page.locator('.color-now') }).nth(1)
+  await fill.locator('.color-now').click()
+  await expect(page.locator('.color-menu .color-eyedropper')).toBeVisible()
+  await page.locator('.color-menu .color-option', { hasText: 'Colour of the layer “Layer 1”' }).click()
+  // The field says what it follows, the whole of it: colour fields were cut to 72 pixels.
+  await expect(fill.locator('.color-now')).toContainText('Layer 1')
+  expect((await fill.locator('.color-now').boundingBox())!.width).toBeGreaterThan(120)
+})
+
+test('gives a colour an opacity, on a shape and on a shared colour', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  const fill = page.locator('[data-panel="properties"] .field', { has: page.locator('.color-now') }).nth(1)
+  await fill.locator('.color-now').click()
+  await page.locator('.color-code input').fill('#e5484d')
+  await page.locator('.color-code input').press('Enter')
+  // Pressed straight after typing the code: the press counts, the code is not saved again over it.
+  const slider = page.locator('.color-menu .color-alpha')
+  const track = (await slider.boundingBox())!
+  await page.mouse.click(track.x + track.width / 2, track.y + track.height / 2)
+  await expect(fill.locator('.color-now')).toContainText('#e5484d80')
+  await expect(page.locator('.color-menu .color-opacity')).toContainText('50 %')
+
+  // A shared colour is set in the same window, opacity included, and not linked to anything else.
+  await page.keyboard.press('Escape')
+  await page.locator('.dv-tab', { hasText: 'Colours' }).click()
+  await page.locator('button[title="Add a shared colour"]').click()
+  await page.locator('[data-panel="colors"] .row .color-now').first().click()
+  await expect(page.locator('.color-menu .color-alpha')).toBeVisible()
+  await expect(page.locator('.color-menu')).not.toContainText('New shared colour')
+})
+
+test('resizes a rectangle by the middles of its sides and its corners', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  const drag = async (from: [number, number], to: [number, number], shift = false) => {
+    await page.mouse.move(box.x + from[0], box.y + from[1])
+    if (shift) await page.keyboard.down('Shift')
+    await page.mouse.down()
+    await page.mouse.move(box.x + to[0], box.y + to[1], { steps: 5 })
+    await page.mouse.up()
+    if (shift) await page.keyboard.up('Shift')
+  }
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  const field = (name: string) => page.locator('label.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('W')).toHaveValue('2000')
+  // The middle of the right side: only the width changes, the left side stays.
+  await drag([500, 350], [600, 350])
+  await expect(field('W')).toHaveValue('3000')
+  await expect(field('H')).toHaveValue('1000')
+  await expect(field('X')).toHaveValue('-200')
+  // The middle of the bottom side: only the height.
+  await drag([450, 400], [450, 450])
+  await expect(field('W')).toHaveValue('3000')
+  await expect(field('H')).toHaveValue('1500')
+  // A corner with Shift keeps the proportions.
+  await drag([600, 450], [900, 500], true)
+  await expect(field('W')).toHaveValue('6000')
+  await expect(field('H')).toHaveValue('3000')
+})
+
+test('with Shift, a dimension keeps level and stops on the line it crosses', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  // A rectangle whose right side is at x = 1800 mm (x = 500 on screen, 10 mm a pixel).
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  // From a point left of it, Shift held, the pointer a little past its right side and below the start.
+  await page.keyboard.press('m')
+  await page.mouse.click(box.x + 200, box.y + 350)
+  await page.keyboard.down('Shift')
+  await page.mouse.move(box.x + 504, box.y + 356, { steps: 4 })
+  await expect(page.locator('.status')).toContainText(/Distance 3\s?000 mm · ΔX 3\s?000 · ΔY 0/)
+  await page.keyboard.up('Shift')
+  await page.keyboard.press('Escape')
+
+  await page.keyboard.press('d')
+  await page.mouse.click(box.x + 200, box.y + 350)
+  await page.keyboard.down('Shift')
+  await page.mouse.move(box.x + 504, box.y + 356, { steps: 4 })
+  await page.mouse.click(box.x + 504, box.y + 356)
+  await page.keyboard.up('Shift')
+  await page.mouse.click(box.x + 504, box.y + 330)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  const field = (name: string) => page.locator('label.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('X2')).toHaveValue(/^1\s?800$/)
+  await expect(field('Y2')).toHaveValue(/^1\s?300$/)
+})
+
+test('takes a thing out of a component: cut inside it, pasted on the page where the component drew it', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  const field = (name: string) => page.locator('label.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  await page.keyboard.press('Control+Alt+k')
+  // The component placed elsewhere: its rectangle is drawn from (3000, 1000), 30 px a metre on screen... 10 mm a pixel.
+  await field('X').fill('3000')
+  await field('X').press('Enter')
+  await field('Y').fill('1000')
+  await field('Y').press('Enter')
+  await page.mouse.dblclick(box.x + 720, box.y + 370)
+  await objectRows(page).first().click()
+  await expect(field('X')).toHaveValue('0')
+  await page.keyboard.press('Control+x')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Control+v')
+  // Two things on the page now: the placement of the emptied component, and the rectangle, on top, where it was seen.
+  await expect(objectRows(page)).toHaveCount(2)
+  await objectRows(page).first().click()
+  await expect(field('X')).toHaveValue(/^3\s?000$/)
+  await expect(field('Y')).toHaveValue(/^1\s?000$/)
+})
+
+test('puts what is cut and pasted on top of what it was under', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  const rect = async (from: [number, number], to: [number, number]) => {
+    await page.keyboard.press('r')
+    await page.mouse.click(box.x + from[0], box.y + from[1])
+    await page.mouse.click(box.x + to[0], box.y + to[1])
+  }
+  // The first under the second, which overlaps it: the list shows the topmost first.
+  await rect([300, 300], [500, 400])
+  await rect([350, 320], [550, 420])
+  await page.keyboard.press('v')
+  const x = page.locator('label.field', { has: page.locator('span:text-is("X")') }).locator('input')
+  await objectRows(page).nth(1).click()
+  await expect(x).toHaveValue('-200')
+  await page.keyboard.press('Control+x')
+  await page.keyboard.press('Control+v')
+  await expect(objectRows(page)).toHaveCount(2)
+  await objectRows(page).first().click()
+  await expect(x).toHaveValue('-200')
+})
+
+test('measures and dimensions between the points clicked, not the grid points near them', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  // At the first zoom the grid is 100 mm: these points, 4370 mm apart, are between its lines.
+  await page.keyboard.press('m')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.move(box.x + 737, box.y + 300, { steps: 4 })
+  await expect(page.locator('.status')).toContainText(/4\s?370/)
+  await page.keyboard.press('Escape')
+
+  await page.keyboard.press('d')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 737, box.y + 300)
+  await page.mouse.click(box.x + 737, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  const x = (name: string) => page.locator('label.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(x('X2')).toHaveValue(/^4\s?170$/)
+  await expect(x('X1')).toHaveValue('-200')
+})
+
+test('shows every value of a dimension style whole, in the narrow side panel', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  await page.keyboard.press('Control+k')
+  await page.keyboard.type('Dimension styles')
+  await page.keyboard.press('Enter')
+  await page.locator('button[title="Add a dimension style"]').click()
+  const panel = page.locator('[data-panel="dimensionStyles"]')
+  const text = panel.locator('h4:has-text("Text") ~ .type-prop')
+  const row = (name: string) => text.filter({ has: page.locator(`span:text-is("${name}")`) })
+  for (const name of ['Font', 'Color']) {
+    const box = row(name).locator('input[type=checkbox]').first()
+    if (!(await box.isChecked())) await box.click()
+  }
+  // A colour defined by the style can be seen and chosen: its chooser was once hidden with the row's name.
+  await expect(row('Color').locator('.color-now')).toBeVisible()
+  // In a column of about 250 px the font goes under its name, with room for "Sans-serif" whole.
+  const font = row('Font').locator('select')
+  expect((await font.boundingBox())!.width).toBeGreaterThan(180)
+})
+
 test('imports a DXF of twenty thousand lines in a few seconds', async ({ page }) => {
   await startWith(page)
   await page.goto('/')
@@ -132,6 +377,11 @@ test('imports a DXF of twenty thousand lines in a few seconds', async ({ page })
   await choose(page, () => page.keyboard.press('Control+i'), 'big.dxf', dxf)
   await expect(page.locator('.toast')).toContainText('Imported 20000 objects from big.dxf', { timeout: 15000 })
   expect(Date.now() - start).toBeLessThan(15000)
+  // The structure lists the first rows only: laying out twenty thousand took seconds after every change.
+  await page.locator('.dv-tab', { hasText: 'Structure' }).click()
+  await expect(page.locator('.more-rows')).toContainText('19700 more not listed')
+  await page.locator('.more-rows button').click()
+  await expect(page.locator('.more-rows')).toContainText('19400 more not listed')
 })
 
 test('offers back unsaved work after the window crashed', async ({ page, context, browser }) => {

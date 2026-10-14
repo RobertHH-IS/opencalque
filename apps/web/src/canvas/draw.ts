@@ -133,6 +133,12 @@ export interface Overlay {
   corner?: Vec2 | null
   /** Whether the box around the selection gets its grips: corners to scale by, a knob to turn by. */
   grips?: boolean
+  /**
+   * The frame a single box-shaped object is resized by, in place of that box: its eight grips (four
+   * corners, then the middles of the sides) in world coordinates, and the direction its knob stands
+   * off the top side, turning with the object.
+   */
+  frame?: { grips: Vec2[]; up: Vec2 } | null
   /** A guide across the whole view through `at`, shown while the line being drawn is exactly horizontal or vertical. */
   axis?: { at: Vec2; vertical: boolean }
   /** An angle being read: its corner, a point along its first side and, once chosen, one along its second. */
@@ -347,7 +353,29 @@ export function drawScene(
   ctx.lineWidth = 1
   // One box around everything selected: it shows the selection as a whole, and is the area where
   // a right-click is about the selection. A single object with draggable handles needs none.
-  const box = selected.length === 1 && handles.length > 0 ? null : sceneBounds(selected)
+  const box = selected.length === 1 && (handles.length > 0 || overlay.frame) ? null : sceneBounds(selected)
+  if (overlay.frame) {
+    // The outline of the object is lit up already; its frame adds a grip at each corner and in the middle of each side, and the knob.
+    const grips = overlay.frame.grips.map(toScreen)
+    const top = grips[4]
+    const knob = { x: top.x + overlay.frame.up.x * 22, y: top.y + overlay.frame.up.y * 22 }
+    // The frame itself, thin: on a rectangle it is the outline, around an ellipse it ties the corner grips together.
+    ctx.beginPath()
+    grips.slice(0, 4).forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+    ctx.closePath()
+    ctx.moveTo(top.x, top.y)
+    ctx.lineTo(knob.x, knob.y)
+    ctx.stroke()
+    ctx.fillStyle = '#ffffff'
+    for (const p of grips) {
+      ctx.fillRect(Math.round(p.x) - 3.5, Math.round(p.y) - 3.5, 7, 7)
+      ctx.strokeRect(Math.round(p.x) - 3.5, Math.round(p.y) - 3.5, 7, 7)
+    }
+    ctx.beginPath()
+    ctx.arc(knob.x, knob.y, 4.5, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
   if (box) {
     const a = toScreen({ x: box.minX, y: box.minY })
     const b = toScreen({ x: box.maxX, y: box.maxY })

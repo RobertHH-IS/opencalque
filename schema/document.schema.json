@@ -220,7 +220,7 @@
             "type": "object",
             "properties": {
               "stroke": {
-                "description": "CSS color of lines and text, or 'none'.",
+                "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                 "type": "string"
               },
               "strokeWidth": {
@@ -271,7 +271,7 @@
             "type": "object",
             "properties": {
               "stroke": {
-                "description": "CSS color of lines and text, or 'none'.",
+                "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                 "type": "string"
               },
               "strokeWidth": {
@@ -462,7 +462,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -471,7 +471,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -639,7 +639,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -648,7 +648,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -833,7 +833,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -842,7 +842,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -1005,7 +1005,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -1014,7 +1014,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -1238,7 +1238,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -1247,7 +1247,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -1465,7 +1465,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -1474,7 +1474,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -1659,7 +1659,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -1668,7 +1668,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -1848,7 +1848,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -1857,7 +1857,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -2054,7 +2054,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -2063,7 +2063,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -2281,7 +2281,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -2290,7 +2290,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -2482,7 +2482,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -2491,7 +2491,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -2691,7 +2691,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -2700,7 +2700,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -2953,7 +2953,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -2962,7 +2962,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -3327,7 +3327,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -3336,7 +3336,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -3524,7 +3524,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -3669,7 +3669,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -3678,7 +3678,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -3876,7 +3876,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -3885,7 +3885,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
@@ -4074,7 +4074,7 @@
                 "type": "object",
                 "properties": {
                   "stroke": {
-                    "description": "CSS color of lines and text, or 'none'.",
+                    "description": "CSS color of lines and text, or 'none'. Any colour property may instead be a shared colour, \"var(--<id>)\", or \"var(--layer)\": the colour of the node's layer.",
                     "type": "string"
                   },
                   "strokeWidth": {
@@ -4083,7 +4083,7 @@
                     "exclusiveMinimum": 0
                   },
                   "fill": {
-                    "description": "CSS fill color, or 'none'.",
+                    "description": "CSS fill color, or 'none', a shared colour \"var(--<id>)\", or \"var(--layer)\" to fill with the colour of the node's layer.",
                     "type": "string"
                   },
                   "pattern": {
