@@ -1,130 +1,22 @@
 import { childrenOf } from './document'
-import { add, rotate, scale, sub, type Vec2 } from './geometry'
-import { ANNOTATION_BEND, ANNOTATION_TEXT_SIZE, arcOf, nodePrimitives } from './kinds'
+import { rotate } from './geometry'
+import { kindOf, nodePrimitives } from './kinds'
 import type { Op } from './ops'
 import type { Registry } from './registry'
+import { frameMiddle, type ResizeFrame } from './resize'
 import { boundsOf } from './scene'
 import type { Document, Node } from './schema'
+import { placing, tidy, turned, type Placing, type Similarity } from './similarity'
 
-/**
- * A change of place, direction and size that keeps shapes in proportion, about a fixed point:
- * first mirrored left to right (when `mirror`), then scaled, then turned. A top-to-bottom mirror
- * is the same as `mirror` with a half turn.
- */
-export interface Similarity {
-  pivot: Vec2
-  mirror?: boolean
-  /** Degrees, clockwise on screen. */
-  rotation?: number
-  /** 1 leaves sizes as they are. */
-  scale?: number
-}
-
-const tidy = (n: number) => Math.round(n * 1e6) / 1e6 + 0
-/** An angle brought back between 0 and 360. */
-const turned = (degrees: number) => tidy(((degrees % 360) + 360) % 360)
+export type { Placing, Similarity }
 
 /**
  * The operations that apply a similarity to nodes, whatever their types; groups are transformed
- * through what they hold. Every kind of node keeps its own meaning: a wall's thickness and a
- * text's size scale with it, a parametric object has its lengths scaled rather than being
- * stretched, text and pictures move to their mirrored place but stay readable, and a paper stays
- * upright (a quarter turn swaps its sides).
+ * through what they hold. Each kind of node says how it is transformed (`NodeKind.transform`),
+ * keeping its own meaning.
  */
 export function transformOps(doc: Document, nodes: Node[], t: Similarity, registry: Registry): Op[] {
-  const s = t.scale ?? 1
-  const turn = t.rotation ?? 0
-  const flip = t.mirror ?? false
-  const map = (p: Vec2): Vec2 => {
-    const d = sub(p, t.pivot)
-    const r = rotate(scale(flip ? { x: -d.x, y: d.y } : d, s), turn)
-    return { x: tidy(t.pivot.x + r.x), y: tidy(t.pivot.y + r.y) }
-  }
-  /** The direction of something that pointed at `degrees`. A mirror reverses the sense of turning. */
-  const angle = (degrees = 0) => turned((flip ? -degrees : degrees) + turn)
-  /**
-   * Where a box that cannot itself be mirrored (it has a top-left corner and a direction) ends
-   * up: mirrored, its far top corner is the one that becomes its top-left.
-   */
-  const box = (node: { x: number; y: number; rotation?: number }, width: number) => map(flip ? add(node, rotate({ x: width, y: 0 }, node.rotation ?? 0)) : node)
-
-  const patchOf = (node: Node): Record<string, unknown> | null => {
-    switch (node.type) {
-      case 'line':
-        return { a: map(node.a), b: map(node.b), ...(node.markerSize === undefined ? {} : { markerSize: tidy(node.markerSize * s) }) }
-      case 'divider':
-        return { a: map(node.a), b: map(node.b) }
-      case 'annotation':
-        return {
-          a: map(node.a),
-          b: map(node.b),
-          ...(node.size === undefined && s === 1 ? {} : { size: tidy((node.size ?? ANNOTATION_TEXT_SIZE) * s) }),
-          ...(node.markerSize === undefined ? {} : { markerSize: tidy(node.markerSize * s) }),
-          // Which side the leader bows to is a matter of handedness, which a mirror reverses.
-          ...(flip ? { bend: -(node.bend ?? ANNOTATION_BEND) } : {}),
-        }
-      case 'room':
-        return { ...map(node), ...(node.size === undefined && s === 1 ? {} : { size: tidy((node.size ?? 250) * s) }) }
-      case 'wall': {
-        // The side a curved wall bows to, its left and right faces, and the face it is drawn by are
-        // matters of handedness, which a mirror reverses: the same face is then on the other hand.
-        const swapped = flip && node.edges && (node.edges.left || node.edges.right) ? { edges: { ...node.edges, left: node.edges.right, right: node.edges.left } } : {}
-        const justify = flip && (node.justify === 'left' || node.justify === 'right') ? { justify: node.justify === 'left' ? 'right' : 'left' } : {}
-        return { a: map(node.a), b: map(node.b), thickness: tidy(node.thickness * s), ...(node.bulge ? { bulge: tidy(node.bulge * s * (flip ? -1 : 1)) } : {}), ...swapped, ...justify }
-      }
-      case 'dimension':
-        return {
-          a: map(node.a),
-          b: map(node.b),
-          // The side its line stands on is a matter of handedness, which a mirror reverses.
-          offset: tidy(node.offset * s * (flip ? -1 : 1)),
-          ...(node.size === undefined ? {} : { size: tidy(node.size * s) }),
-          ...(node.markerSize === undefined ? {} : { markerSize: tidy(node.markerSize * s) }),
-          ...(node.extensionGap === undefined ? {} : { extensionGap: tidy(node.extensionGap * s) }),
-        }
-      case 'polyline':
-        return { points: node.points.map(map), ...(node.markerSize === undefined ? {} : { markerSize: tidy(node.markerSize * s) }) }
-      case 'rect':
-      case 'image':
-        return { ...box(node, node.width), width: tidy(node.width * s), height: tidy(node.height * s), rotation: angle(node.rotation) }
-      case 'paper': {
-        const centre = map({ x: node.x + node.width / 2, y: node.y + node.height / 2 })
-        const quarter = Math.abs((((turn % 180) + 180) % 180) - 90) < 1e-6
-        const width = tidy((quarter ? node.height : node.width) * s)
-        const height = tidy((quarter ? node.width : node.height) * s)
-        return { x: tidy(centre.x - width / 2), y: tidy(centre.y - height / 2), width, height }
-      }
-      case 'ellipse': {
-        const centre = map({ x: node.cx, y: node.cy })
-        // Mirrored, an arc runs the other way round: its ends swap, each to the other side of the axis.
-        const ends = arcOf(node)
-        const arc = flip && ends ? { from: turned(180 - ends.to), to: turned(180 - ends.from) } : {}
-        return { cx: centre.x, cy: centre.y, rx: tidy(node.rx * s), ry: tidy(node.ry * s), rotation: angle(node.rotation), ...arc }
-      }
-      case 'text':
-        // Its width is not known exactly without the renderer's font; this matches the estimate used for picking.
-        return { ...box(node, node.text.length * node.size * 0.55), size: tidy(node.size * s), rotation: angle(node.rotation) }
-      case 'instance':
-        return { ...map(node), rotation: angle(node.rotation), ...(flip ? { flipX: !node.flipX } : {}), ...(s === 1 ? {} : { scale: tidy((node.scale ?? 1) * s) }) }
-      case 'parametric': {
-        const patch: Record<string, unknown> = { ...map(node), rotation: angle(node.rotation), ...(flip ? { flipX: !node.flipX } : {}) }
-        const kind = registry.parametric.get(node.kind)
-        if (s !== 1 && kind) {
-          // A door twice the size is a door with twice the width, not a stretched drawing of one.
-          const props: Record<string, unknown> = { ...node.props }
-          for (const param of kind.params) {
-            if (param.unit !== 'length' || typeof param.default !== 'number') continue
-            const value = props[param.key]
-            props[param.key] = tidy((typeof value === 'number' ? value : param.default) * s)
-          }
-          patch.props = props
-        }
-        return patch
-      }
-      default:
-        return null
-    }
-  }
+  const placed = placing(t)
 
   /** A node's modifiers go where the node goes: their frames are placed things like any other. */
   const modifiersOf = (node: Node): Record<string, unknown> =>
@@ -132,7 +24,15 @@ export function transformOps(doc: Document, nodes: Node[], t: Similarity, regist
       ? {
           modifiers: node.modifiers.map((m) => {
             const frame = m.frame ?? { x: 0, y: 0 }
-            return { ...m, frame: { ...map(frame), rotation: angle(frame.rotation), ...(flip ? { flipX: !frame.flipX } : frame.flipX ? { flipX: true } : {}), ...(s === 1 && frame.scale === undefined ? {} : { scale: tidy((frame.scale ?? 1) * s) }) } }
+            return {
+              ...m,
+              frame: {
+                ...placed.point(frame),
+                rotation: placed.angle(frame.rotation),
+                ...(placed.mirror ? { flipX: !frame.flipX } : frame.flipX ? { flipX: true } : {}),
+                ...(placed.scale === 1 && frame.scale === undefined ? {} : { scale: tidy((frame.scale ?? 1) * placed.scale) }),
+              },
+            }
           }),
         }
       : {}
@@ -140,7 +40,7 @@ export function transformOps(doc: Document, nodes: Node[], t: Similarity, regist
   // Groups have no geometry, but they are listed too: a group can carry modifiers of its own.
   const everything = (list: Node[]): Node[] => list.flatMap((n) => (n.type === 'group' ? [n, ...everything(childrenOf(doc, n.id))] : [n]))
   return everything(nodes).flatMap((node): Op[] => {
-    const geometry = node.type === 'group' ? {} : patchOf(node)
+    const geometry = kindOf(node).transform(node, placed, registry)
     if (!geometry) return []
     const patch = { ...geometry, ...modifiersOf(node) }
     return Object.keys(patch).length > 0 ? [{ op: 'update_node', id: node.id, patch }] : []
@@ -154,23 +54,35 @@ export function transformOps(doc: Document, nodes: Node[], t: Similarity, regist
  * about its corner nor a component about its insertion point, each a different point.
  */
 export function turnToOps(doc: Document, nodes: Node[], degrees: number, registry: Registry): Op[] {
-  const origin = { x: 0, y: 0 }
   return nodes.flatMap((node): Op[] => {
     const now = (node as { rotation?: number }).rotation ?? 0
     if (turned(degrees - now) === 0) return []
-    // Straightened about the origin, the node fills an upright box; that box's middle, turned
-    // back, is the node's own middle.
-    const upright: Record<string, unknown> = { ...node }
-    for (const op of transformOps(doc, [node], { pivot: origin, rotation: -now }, registry)) {
+    const box = turnedBox(doc, node, registry)
+    if (!box) return [{ op: 'update_node', id: node.id, patch: { rotation: turned(degrees) } }]
+    return transformOps(doc, [node], { pivot: frameMiddle(box), rotation: degrees - now }, registry)
+  })
+}
+
+/**
+ * The box a node fills when it is not turned, turned as the node is. It keeps its shape whatever
+ * the angle and its middle is the node's own middle, so it is the box drawn around a turned
+ * object that has no frame of its own (a text, a picture, a compass), and the one it turns about.
+ * Null for a node that draws nothing.
+ */
+export function turnedBox(doc: Document, node: Node, registry: Registry): ResizeFrame | null {
+  const now = (node as { rotation?: number }).rotation ?? 0
+  // Straightened about the origin, the node fills an upright box; that box, turned back, is the node's own.
+  const upright: Record<string, unknown> = { ...node }
+  if (now !== 0) {
+    for (const op of transformOps(doc, [node], { pivot: { x: 0, y: 0 }, rotation: -now }, registry)) {
       if (op.op !== 'update_node' || op.id !== node.id) continue
       for (const [key, value] of Object.entries(op.patch)) {
         if (value === null) delete upright[key]
         else upright[key] = value
       }
     }
-    const box = boundsOf(nodePrimitives(upright as Node, { doc, registry, depth: 0 }))
-    if (!box) return [{ op: 'update_node', id: node.id, patch: { rotation: turned(degrees) } }]
-    const middle = rotate({ x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 }, now)
-    return transformOps(doc, [node], { pivot: middle, rotation: degrees - now }, registry)
-  })
+  }
+  const box = boundsOf(nodePrimitives(upright as Node, { doc, registry, depth: 0 }))
+  if (!box) return null
+  return { origin: rotate({ x: box.minX, y: box.minY }, now), rotation: now, width: box.maxX - box.minX, height: box.maxY - box.minY }
 }

@@ -56,6 +56,9 @@ importers:
       '@opencalque/ext-architecture':
         specifier: workspace:*
         version: link:../../packages/ext-architecture
+      '@opencalque/warehouse':
+        specifier: workspace:*
+        version: link:../../packages/warehouse
       dockview-react:
         specifier: ^8.4.1
         version: 8.4.1(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -96,6 +99,9 @@ importers:
       '@opencalque/ext-architecture':
         specifier: workspace:*
         version: link:../ext-architecture
+      '@opencalque/warehouse':
+        specifier: workspace:*
+        version: link:../warehouse
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -121,6 +127,15 @@ importers:
       '@opencalque/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/warehouse:
+    dependencies:
+      '@opencalque/core':
+        specifier: workspace:*
+        version: link:../core
+      '@opencalque/ext-architecture':
+        specifier: workspace:*
+        version: link:../ext-architecture
 
 packages:
 

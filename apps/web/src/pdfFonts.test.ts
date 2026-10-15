@@ -12,8 +12,16 @@ describe('the fonts a PDF is given', () => {
 
   it('draws kanji in their Japanese forms for Japanese, and Chinese ones otherwise', async () => {
     expect(names(await pdfFonts(['直', '角']))).toEqual(['NotoSansSC-Regular'])
-    expect(names(await pdfFonts(['直', '角'], true))).toEqual(['NotoSansJP-Regular'])
+    expect(names(await pdfFonts(['直', '角'], 'ja'))).toEqual(['NotoSansJP-Regular'])
     // Kana make a text Japanese whatever the interface; a simplified character the Japanese font lacks still prints.
     expect(names(await pdfFonts(['直', 'か', '间']))).toEqual(['NotoSansJP-Regular', 'NotoSansSC-Regular'])
+  })
+
+  it('prints Hangul, with Chinese characters in their Korean forms in a Korean text', async () => {
+    expect(names(await pdfFonts(['거', '실']))).toEqual(['NotoSansKR-Regular'])
+    expect(names(await pdfFonts(['直', '角'], 'ko'))).toEqual(['NotoSansKR-Regular'])
+    // A simplified character the Korean font lacks still prints.
+    expect(names(await pdfFonts(['거', '间']))).toEqual(['NotoSansKR-Regular', 'NotoSansSC-Regular'])
+    expect(names(await pdfFonts(['か', '거']))).toEqual(['NotoSansJP-Regular', 'NotoSansKR-Regular'])
   })
 })

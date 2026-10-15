@@ -10,7 +10,7 @@
   <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="Runs on Windows, macOS, Linux and the web" src="https://img.shields.io/badge/runs%20on-Windows%20%C2%B7%20macOS%20%C2%B7%20Linux%20%C2%B7%20web-4b5563">
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript&logoColor=white">
-  <img alt="Languages: English, French, Spanish, German, Chinese, Japanese" src="https://img.shields.io/badge/languages-EN%20%C2%B7%20FR%20%C2%B7%20ES%20%C2%B7%20DE%20%C2%B7%20ZH%20%C2%B7%20JA-0d99ff">
+  <img alt="Languages: English, French, Spanish, German, Chinese, Japanese, Korean" src="https://img.shields.io/badge/languages-EN%20%C2%B7%20FR%20%C2%B7%20ES%20%C2%B7%20DE%20%C2%B7%20ZH%20%C2%B7%20JA%20%C2%B7%20KO-0d99ff">
   <a href="#contributing"><img alt="Contributions welcome" src="https://img.shields.io/badge/contributions-welcome-22c55e"></a>
 </p>
 
@@ -18,7 +18,7 @@
 
 *Calque* is French for tracing paper, and for a layer. OpenCalque is a drafting table for buildings: draw walls that join themselves, drop in doors, windows and stairs that know how to behave, name rooms and get their area, then frame it all on a sheet. It is a desktop app and a web app from the same code, and everything it saves is a file you can read.
 
-> **Status: release candidate for 1.0.** The editor works end to end and is covered by unit tests and browser tests; from 1.0 on, the file format stays readable. [Download it](#download) or run it from source, and see [what is not there yet](#what-is-not-there-yet) and [what changed lately](CHANGELOG.md).
+> **Status: 1.0, stable.** The editor works end to end and is covered by unit tests and browser tests, and a drawing saved by it stays readable by every later version ([what stays stable](#what-stays-stable)). [Download it](#download) or run it from source, and see [what is not there yet](#what-is-not-there-yet) and [what changed](CHANGELOG.md).
 
 ## Why OpenCalque
 
@@ -47,7 +47,15 @@ Installers for each version are on the [releases page](https://github.com/lauren
 | macOS | `OpenCalque-…-mac-arm64.dmg` (Apple silicon) or `…-mac-x64.dmg` (Intel) |
 | Linux | `OpenCalque-…-linux-….AppImage` |
 
-The builds are not signed, so the system asks before running them the first time: on Windows choose "More info", then "Run anyway"; on macOS right-click the app and choose Open (or allow it under System Settings → Privacy & Security). If a version before 0.4.1 says the app "is damaged", run `xattr -cr /Applications/OpenCalque.app` once, or take a newer version. When it starts, pick **Start with the example** to get a furnished flat to take apart.
+The builds are not signed, so the system asks before running them the first time:
+
+- **Windows**: choose "More info", then "Run anyway".
+- **macOS**: open the app once, then go to System Settings → Privacy & Security, where an "Open Anyway" button for OpenCalque appears; on macOS 14 and earlier, right-clicking the app and choosing Open does the same. If a version before 0.4.1 says the app "is damaged", run `xattr -cr /Applications/OpenCalque.app` once, or take a newer version.
+- **Linux**: make the AppImage executable (`chmod +x OpenCalque-*.AppImage`). AppImages need FUSE 2, which recent Ubuntu does not install by default (`sudo apt install libfuse2t64`). On Ubuntu 24.04 and later, an Electron app started from an AppImage can close at once because the system restricts the sandbox it uses; starting it with `--no-sandbox` gets past that.
+
+The macOS and Linux builds are made by the same release workflow as the Windows one, but have not been tried on a real Mac or Linux machine by the maintainers: reports of what works and what does not are welcome.
+
+When it starts, pick **Start with the example** to get a furnished flat to take apart.
 
 Or use it in a browser, with nothing to install: **[opencalque.com](https://opencalque.com)**. Chrome and Edge can open and save a drawing in place; other browsers download it.
 
@@ -70,6 +78,7 @@ pnpm build && pnpm start   # the built desktop app
 pnpm test         # unit tests (Vitest)
 pnpm e2e          # build the web app and drive it in a browser (Playwright; first run `pnpm exec playwright install chromium`)
 pnpm dist         # build the installer for the system you are on, into apps/desktop/dist
+pnpm notices      # rewrite THIRD-PARTY-NOTICES.txt after adding or updating a dependency
 ```
 
 ## What you can do
@@ -146,7 +155,7 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | --- | --- |
 | Start | The welcome window offers a new drawing, a file, a recent drawing (desktop app) or the example. Switch it off there or under Preferences; bring it back from Preferences → Welcome window |
 | Menus | File, Edit, Object, View and Preferences are in the bar at the top, which in the desktop app is also the window's title bar; the tools are in the bar under the drawing. About shows the version and what is new |
-| Language | English, French, Spanish, German, Chinese (Simplified) and Japanese. The app follows your system language; change it under Preferences |
+| Language | English, French, Spanish, German, Chinese (Simplified), Japanese and Korean. The app follows your system language; change it under Preferences |
 | Panels | Drag a panel's tab to another edge, onto another panel to share its tabs, or out to float. Close and reopen panels from View. Preferences → Reset the panel layout puts everything back |
 | Drop files | Drag a picture or a PDF from your file manager onto the drawing to trace it, a `.dxf` to add its geometry, an `.opencalque` file to open it, or an extension `.json` to install it |
 | Trace a floor plan | File → Import, and pick a PDF or a picture (PNG, JPG, WebP…). Then set its scale: click two points whose real distance you know and type that distance (`3500`, `350 cm`, `3.5 m`). The plan is then locked so you can draw over it |
@@ -229,7 +238,8 @@ The assistant can use, chosen under Preferences:
 
 ```
 packages/core              The document model. No UI, no DOM, runs anywhere.
-packages/ext-architecture  Bundled extension: doors, windows, stairs, "insert room" command.
+packages/ext-architecture  Built-in extension: doors, windows, stairs, washbasins, bathtub, kitchen, corner sofa, compass.
+packages/warehouse         What ships besides code: the component libraries and the extensions written as data.
 packages/cli               Command-line access to the model.
 apps/web                   The editor: React + Canvas. Deployable as a static site.
 apps/desktop               Electron shell around apps/web: native file dialogs, recent files, installers.
@@ -269,6 +279,16 @@ A `.opencalque` file is JSON. JSON Schemas for documents and operations are in [
 - **Unknown parametric kinds survive.** A file that uses an extension you do not have still opens; those objects show as placeholders and are saved back untouched.
 - **It stays readable.** From 1.0, a drawing says which version of the format it is written in (`"version": 1`). The app reads that version and every older one. Properties it does not know, written by a newer version or by a script, are kept as they are and saved back. A drawing in a newer format than the app reads is refused with a message, never half-read. A drawing with a reference to something missing (a layer, a wall type, a parent) opens with the problem put right and a note saying so.
 - **Order keys** are keys of the [fractional-indexing](https://github.com/rocicorp/fractional-indexing) package, such as `a0` or `a1V`. Leave `order` out when adding a node and it goes on top.
+
+### What stays stable
+
+Through every 1.x version:
+
+- **Drawings.** A drawing saved by 1.0 opens in every later version, with nothing in it lost or changed in meaning. A change to the format that an older version could not read raises its `version`, and every later version brings older drawings up to date as it reads them.
+- **Extensions written as data.** An extension with `"formatVersion": 1` keeps loading; what is added to the format is optional. Its schema is [`schema/extension.schema.json`](schema/extension.schema.json).
+- **Operations.** An operation valid in 1.0 (from a script, `opencalque apply` or the assistant) stays valid and means the same; new kinds of operation may be added.
+
+The TypeScript packages of this repository are not published, and their code may change between versions.
 
 ## Operations
 
@@ -365,14 +385,14 @@ export const columns: Extension = {
 
 Because objects describe themselves as primitives (paths, ellipses, text), a new object type automatically gets rendering, selection, snapping, a properties form and SVG export. Add an `opening` function and the object also cuts and snaps to walls, and `build` is told the wall's thickness. [`packages/ext-architecture`](packages/ext-architecture/src/index.ts) is the reference.
 
-Extensions are currently compiled in: add yours to the registry in [`apps/web/src/store.ts`](apps/web/src/store.ts). Loading them at runtime is not built yet.
+Extensions in code are compiled in: add yours where the editor loads its extensions, [`apps/web/src/extensions.ts`](apps/web/src/extensions.ts), and to [`standardRegistry`](packages/warehouse/src/index.ts), which the command line draws with. Loading them at runtime is not built yet; extensions written as data are installed at runtime, from a file or a catalog.
 
 ## What is not there yet
 
 - **Installers** are not signed (see [Download](#download) for the one extra click) and do not update themselves: download the next version from the releases page.
 - **Release notes** and the example drawing are in English only. Recent drawings are listed in the desktop app only.
-- **Printing.** PDF export uses the standard fonts of PDF readers for Western European text, and fonts shipped with the app for other scripts, so text is close to the screen but not identical; Korean prints as empty boxes. Pictures other than JPEG and PNG are left out. A sheet cannot yet show a part of the plan at another scale.
-- **Drawing.** Arcs are made by typing angles, not yet drawn with a tool of their own. Scaling is uniform only.
+- **Printing.** PDF export uses the standard fonts of PDF readers for Western European text, and fonts shipped with the app for other scripts, so text is close to the screen but not identical. Pictures other than JPEG and PNG are left out. A sheet cannot yet show a part of the plan at another scale.
+- **Drawing.** Arcs are made by typing angles, not yet drawn with a tool of their own. Several objects selected together are scaled in proportion only.
 - **Walls.** Curved walls are bent from straight ones; they cannot yet be drawn as arcs directly, extended, trimmed or given a dimension chain.
 - **Import.** One page of a PDF at a time. DXF import does not read binary DXF or DWG, block attributes, or angular and radial dimensions as dimensions; a hatch pattern becomes the nearest of the app's own, and a hatch filled with a picture a plain colour.
 - **Hosted version.** Accounts, cloud storage and realtime collaboration are planned; the data model is prepared for them, nothing is built.
@@ -386,11 +406,11 @@ Good first contributions: a component library for your trade, a translation, a d
 
 ### Releasing a version
 
-1. Add a `## x.y.z — date` section at the top of [CHANGELOG.md](CHANGELOG.md) and set the same version in the `package.json` files (a test checks they agree).
+1. Add a `## x.y.z — date` section at the top of [CHANGELOG.md](CHANGELOG.md) and set the same version in every `package.json` (a test checks they agree).
 2. Commit, then `git tag vx.y.z && git push origin main vx.y.z`.
 
 The [release workflow](.github/workflows/release.yml) builds the Windows, macOS and Linux installers and publishes a GitHub release with them, described by that section of the changelog, once all three have built. A version with a hyphen, such as `1.0.0-rc.1`, is published as a pre-release. The app shows the same notes under About.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The software and fonts of others that the app includes are listed with their licences in [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt), also shown in the app under About › Licences.

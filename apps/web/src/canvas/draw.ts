@@ -1,4 +1,5 @@
-import { paintOrder, sceneBounds, type MoveGuides, type PaintStep, type SceneItem, type Snap, type Vec2 } from '@opencalque/core'
+import { gridStep } from '../view'
+import { boundsFrame, frameGrips, paintOrder, rotate, sceneBounds, type MoveGuides, type PaintStep, type ResizeFrame, type SceneItem, type Snap, type Vec2 } from '@opencalque/core'
 
 // Pictures decode asynchronously. Until one is ready it is simply not drawn, and the canvas is
 // told to repaint when it arrives.
@@ -19,7 +20,7 @@ function pictureFor(href: string): HTMLImageElement | null {
   }
   return picture.complete && picture.naturalWidth > 0 ? picture : null
 }
-import type { View } from '../store'
+import type { View } from '../view'
 import { formatAngle, formatLength, formatNumber } from '../units'
 
 const ACCENT = '#0d99ff'
@@ -135,6 +136,12 @@ export interface Overlay {
   corner?: Vec2 | null
   /** Whether the box around the selection gets its grips: corners to scale by, a knob to turn by. */
   grips?: boolean
+  /**
+   * The box around the selection when it is turned, in world coordinates: a turned object's own
+   * box, which turns with it, or the box of a selection being turned by its knob. Without it, the
+   * box is the upright one around what is selected.
+   */
+  box?: ResizeFrame | null
   /** What is selected is shown by its own outline alone, with no box around it: rooms, whose floor may be any shape. */
   boxless?: boolean
   /**
@@ -159,23 +166,29 @@ export function angleBetween(vertex: Vec2, a: Vec2, b: Vec2): number {
 }
 
 /**
- * Where the grips of the box around a selection are on screen: its four corners, clockwise from
- * the top left, and the knob above the middle of its top side.
+ * Where the box around a selection is on screen, a few pixels out from what it holds: its four
+ * corners, clockwise from the top left as the box is turned, the middle of its top side, and the
+ * knob that stands off it.
  */
-export function boxGrips(box: { minX: number; minY: number; maxX: number; maxY: number }, view: View): { corners: Vec2[]; knob: Vec2 } {
-  const left = Math.round(box.minX * view.zoom + view.x) - 3.5
-  const top = Math.round(box.minY * view.zoom + view.y) - 3.5
-  const right = Math.round(box.maxX * view.zoom + view.x) + 3.5
-  const bottom = Math.round(box.maxY * view.zoom + view.y) + 3.5
-  return {
-    corners: [
-      { x: left, y: top },
-      { x: right, y: top },
-      { x: right, y: bottom },
-      { x: left, y: bottom },
-    ],
-    knob: { x: (left + right) / 2, y: top - 22 },
-  }
+export function boxGrips(box: ResizeFrame, view: View): { corners: Vec2[]; top: Vec2; knob: Vec2 } {
+  const across = rotate({ x: 1, y: 0 }, box.rotation)
+  const down = rotate({ x: 0, y: 1 }, box.rotation)
+  // A box square to the screen sits on whole pixels, so that its sides are crisp.
+  const crisp = (n: number) => (box.rotation % 90 === 0 ? Math.round(n) : n)
+  const out = [
+    [-3.5, -3.5],
+    [3.5, -3.5],
+    [3.5, 3.5],
+    [-3.5, 3.5],
+  ]
+  const corners = frameGrips(box)
+    .slice(0, 4)
+    .map((p, i) => ({
+      x: crisp(p.x * view.zoom + view.x) + across.x * out[i][0] + down.x * out[i][1],
+      y: crisp(p.y * view.zoom + view.y) + across.y * out[i][0] + down.y * out[i][1],
+    }))
+  const top = { x: (corners[0].x + corners[1].x) / 2, y: (corners[0].y + corners[1].y) / 2 }
+  return { corners, top, knob: { x: top.x - down.x * 22, y: top.y - down.y * 22 } }
 }
 
 /** A size shown beside a shape: anchored at a world point, nudged by a few screen pixels. */
@@ -196,11 +209,6 @@ export interface AngleMark {
   degrees: number
 }
 
-/** Grid spacing in mm: the smallest "nice" step that stays at least 8 px apart on screen. */
-export function gridStep(zoom: number): number {
-  for (const step of [1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 50000]) if (step * zoom >= 8) return step
-  return 100000
-}
 
 /** Paints one step, inside the outlines its primitive is clipped to, if any. */
 function paint(ctx: CanvasRenderingContext2D, step: PaintStep, zoom: number, ink: CanvasPalette['ink'] = same): void {
@@ -358,7 +366,8 @@ export function drawScene(
   // One box around everything selected: it shows the selection as a whole, and is the area where
   // a right-click is about the selection. A single object with draggable handles needs none, and
   // nor do rooms, whose floor is outlined already and may be any shape: an arch in a rectangle.
-  const box = (selected.length === 1 && (handles.length > 0 || overlay.frame)) || overlay.boxless ? null : sceneBounds(selected)
+  const bounds = (selected.length === 1 && (handles.length > 0 || overlay.frame)) || overlay.boxless ? null : sceneBounds(selected)
+  const box = bounds && (overlay.box ?? boundsFrame(bounds))
   if (overlay.frame) {
     // The outline of the object is lit up already; its frame adds a grip at each corner and in the middle of each side, and the knob.
     const grips = overlay.frame.grips.map(toScreen)
@@ -382,14 +391,15 @@ export function drawScene(
     ctx.stroke()
   }
   if (box) {
-    const a = toScreen({ x: box.minX, y: box.minY })
-    const b = toScreen({ x: box.maxX, y: box.maxY })
-    ctx.strokeRect(Math.round(a.x) - 3.5, Math.round(a.y) - 3.5, Math.round(b.x - a.x) + 7, Math.round(b.y - a.y) + 7)
+    const { corners, top, knob } = boxGrips(box, view)
+    ctx.beginPath()
+    corners.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+    ctx.closePath()
+    ctx.stroke()
     if (overlay.grips) {
-      const { corners, knob } = boxGrips(box, view)
       ctx.beginPath()
       ctx.moveTo(knob.x, knob.y)
-      ctx.lineTo(knob.x, corners[0].y)
+      ctx.lineTo(top.x, top.y)
       ctx.stroke()
       ctx.fillStyle = '#ffffff'
       for (const p of corners) {

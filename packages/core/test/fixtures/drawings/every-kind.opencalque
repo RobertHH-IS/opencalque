@@ -1,0 +1,625 @@
+{
+  "format": "opencalque",
+  "version": 1,
+  "id": "doc_every_kind",
+  "name": "Every kind",
+  "unit": "mm",
+  "layers": {
+    "layer_1": {
+      "id": "layer_1",
+      "name": "Walls",
+      "order": "a0",
+      "color": "#1f1f1f"
+    },
+    "layer_furniture": {
+      "id": "layer_furniture",
+      "name": "Furniture",
+      "order": "a1",
+      "color": "#2563eb"
+    }
+  },
+  "nodes": {
+    "page_1": {
+      "id": "page_1",
+      "name": "Plan",
+      "parent": null,
+      "order": "a0",
+      "type": "page"
+    },
+    "w_top": {
+      "id": "w_top",
+      "parent": "page_1",
+      "order": "a0",
+      "layer": "layer_1",
+      "type": "wall",
+      "a": {
+        "x": 0,
+        "y": 0
+      },
+      "b": {
+        "x": 6000,
+        "y": 0
+      },
+      "thickness": 300,
+      "wallType": "outer"
+    },
+    "w_right": {
+      "id": "w_right",
+      "parent": "page_1",
+      "order": "a1",
+      "layer": "layer_1",
+      "type": "wall",
+      "a": {
+        "x": 6000,
+        "y": 0
+      },
+      "b": {
+        "x": 6000,
+        "y": 4000
+      },
+      "thickness": 200,
+      "justify": "left",
+      "joins": {
+        "a": "round"
+      }
+    },
+    "w_bottom": {
+      "id": "w_bottom",
+      "parent": "page_1",
+      "order": "a2",
+      "layer": "layer_1",
+      "type": "wall",
+      "a": {
+        "x": 6000,
+        "y": 4000
+      },
+      "b": {
+        "x": 0,
+        "y": 4000
+      },
+      "thickness": 200,
+      "bulge": 600,
+      "edges": {
+        "right": {
+          "stroke": "var(--brick)",
+          "strokeWidth": 2
+        }
+      }
+    },
+    "w_left": {
+      "id": "w_left",
+      "parent": "page_1",
+      "order": "a3",
+      "layer": "layer_1",
+      "type": "wall",
+      "a": {
+        "x": 0,
+        "y": 4000
+      },
+      "b": {
+        "x": 0,
+        "y": 0
+      },
+      "thickness": 200,
+      "height": 2600,
+      "joins": {
+        "b": "butt"
+      }
+    },
+    "door": {
+      "id": "door",
+      "parent": "page_1",
+      "order": "a4",
+      "layer": "layer_1",
+      "type": "parametric",
+      "kind": "arch.door",
+      "props": {
+        "width": 900,
+        "type": "Double"
+      },
+      "x": 1000,
+      "y": 0,
+      "rotation": 0
+    },
+    "window": {
+      "id": "window",
+      "parent": "page_1",
+      "order": "a5",
+      "layer": "layer_1",
+      "type": "parametric",
+      "kind": "arch.window",
+      "props": {
+        "width": 1500,
+        "glazing": "Triple"
+      },
+      "x": 6000,
+      "y": 1000,
+      "rotation": 90
+    },
+    "stair": {
+      "id": "stair",
+      "parent": "page_1",
+      "order": "a6",
+      "layer": "layer_1",
+      "type": "parametric",
+      "kind": "arch.stair.l",
+      "props": {
+        "steps": 12,
+        "before": 5
+      },
+      "x": 4500,
+      "y": 3500,
+      "rotation": 0
+    },
+    "unknown": {
+      "id": "unknown",
+      "parent": "page_1",
+      "order": "a7",
+      "layer": "layer_1",
+      "type": "parametric",
+      "kind": "someone.else",
+      "props": {
+        "size": 3
+      },
+      "x": 9000,
+      "y": 9000
+    },
+    "divider": {
+      "id": "divider",
+      "parent": "page_1",
+      "order": "a8",
+      "layer": "layer_1",
+      "type": "divider",
+      "a": {
+        "x": 3000,
+        "y": 0
+      },
+      "b": {
+        "x": 3000,
+        "y": 4000
+      }
+    },
+    "room_a": {
+      "id": "room_a",
+      "name": "Living",
+      "parent": "page_1",
+      "order": "a9",
+      "layer": "layer_1",
+      "style": {
+        "fill": "#fde68a",
+        "pattern": {
+          "kind": "Tiles",
+          "spacing": 300
+        }
+      },
+      "type": "room",
+      "x": 1500,
+      "y": 2000
+    },
+    "room_b": {
+      "id": "room_b",
+      "name": "Kitchen",
+      "parent": "page_1",
+      "order": "aA",
+      "layer": "layer_1",
+      "type": "room",
+      "x": 4500,
+      "y": 1500,
+      "showArea": false
+    },
+    "line": {
+      "id": "line",
+      "parent": "page_1",
+      "order": "aB",
+      "layer": "layer_1",
+      "style": {
+        "stroke": "#dc2626",
+        "strokeWidth": 2,
+        "dash": [
+          8,
+          4
+        ]
+      },
+      "type": "line",
+      "a": {
+        "x": 7000,
+        "y": 0
+      },
+      "b": {
+        "x": 9000,
+        "y": 500
+      },
+      "startMarker": "dot",
+      "endMarker": "arrow"
+    },
+    "poly": {
+      "id": "poly",
+      "parent": "page_1",
+      "order": "aC",
+      "layer": "layer_1",
+      "style": {
+        "fill": "var(--glass)",
+        "pattern": {
+          "kind": "Lines",
+          "spacing": 150,
+          "angle": 45
+        }
+      },
+      "type": "polyline",
+      "points": [
+        {
+          "x": 7000,
+          "y": 1000
+        },
+        {
+          "x": 8500,
+          "y": 1200
+        },
+        {
+          "x": 9000,
+          "y": 2500
+        },
+        {
+          "x": 7200,
+          "y": 2600
+        }
+      ],
+      "closed": true,
+      "smooth": true
+    },
+    "rect": {
+      "id": "rect",
+      "parent": "page_1",
+      "order": "aD",
+      "layer": "layer_1",
+      "style": {
+        "fill": "var(--brick)"
+      },
+      "type": "rect",
+      "x": 7000,
+      "y": 3000,
+      "width": 1500,
+      "height": 800,
+      "rotation": 15
+    },
+    "arc": {
+      "id": "arc",
+      "parent": "page_1",
+      "order": "aE",
+      "layer": "layer_1",
+      "type": "ellipse",
+      "cx": 10000,
+      "cy": 1000,
+      "rx": 800,
+      "ry": 500,
+      "rotation": 30,
+      "from": 0,
+      "to": 220
+    },
+    "oval": {
+      "id": "oval",
+      "parent": "page_1",
+      "order": "aF",
+      "layer": "layer_1",
+      "style": {
+        "stroke": "var(--layer)",
+        "fill": "#86efac"
+      },
+      "type": "ellipse",
+      "cx": 10000,
+      "cy": 3000,
+      "rx": 600,
+      "ry": 600
+    },
+    "text": {
+      "id": "text",
+      "parent": "page_1",
+      "order": "aG",
+      "layer": "layer_1",
+      "type": "text",
+      "x": 7000,
+      "y": 5000,
+      "text": "Every kind\non page {page}",
+      "size": 250,
+      "font": "serif",
+      "bold": true,
+      "align": "left"
+    },
+    "dim": {
+      "id": "dim",
+      "parent": "page_1",
+      "order": "aH",
+      "layer": "layer_1",
+      "type": "dimension",
+      "a": {
+        "x": 0,
+        "y": -600
+      },
+      "b": {
+        "x": 6000,
+        "y": -600
+      },
+      "offset": -400,
+      "dimensionStyle": "plan"
+    },
+    "dim_v": {
+      "id": "dim_v",
+      "parent": "page_1",
+      "order": "aI",
+      "layer": "layer_1",
+      "type": "dimension",
+      "a": {
+        "x": -800,
+        "y": 0
+      },
+      "b": {
+        "x": -800,
+        "y": 4000
+      },
+      "offset": 300,
+      "textColor": "#16a34a",
+      "verticalText": "up"
+    },
+    "note": {
+      "id": "note",
+      "parent": "page_1",
+      "order": "aJ",
+      "layer": "layer_1",
+      "type": "annotation",
+      "a": {
+        "x": 1500,
+        "y": 2000
+      },
+      "b": {
+        "x": 2500,
+        "y": 5200
+      },
+      "text": "Tiled floor",
+      "endMarker": "dot",
+      "bend": 0.3
+    },
+    "picture": {
+      "id": "picture",
+      "parent": "page_1",
+      "order": "aK",
+      "layer": "layer_1",
+      "type": "image",
+      "asset": "asset_tiny",
+      "x": 11500,
+      "y": 0,
+      "width": 1000,
+      "height": 1000,
+      "rotation": 10,
+      "opacity": 0.6
+    },
+    "chair": {
+      "id": "chair",
+      "name": "Chair",
+      "parent": null,
+      "order": "a1",
+      "type": "component"
+    },
+    "chair_seat": {
+      "id": "chair_seat",
+      "parent": "chair",
+      "order": "a0",
+      "type": "rect",
+      "x": 0,
+      "y": 0,
+      "width": 450,
+      "height": 450
+    },
+    "chair_back": {
+      "id": "chair_back",
+      "parent": "chair",
+      "order": "a1",
+      "style": {
+        "strokeWidth": 3
+      },
+      "type": "line",
+      "a": {
+        "x": 0,
+        "y": 0
+      },
+      "b": {
+        "x": 450,
+        "y": 0
+      }
+    },
+    "chair_1": {
+      "id": "chair_1",
+      "parent": "page_1",
+      "order": "aL",
+      "layer": "layer_furniture",
+      "type": "instance",
+      "component": "chair",
+      "x": 1000,
+      "y": 3000,
+      "rotation": 30
+    },
+    "chair_2": {
+      "id": "chair_2",
+      "parent": "page_1",
+      "order": "aM",
+      "layer": "layer_furniture",
+      "type": "instance",
+      "component": "chair",
+      "x": 2000,
+      "y": 3000,
+      "flipX": true,
+      "scale": 1.5,
+      "scaleX": 1.4
+    },
+    "group": {
+      "id": "group",
+      "name": "Marks",
+      "parent": "page_1",
+      "order": "aN",
+      "layer": "layer_1",
+      "modifiers": [
+        {
+          "type": "array",
+          "params": {
+            "columns": 3,
+            "rows": 2,
+            "dx": 600,
+            "dy": 600
+          },
+          "frame": {
+            "x": 12000,
+            "y": 2000
+          }
+        },
+        {
+          "type": "crop",
+          "params": {
+            "width": 1500,
+            "height": 1000
+          },
+          "frame": {
+            "x": 11900,
+            "y": 1900
+          }
+        }
+      ],
+      "type": "group",
+      "opacity": 0.5
+    },
+    "mark": {
+      "id": "mark",
+      "parent": "group",
+      "order": "a0",
+      "layer": "layer_1",
+      "style": {
+        "fill": "#f97316"
+      },
+      "type": "ellipse",
+      "cx": 12200,
+      "cy": 2200,
+      "rx": 150,
+      "ry": 150
+    },
+    "cross": {
+      "id": "cross",
+      "parent": "group",
+      "order": "a1",
+      "layer": "layer_1",
+      "type": "line",
+      "a": {
+        "x": 12050,
+        "y": 2200
+      },
+      "b": {
+        "x": 12350,
+        "y": 2200
+      }
+    },
+    "hatched": {
+      "id": "hatched",
+      "parent": "page_1",
+      "order": "aO",
+      "layer": "layer_1",
+      "modifiers": [
+        {
+          "type": "hatch",
+          "params": {
+            "spacing": 100,
+            "angle": 30
+          }
+        }
+      ],
+      "type": "rect",
+      "x": 11500,
+      "y": 4000,
+      "width": 1200,
+      "height": 900
+    },
+    "sheet": {
+      "id": "sheet",
+      "name": "On every sheet",
+      "parent": null,
+      "order": "a2",
+      "type": "component",
+      "sheet": {
+        "width": 420,
+        "height": 297
+      }
+    },
+    "sheet_logo": {
+      "id": "sheet_logo",
+      "parent": "sheet",
+      "order": "a0",
+      "type": "text",
+      "x": 10,
+      "y": 20,
+      "text": "{sheet} · {scale}",
+      "size": 5
+    },
+    "paper": {
+      "id": "paper",
+      "name": "Sheet 01",
+      "parent": "page_1",
+      "order": "aP",
+      "layer": "layer_1",
+      "type": "paper",
+      "x": -2000,
+      "y": -2000,
+      "width": 42000,
+      "height": 29700,
+      "scale": 100,
+      "titleBlock": {
+        "date": "2026-10-15",
+        "number": "A-01"
+      }
+    }
+  },
+  "colors": {
+    "brick": {
+      "id": "brick",
+      "name": "Brick",
+      "value": "#b5543c"
+    },
+    "glass": {
+      "id": "glass",
+      "name": "Glass",
+      "value": "#60a5fa80"
+    }
+  },
+  "wallTypes": {
+    "outer": {
+      "id": "outer",
+      "name": "Outer wall",
+      "thickness": 300,
+      "fill": "var(--brick)",
+      "layers": [
+        {
+          "name": "Brick",
+          "thickness": 200
+        },
+        {
+          "name": "Insulation",
+          "thickness": 100
+        }
+      ]
+    }
+  },
+  "dimensionStyles": {
+    "plan": {
+      "id": "plan",
+      "name": "Plan",
+      "startMarker": "arrow",
+      "endMarker": "arrow",
+      "unit": "cm",
+      "decimals": 0
+    }
+  },
+  "assets": {
+    "asset_tiny": {
+      "id": "asset_tiny",
+      "mime": "image/png",
+      "data": "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DwH4wZ/jMw/GdgAABV/wf54wmIOgAAAABJRU5ErkJggg==",
+      "width": 2,
+      "height": 2
+    }
+  }
+}

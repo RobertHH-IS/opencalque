@@ -1,9 +1,10 @@
 import { create } from 'zustand'
-import { applyOps } from '@opencalque/core'
 import { t } from '../i18n'
 import { platform } from '../platform'
 import { CLAUDE_MODELS, setAiPrefs, usePrefs, type Prefs } from '../prefs'
-import { collapseHistory, registry, replaceDoc, useStore } from '../store'
+import { registry } from '../extensions'
+import { applyOrThrow, collapseHistory, useStore } from '../store'
+import { visibleArea } from '../view'
 import { runRequest, systemPrompt, TOOLS, type AgentHost, type RequestContext } from './agent'
 import { anthropicProvider } from './anthropic'
 import { claudeCliProvider } from './claudecli'
@@ -78,11 +79,11 @@ const host: AgentHost = {
   registry,
   state: () => {
     const { doc, scope, selection, corner, activeLayer, view, viewport } = useStore.getState()
-    // What is on screen, in millimetres: the canvas's corners taken back through the view.
-    const visible = viewport.width > 0 ? { minX: -view.x / view.zoom, minY: -view.y / view.zoom, maxX: (viewport.width - view.x) / view.zoom, maxY: (viewport.height - view.y) / view.zoom } : null
+    const visible = visibleArea(view, viewport)
     return { doc, scope, selection, corner, activeLayer, visible }
   },
-  apply: (ops) => replaceDoc(applyOps(useStore.getState().doc, ops)),
+  // Throws on a failed operation, which the agent reports back to the model.
+  apply: applyOrThrow,
 }
 
 /** The model session of the current conversation, with the settings it was made with. */

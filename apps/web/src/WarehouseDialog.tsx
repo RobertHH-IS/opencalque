@@ -5,12 +5,15 @@ import { DRAWING_EXTENSIONS, guarded, importLibraryFrom } from './actions'
 import { language, msg, t, tn } from './i18n'
 import { platform } from './platform'
 import { setPrefs, usePrefs } from './prefs'
-import { apply, BUILT_IN_EXTENSION, editComponent, loadExtensions, registry, replaceDoc, setTool, toast, useStore } from './store'
+import { BUILT_IN_EXTENSION, loadExtensions, registry, useExtensions } from './extensions'
+import { editComponent } from './navigation'
+import { apply, applyOrThrow, setTool, useStore } from './store'
+import { toast, useWindows } from './windows'
 import { IconButton } from './ui'
 import { bundledExtensions, bundledLibraries, remoteCatalog, type Library } from './catalog'
 import { formatLength, formatNumber, unitSuffix } from './units'
 
-const close = () => useStore.setState({ warehouse: null })
+const close = () => useWindows.setState({ warehouse: null })
 
 /** A text of an extension that is not installed yet, in the user's language when the extension provides it. */
 const own = (extension: { translations?: Record<string, Record<string, string>> }, text: string) => extension.translations?.[language()]?.[text] ?? text
@@ -39,13 +42,41 @@ interface Card {
   /** What its tooltip says about it besides how to place it, when that is more than its card shows. */
   about?: string
   picture: string
-  place(): void
+  /** Puts it on the pointer, to be placed on the drawing; `carried` while the card is being dragged there. */
+  place(carried?: boolean): void
   /** Id of the component, for one that belongs to the drawing and can therefore be renamed, edited and deleted here. */
   own?: string
   /** A parametric object: its sizes and options are set once placed. Marked on its card. */
   parametric?: boolean
   /** The library a component of a library is in, and its id there. */
   library?: { id: string; component: string }
+}
+
+/**
+ * Lets a card be dragged onto the drawing. Once the pointer has moved a few pixels with the button
+ * held, the library closes and what the card holds follows the pointer as after a click on it; let
+ * go over the drawing, it is put down there (the canvas does that, for a `carried` placing). Let go
+ * anywhere else, it stays on the pointer, as after a click.
+ */
+function carry(e: React.PointerEvent, card: Card): void {
+  if (e.button !== 0 || (e.target as Element).closest('input, button')) return
+  const from = { x: e.clientX, y: e.clientY }
+  const move = (m: PointerEvent) => {
+    if (Math.hypot(m.clientX - from.x, m.clientY - from.y) < 5) return
+    window.removeEventListener('pointermove', move)
+    card.place(true)
+  }
+  // Heard after the canvas, which has put it down if it was let go there.
+  const end = () => {
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', end)
+    window.removeEventListener('pointercancel', end)
+    const { placing } = useStore.getState()
+    if (placing?.carried) useStore.setState({ placing: { ...placing, carried: false } })
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', end)
+  window.addEventListener('pointercancel', end)
 }
 
 /** Where parametric objects that say no category, or one nothing else is in, are listed. */
@@ -103,7 +134,7 @@ function lastSection(): string {
  */
 function Components({ libraries }: { libraries: Library[] }) {
   const doc = useStore((s) => s.doc)
-  const version = useStore((s) => s.extensionsVersion)
+  const version = useExtensions((s) => s.version)
   const [loaded, setLoaded] = useState<Record<string, Document>>({})
   const [chosenSection, setChosenSection] = useState(lastSection)
   const [search, setSearch] = useState('')
@@ -127,19 +158,23 @@ function Components({ libraries }: { libraries: Library[] }) {
     }
   }, [libraries])
 
-  /** Copies components of a library into the drawing; with one, goes straight to placing it. */
-  const add = (library: Document, ids: string[], from?: Library) =>
+  /**
+   * Copies components of a library into the drawing; with one, goes straight to placing it. What
+   * comes in is the library's: a copy brought in before is reused only while nothing in it has
+   * been changed, and one that was is left as another component of the drawing's own.
+   */
+  const add = (library: Document, ids: string[], from?: Library, carried?: boolean) =>
     guarded(() => {
-      const result = importComponents(useStore.getState().doc, library, ids)
+      const result = importComponents(useStore.getState().doc, library, ids, { original: true })
       // What arrives in the drawing is named in the user's language, like what the library showed.
       const names = Object.values(result.imported).flatMap((id): Op[] => {
         const name = result.doc.nodes[id]?.name
         const shown = name && from ? own(from, name) : name
         return shown && shown !== name ? [{ op: 'update_node', id, patch: { name: shown } }] : []
       })
-      replaceDoc(applyOps(result.doc, names))
+      applyOrThrow([...result.ops, ...names])
       close()
-      if (ids.length === 1) setTool('place', { type: 'instance', component: result.imported[ids[0]] })
+      if (ids.length === 1) setTool('place', { type: 'instance', component: result.imported[ids[0]], carried })
       else toast(tn(ids.length, '{n} component added. It is in the component library, under “In this drawing”.', '{n} components added. They are in the component library, under “In this drawing”.'))
     })
 
@@ -178,7 +213,7 @@ function Components({ libraries }: { libraries: Library[] }) {
         description: defaultSize(kind),
         about: kind.description ? t(kind.description) : undefined,
         picture: objectPicture(kind),
-        place: () => (close(), setTool('place', { type: 'parametric', kind: kind.kind })),
+        place: (carried) => (close(), setTool('place', { type: 'parametric', kind: kind.kind, carried })),
       })),
     [version, lengthUnit],
   )
@@ -191,7 +226,7 @@ function Components({ libraries }: { libraries: Library[] }) {
         name: c.name ?? c.id,
         description: c.description ?? '',
         picture: svgUrl(toSVG(doc, c.id, registry)),
-        place: () => (close(), setTool('place', { type: 'instance', component: c.id })),
+        place: (carried) => (close(), setTool('place', { type: 'instance', component: c.id, carried })),
       })),
     [doc, version],
   )
@@ -206,7 +241,7 @@ function Components({ libraries }: { libraries: Library[] }) {
           name: from ? own(from, c.name ?? c.id) : (c.name ?? c.id),
           description: from ? own(from, c.description ?? '') : (c.description ?? ''),
           picture: svgUrl(toSVG(library, c.id, registry)),
-          place: () => add(library, [c.id], from),
+          place: (carried) => add(library, [c.id], from, carried),
         }))
       }),
     [loaded, version, libraries],
@@ -344,11 +379,14 @@ function Components({ libraries }: { libraries: Library[] }) {
                   role="button"
                   tabIndex={0}
                   // Its name and what its card has no room for, then how to place it.
-                  title={[card.name, card.about ?? card.description, t('Click, then click on the drawing to place it')].filter(Boolean).join('\n\n')}
-                  onClick={card.place}
+                  title={[card.name, card.about ?? card.description, t('Click, then click on the drawing to place it, or drag it onto the drawing')].filter(Boolean).join('\n\n')}
+                  onClick={() => card.place()}
                   onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && card.place()}
+                  onPointerDown={(e) => carry(e, card)}
+                  // Dragged, the card is what it holds, not a picture to drop as a file.
+                  onDragStart={(e) => e.preventDefault()}
                 >
-                  {card.picture ? <img src={card.picture} alt="" /> : <span className="warehouse-blank" />}
+                  {card.picture ? <img src={card.picture} alt="" draggable={false} /> : <span className="warehouse-blank" />}
                   {card.parametric && (
                     <span className="warehouse-badge" title={t('Parametric: its sizes and options are set once it is placed, in its properties or by pulling its sides')}>
                       <SlidersHorizontal size={11} />
@@ -403,7 +441,7 @@ function Components({ libraries }: { libraries: Library[] }) {
 
 function Extensions({ catalog }: { catalog: DeclarativeExtension[] }) {
   const { installed, disabled } = usePrefs((p) => p.extensions)
-  useStore((s) => s.extensionsVersion)
+  useExtensions((s) => s.version)
   // Installed extensions stay listed even when no catalog offers them any more.
   const all = [...catalog, ...Object.values(installed).filter((e) => !catalog.some((c) => c.id === e.id))]
 
@@ -528,7 +566,7 @@ export function ExtensionWarehouse() {
 
 /** The component library: everything that can be placed, from the drawing, the app and a web catalog. */
 export function Warehouse() {
-  const open = useStore((s) => s.warehouse) === 'components'
+  const open = useWindows((s) => s.warehouse) === 'components'
   const { libraries } = useCatalog(open)
 
   if (!open) return null

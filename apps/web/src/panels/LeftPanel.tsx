@@ -4,7 +4,8 @@ import { childrenOf, layersOf, pagesOf, type Document, type Node, type Op, color
 import { moveInOrder, duplicatePage, placeIn } from '../actions'
 import { ColorChoice } from '../ColorChoice'
 import { msg, t } from '../i18n'
-import { apply, editComponent, select, showPage, useStore } from '../store'
+import { editComponent, showPage } from '../navigation'
+import { apply, select, useStore } from '../store'
 import { EditableText, IconButton, labelOf, Section, TypeIcon } from '../ui'
 
 const rename = (id: string) => (name: string) => apply([{ op: 'update_node', id, patch: { name } }])

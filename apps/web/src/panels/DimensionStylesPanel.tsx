@@ -5,7 +5,8 @@ import { msg, t } from '../i18n'
 import { apply, useStore } from '../store'
 import { EditableText, IconButton, Section } from '../ui'
 import { unit } from '../units'
-import { DIMENSION, FieldRow, patchFor, read, type FieldSpec, type Update } from './RightPanel'
+import { FieldRow, patchFor, read, type Update } from './properties/FieldRow'
+import { DIMENSION, type FieldSpec } from './properties/fields'
 import { Defines } from './WallTypesPanel'
 
 /** What the tick of a property of a dimension style says, on and off, and what stands for its value when it is off. */

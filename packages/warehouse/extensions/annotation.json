@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "id": "opencalque.annotation",
   "name": "Plan annotations",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "OpenCalque",
   "description": "North arrow, scale bar and level marker.",
   "translations": {
@@ -66,6 +66,18 @@
       "Divisions": "分割数",
       "Level": "レベル",
       "Text size": "文字サイズ"
+    },
+    "ko": {
+      "Plan annotations": "도면 기호",
+      "North arrow, scale bar and level marker.": "방위표, 축척 막대, 레벨 기호.",
+      "North arrow": "방위표",
+      "Scale bar": "축척 막대",
+      "Level marker": "레벨 기호",
+      "Size": "크기",
+      "Length": "길이",
+      "Divisions": "눈금 수",
+      "Level": "레벨",
+      "Text size": "글자 크기"
     }
   },
   "objects": [

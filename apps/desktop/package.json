@@ -1,7 +1,7 @@
 {
   "name": "@opencalque/desktop",
   "productName": "OpenCalque",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "main": "./out/main/index.js",
@@ -9,7 +9,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "start": "electron-vite preview",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/preload",
     "smoke": "electron scripts/smoke.cjs",
     "dist": "electron-builder --publish never"
   },
@@ -33,6 +33,10 @@
     },
     "files": [
       "out/**"
+    ],
+    "extraResources": [
+      { "from": "../../LICENSE", "to": "LICENSE.txt" },
+      { "from": "../../THIRD-PARTY-NOTICES.txt", "to": "THIRD-PARTY-NOTICES.txt" }
     ],
     "npmRebuild": false,
     "fileAssociations": [

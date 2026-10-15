@@ -25,6 +25,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build:web
+      # The licences shown under About and shipped with the installers are those of what the build holds.
+      - run: pnpm notices --check
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm exec playwright test
       - uses: actions/upload-artifact@v4

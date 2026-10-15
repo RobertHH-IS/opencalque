@@ -1,44 +1,32 @@
 import { create } from 'zustand'
-import { applyOps, applyTransform, buildScene, createDocument, declarativeExtension, holdsChildren, layersOf, pagesOf, Registry, rootOf, sceneBounds, type Document, type NodeInput, type NodeOf, type Op, type Transform, type Vec2, wallEndsAt } from '@opencalque/core'
-import { architecture } from '@opencalque/ext-architecture'
+import { applyOps, createDocument, holdsChildren, layersOf, pagesOf, type Document, type NodeInput, type Op, type Vec2, wallEndsAt } from '@opencalque/core'
 import type { StoredFile } from './platform'
-import { bundledExtensions } from './catalog'
-import { setPrefs, usePrefs } from './prefs'
-import { ahead, scopePath, type ScopePath, type ScopeStep } from './scopePath'
+import type { Tool } from './tools'
+import { MEASURE_TOOLS, ROOM_TOOLS, SHAPE_TOOLS, TEXT_TOOLS } from './tools'
+import type { View } from './view'
+import { closeWindows, toast } from './windows'
 
-/** The one extension that is compiled into the app. It can be switched off but not removed. */
-export const BUILT_IN_EXTENSION = architecture.id
+export type { Tool } from './tools'
+export type { View } from './view'
+
+/** What the place tool puts down; `carried` while it is being dragged from the component library, to be put down where the button is let go. */
+export type Placing = ({ type: 'instance'; component: string } | { type: 'parametric'; kind: string }) & { carried?: boolean }
 
 /**
- * The extensions in use. It is always this same object; `loadExtensions` refills it, and
- * `extensionsVersion` in the store changes so that whatever depends on it redraws.
+ * One undoable step. In `past`, `doc` is the drawing before the step; in `future`, the drawing after
+ * it. Either way `ops` are the operations that turn the earlier of the two into the later: every
+ * change the editor records is a list of operations, which is what a shared drawing would send.
  */
-export const registry = new Registry()
-
-export type Tool = 'select' | 'hand' | 'line' | 'rect' | 'ellipse' | 'wall' | 'dimension' | 'measure' | 'angle' | 'split' | 'rotate' | 'calibrate' | 'eyedropper' | 'text' | 'annotation' | 'paper' | 'room' | 'divider' | 'place'
-/** The plain shapes, which share one toolbar button. */
-export const SHAPE_TOOLS: Tool[] = ['line', 'rect', 'ellipse']
-/** The tools for naming spaces, which share another. */
-export const ROOM_TOOLS: Tool[] = ['room', 'divider']
-/** The tools for writing on the drawing, which share a third. */
-export const TEXT_TOOLS: Tool[] = ['text', 'annotation', 'dimension']
-/** The tools that read something off the drawing without adding to it. */
-export const MEASURE_TOOLS: Tool[] = ['measure', 'angle']
-
-export type Placing = { type: 'instance'; component: string } | { type: 'parametric'; kind: string }
-
-export interface View {
-  /** Screen position of the world origin, in CSS pixels. */
-  x: number
-  y: number
-  /** Pixels per millimetre. */
-  zoom: number
+export interface Step {
+  doc: Document
+  ops: Op[]
 }
 
-interface State {
+/** The open drawing, its history, and where in it the user is. Opening another drawing replaces all of it. */
+interface Session {
   doc: Document
-  past: Document[]
-  future: Document[]
+  past: Step[]
+  future: Step[]
   /** The document before the gesture in progress; `doc` is then a preview that is not in history yet. */
   base: Document | null
   saved: Document
@@ -63,25 +51,18 @@ interface State {
    * object of its own, so it is known by where it is. It and `selection` are never both set.
    */
   corner: Vec2 | null
+  activeLayer: string
+  /** The wall type the wall tool draws next, or null for walls of no type: one of this drawing's, so it goes with it. */
+  wallType: string | null
+  view: View
+}
+
+/** What is being done right now: the tool, the shape in progress, what the pointer is on. Opening a drawing starts it afresh. */
+interface Interaction {
   tool: Tool
   placing: Placing | null
   /** Rotation, in degrees, of the object following the cursor in the place tool. */
   placingRotation: number
-  activeLayer: string
-  wallThickness: number
-  /** The wall type the wall tool draws next, or null for walls of no type. */
-  wallType: string | null
-  /** Where the points clicked with the wall tool lie on the wall: along its middle, or along its left or right face as it is drawn. */
-  wallJustify: 'left' | 'center' | 'right'
-  /** The drawing scale (the N of 1:N) given to the papers the paper tool makes, which sets how large the standard formats are. */
-  paperScale: number
-  /** The shape tool used last, shown on the toolbar's shape button. */
-  shapeTool: Tool
-  /** Likewise for the room button. */
-  roomTool: Tool
-  /** And for the text button. */
-  textTool: Tool
-  measureTool: Tool
   /**
    * Sizes typed in the quick bar for the shape being drawn; they win over the pointer. For a
    * rectangle or ellipse `a` is the width and `b` the height; for a line, wall or polyline segment
@@ -101,6 +82,42 @@ interface State {
    * placed so far. Hints and the size fields show only what applies at that step.
    */
   drawStep: number
+  /** The two points picked with the calibrate tool, waiting for their real distance. */
+  calibration: { a: Vec2; b: Vec2 } | null
+  /** The line of a wall the pointer is over in the properties panel, to show on the drawing. */
+  edgeHover: { wall: string; edge: 'left' | 'right' | 'a' | 'b' } | null
+  /**
+   * Set while the pointer is on a face of the selected wall, or drags one to change its thickness,
+   * or is on the line across one of its free ends, or drags it to change its length: for the hints
+   * to say so.
+   */
+  wallFace: 'hover' | 'drag' | 'end hover' | 'end drag' | null
+  /**
+   * The text being typed in place. `create` is the node to add when it is a new text that is not in
+   * the drawing yet (it exists only as a preview until the typing ends).
+   */
+  editingText: { id: string; create?: NodeInput } | null
+  /** Where the right-click menu is open, in window coordinates. */
+  contextMenu: { x: number; y: number } | null
+  /** Where on the drawing the last right-click was, for commands of its menu that act at that very place. */
+  menuPoint: Vec2 | null
+  status: string
+}
+
+/** How the tools draw, as the user left them: these belong to the session, not to a drawing, and outlive opening another. */
+interface ToolSettings {
+  wallThickness: number
+  /** Where the points clicked with the wall tool lie on the wall: along its middle, or along its left or right face as it is drawn. */
+  wallJustify: 'left' | 'center' | 'right'
+  /** The drawing scale (the N of 1:N) given to the papers the paper tool makes, which sets how large the standard formats are. */
+  paperScale: number
+  /** The shape tool used last, shown on the toolbar's shape button. */
+  shapeTool: Tool
+  /** Likewise for the room button. */
+  roomTool: Tool
+  /** And for the text button. */
+  textTool: Tool
+  measureTool: Tool
   /** Stroke colour given to the shapes drawn next, or null for the layer's colour. */
   drawColor: string | null
   /** Likewise their line weight, in pixels, and their pattern of dashes; null leaves each as it comes. */
@@ -110,44 +127,18 @@ interface State {
   dimensionTemplate: Record<string, unknown>
   /** Likewise for the annotations the annotation tool draws next: their ends, curve and text size. */
   annotationTemplate: Record<string, unknown>
-  /** The two points picked with the calibrate tool, waiting for their real distance. */
-  calibration: { a: Vec2; b: Vec2 } | null
-  preferencesOpen: boolean
-  welcomeOpen: boolean
-  /** The line of a wall the pointer is over in the properties panel, to show on the drawing. */
-  edgeHover: { wall: string; edge: 'left' | 'right' | 'a' | 'b' } | null
-  /**
-   * Set while the pointer is on a face of the selected wall, or drags one to change its thickness,
-   * or is on the line across one of its free ends, or drags it to change its length: for the hints
-   * to say so.
-   */
-  wallFace: 'hover' | 'drag' | 'end hover' | 'end drag' | null
-  exportOpen: boolean
-  aboutOpen: boolean
-  /**
-   * The text being typed in place. `create` is the node to add when it is a new text that is not in
-   * the drawing yet (it exists only as a preview until the typing ends).
-   */
-  editingText: { id: string; create?: NodeInput } | null
-  /** Whether the component library is open. */
-  warehouse: 'components' | null
-  /** The page Preferences opens on next, when something asked for one; otherwise the one it was left on. */
-  preferencesPage: string | null
-  /** Bumped whenever the set of extensions in use changes. */
-  extensionsVersion: number
-  /** Where the right-click menu is open, in window coordinates. */
-  contextMenu: { x: number; y: number } | null
-  /** Where on the drawing the last right-click was, for commands of its menu that act at that very place. */
-  menuPoint: Vec2 | null
-  view: View
-  viewport: { width: number; height: number }
-  status: string
-  toast: string | null
 }
+
+/** The size of the drawing area on screen, which outlives drawings too. */
+interface Screen {
+  viewport: { width: number; height: number }
+}
+
+type State = Session & Interaction & ToolSettings & Screen
 
 const HISTORY_LIMIT = 200
 
-function initial(doc: Document, file: StoredFile | null): State {
+function session(doc: Document, file: StoredFile | null): Session {
   const page = pagesOf(doc)[0].id
   return {
     doc,
@@ -162,48 +153,45 @@ function initial(doc: Document, file: StoredFile | null): State {
     trail: null,
     selection: [],
     corner: null,
-    tool: 'select',
-    placing: null,
-    placingRotation: 0,
     activeLayer: layersOf(doc)[0].id,
-    wallThickness: 200,
     wallType: null,
-    wallJustify: 'center',
-    paperScale: 100,
-    shapeTool: 'rect',
-    roomTool: 'room',
-    textTool: 'text',
-    measureTool: 'measure',
-    annotationTemplate: {},
-    drawLocks: {},
-    axisLock: null,
-    drawLive: null,
-    drawStep: 0,
-    drawColor: null,
-    drawWeight: null,
-    drawDash: null,
-    dimensionTemplate: {},
-    calibration: null,
-    preferencesOpen: false,
-    welcomeOpen: false,
-    edgeHover: null,
-    wallFace: null,
-    exportOpen: false,
-    aboutOpen: false,
-    contextMenu: null,
-    menuPoint: null,
-    warehouse: null,
-    preferencesPage: null,
-    editingText: null,
-    extensionsVersion: 0,
     view: { x: 320, y: 220, zoom: 0.1 },
-    viewport: { width: 0, height: 0 },
-    status: '',
-    toast: null,
   }
 }
 
-export const useStore = create<State>(() => initial(createDocument(), null))
+const IDLE: Interaction = {
+  tool: 'select',
+  placing: null,
+  placingRotation: 0,
+  drawLocks: {},
+  axisLock: null,
+  drawLive: null,
+  drawStep: 0,
+  calibration: null,
+  edgeHover: null,
+  wallFace: null,
+  editingText: null,
+  contextMenu: null,
+  menuPoint: null,
+  status: '',
+}
+
+const SETTINGS: ToolSettings = {
+  wallThickness: 200,
+  wallJustify: 'center',
+  paperScale: 100,
+  shapeTool: 'rect',
+  roomTool: 'room',
+  textTool: 'text',
+  measureTool: 'measure',
+  drawColor: null,
+  drawWeight: null,
+  drawDash: null,
+  dimensionTemplate: {},
+  annotationTemplate: {},
+}
+
+export const useStore = create<State>(() => ({ ...session(createDocument(), null), ...IDLE, ...SETTINGS, viewport: { width: 0, height: 0 } }))
 const get = useStore.getState
 const set = useStore.setState
 
@@ -225,53 +213,35 @@ function settle(s: State, doc: Document): Partial<State> {
   }
 }
 
-/** Whether version `a` ("1.2.0") is later than `b`. */
-const later = (a: string, b: string) => {
-  const [x, y] = [a, b].map((v) => v.split('.').map((part) => parseInt(part, 10) || 0))
-  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0)
-  return false
+/** The operations of the preview shown now, computed from `base`; what `commit` records. */
+let pending: Op[] = []
+
+/**
+ * Records `doc`, made from the document before the gesture (or the current one) by `ops`, as one
+ * undoable step. Every change kept in history passes through here, with the operations that made it.
+ */
+function record(doc: Document, ops: Op[]): void {
+  const s = get()
+  const before = s.base ?? s.doc
+  pending = []
+  if (doc === before) return set({ ...settle(s, doc), base: null })
+  set({ ...settle(s, doc), base: null, past: [...s.past, { doc: before, ops }].slice(-HISTORY_LIMIT), future: [] })
 }
 
 /**
- * Puts the built-in extension (unless switched off) and every installed one into the registry.
- * An installed extension that no longer loads is skipped, so one bad file cannot stop the app. One
- * installed from those that ship with the app is replaced by the one that ships now, when that is
- * a later version: it was installed as a copy, and would otherwise never get what was added to it.
+ * Applies operations as one undoable step, or throws when one fails. During a gesture they go on
+ * top of its preview, which becomes part of the same step.
  */
-export function loadExtensions(): void {
-  const stored = usePrefs.getState().extensions
-  const newer = bundledExtensions().filter((extension) => stored.installed[extension.id] && later(extension.version, stored.installed[extension.id].version))
-  if (newer.length > 0) setPrefs({ extensions: { ...stored, installed: { ...stored.installed, ...Object.fromEntries(newer.map((extension) => [extension.id, extension])) } } })
-  const { installed, disabled } = usePrefs.getState().extensions
-  registry.clear()
-  if (!disabled.includes(BUILT_IN_EXTENSION)) registry.use(architecture)
-  for (const extension of Object.values(installed)) {
-    try {
-      registry.use(declarativeExtension(extension))
-    } catch (error) {
-      console.warn(`Extension ${extension.id} was not loaded:`, error)
-    }
-  }
-  set({ extensionsVersion: get().extensionsVersion + 1 })
-}
-
-export function toast(message: string): void {
-  set({ toast: message })
-  setTimeout(() => get().toast === message && set({ toast: null }), 4000)
-}
-
-/** Replaces the document as one undoable step. */
-export function replaceDoc(doc: Document): void {
+export function applyOrThrow(ops: Op[]): void {
   const s = get()
-  const before = s.base ?? s.doc
-  if (doc === before) return set({ ...settle(s, doc), base: null })
-  set({ ...settle(s, doc), base: null, past: [...s.past, before].slice(-HISTORY_LIMIT), future: [] })
+  const all = s.base ? [...pending, ...ops] : ops
+  record(applyOps(s.doc, ops), all)
 }
 
 /** Applies operations as one undoable step. Reports failures to the user and returns false. */
 export function apply(ops: Op[]): boolean {
   try {
-    replaceDoc(applyOps(get().doc, ops))
+    applyOrThrow(ops)
     return true
   } catch (error) {
     toast((error as Error).message)
@@ -288,6 +258,7 @@ export function preview(ops: Op[]): boolean {
   const base = s.base ?? s.doc
   try {
     set({ ...settle(s, applyOps(base, ops)), base })
+    pending = ops
     return true
   } catch (error) {
     set({ status: (error as Error).message.split('\n')[0] })
@@ -301,36 +272,40 @@ export function preview(ops: Op[]): boolean {
  */
 export function collapseHistory(mark: number): void {
   const { past } = get()
-  if (past.length > mark + 1) set({ past: past.slice(0, mark + 1) })
+  if (past.length <= mark + 1) return
+  const merged = past.slice(mark)
+  set({ past: [...past.slice(0, mark), { doc: merged[0].doc, ops: merged.flatMap((step) => step.ops) }] })
 }
 
 export function commit(): void {
-  if (get().base) replaceDoc(get().doc)
+  if (get().base) record(get().doc, pending)
 }
 
 export function cancel(): void {
   const s = get()
+  pending = []
   if (s.base) set({ ...settle(s, s.base), base: null })
 }
 
 export function undo(): void {
   cancel()
   const s = get()
-  const doc = s.past.at(-1)
-  if (doc) set({ ...settle(s, doc), past: s.past.slice(0, -1), future: [...s.future, s.doc] })
+  const step = s.past.at(-1)
+  if (step) set({ ...settle(s, step.doc), past: s.past.slice(0, -1), future: [...s.future, { doc: s.doc, ops: step.ops }] })
 }
 
 export function redo(): void {
   cancel()
   const s = get()
-  const doc = s.future.at(-1)
-  if (doc) set({ ...settle(s, doc), future: s.future.slice(0, -1), past: [...s.past, s.doc] })
+  const step = s.future.at(-1)
+  if (step) set({ ...settle(s, step.doc), future: s.future.slice(0, -1), past: [...s.past, { doc: s.doc, ops: step.ops }] })
 }
 
+/** Opens a drawing: its session and what is being done start afresh, every window closes, and how the tools draw stays as it was. */
 export function loadDocument(doc: Document, file: StoredFile | null): void {
-  // Tool settings belong to the session, not the document.
-  const { viewport, wallThickness, wallJustify, paperScale, dimensionTemplate, annotationTemplate, extensionsVersion, shapeTool, roomTool, textTool, measureTool, drawColor, drawWeight, drawDash } = get()
-  set({ ...initial(doc, file), viewport, wallThickness, wallJustify, paperScale, dimensionTemplate, annotationTemplate, extensionsVersion, shapeTool, roomTool, textTool, measureTool, drawColor, drawWeight, drawDash })
+  pending = []
+  set({ ...session(doc, file), ...IDLE })
+  closeWindows()
 }
 
 export function setTool(tool: Tool, placing: Placing | null = null): void {
@@ -350,111 +325,4 @@ export function selectCorner(at: Vec2 | null): void {
   set({ selection: [], corner: at })
 }
 
-/** Shows a page; showing the page already shown, from inside something, is leaving it for the page. */
-export function showPage(id: string): void {
-  const { doc, scope, page, through, trail } = get()
-  const left = id === page && scope !== page ? (trailFrom(doc, page, scope, through, trail) ?? { scope, through }) : null
-  set({ page: id, scope: id, through: [], trail: left, selection: [] })
-}
-
-/** The way to the scope, and the places ahead of it on the trail (`ahead`): none when that way does not lead into it. */
-export function trailAhead(s: Pick<State, 'doc' | 'page' | 'scope' | 'through' | 'trail'> = get()): { path: ScopePath; trail: ScopePath | null; steps: ScopeStep[] } {
-  const path = scopePath(s.doc, s.page, s.scope, s.through)
-  if (!s.trail) return { path, trail: null, steps: [] }
-  const trail = scopePath(s.doc, s.page, s.trail.scope, s.trail.through)
-  return { path, trail, steps: ahead(path, trail) }
-}
-
-/** `trail`, while the way to `scope` leads into it. */
-function trailFrom(doc: Document, page: string, scope: string, through: string[] | null, trail: State['trail']): State['trail'] {
-  return trail && trailAhead({ doc, page, scope, through, trail }).steps.length > 0 ? trail : null
-}
-
-/**
- * Goes inside a component or group to edit what it contains, or with null comes back out one step
- * (`scopePath`): from a group to whatever holds it, from a component to where its placement is,
- * leaving what was gone into selected; a component opened from the library goes back to the page.
- * Given the instance it was reached by, a component stays where and as large as that instance drew
- * it, and comes back out the same way: only the rest of the drawing goes away. Going into anything
- * that is not on the trail forgets it.
- */
-export function editComponent(id: string | null, instance?: NodeOf<'instance'>): void {
-  const { doc, scope, page, view, through, trail } = get()
-  if (id !== null) {
-    const enter = (to: Pick<State, 'scope' | 'through'> & Partial<State>) => set({ ...to, selection: [], trail: trailFrom(doc, page, to.scope, to.through, trail) })
-    if (doc.nodes[id]?.type !== 'component') return enter({ scope: id, through })
-    const chain = rootOf(doc, scope)?.type === 'page' ? [] : through
-    if (!instance || !chain) return enter({ scope: id, through: null })
-    return enter({ scope: id, through: [...chain, instance.id], view: carried(view, doc, id, [instance], 1) })
-  }
-  const { steps } = scopePath(doc, page, scope, through)
-  if (steps.length > 1) return leaveTo(steps[steps.length - 2].id)
-  set({ scope: page, through: [], trail: null, selection: [] })
-}
-
-/**
- * Comes back out to a place on the way to what is being edited (`scopePath`), with what leads on
- * from there selected: the group gone into, or the placement of the component. Coming out of
- * components goes back through their placements, so the drawing stays where it was on screen.
- * Where it came out of becomes the trail, unless it was already on the way into a deeper one.
- */
-export function leaveTo(id: string): void {
-  const { doc, scope, page, view, through, trail } = get()
-  const path = scopePath(doc, page, scope, through)
-  const at = path.steps.findIndex((step) => step.id === id)
-  if (at < 0 || at === path.steps.length - 1) return
-  const { depth } = path.steps[at]
-  const next = path.steps[at + 1]
-  const left = (path.through ?? []).slice(depth).map((ref) => doc.nodes[ref] as NodeOf<'instance'>)
-  set({
-    scope: id,
-    through: path.through && path.through.slice(0, depth),
-    trail: trailFrom(doc, page, scope, through, trail) ?? { scope, through },
-    selection: [next.depth === depth ? next.id : left[0].id],
-    ...(left.length > 0 ? { view: carried(view, doc, rootOf(doc, scope)!.id, left, -1) } : {}),
-  })
-}
-
-/**
- * Goes back into a place on the trail, ahead of the scope, by the placements it was left through,
- * so the drawing is where it was on screen; what leads on from there is selected, as when leaving.
- */
-export function returnTo(id: string): void {
-  const { doc, view } = get()
-  const { path, trail, steps } = trailAhead()
-  const at = steps.findIndex((step) => step.id === id)
-  if (!trail || at < 0) return
-  const { depth } = steps[at]
-  const next = steps[at + 1]
-  const into = (trail.through ?? []).slice(path.steps[path.steps.length - 1].depth, depth).map((ref) => doc.nodes[ref] as NodeOf<'instance'>)
-  set({
-    scope: id,
-    through: trail.through && trail.through.slice(0, depth),
-    selection: next ? [next.depth === depth ? next.id : trail.through![depth]] : [],
-    ...(into.length > 0 ? { view: carried(view, doc, rootOf(doc, id)!.id, into, 1) } : {}),
-  })
-}
-
-/** Lets go of the places left: the breadcrumb no longer offers to go back into them. */
-export function forgetTrail(): void {
-  set({ trail: null })
-}
-
-/**
- * The view that shows a component's contents where `instances` (outermost first) draw them, going
- * in (1), or the other way, coming out (-1). The middle of the contents is what stays put, which
- * for an instance that is not turned is every point of it.
- */
-function carried(view: View, doc: Document, component: string, instances: Transform[], way: 1 | -1): View {
-  const box = sceneBounds(buildScene(doc, component, registry))
-  const inner = box ? { x: (box.minX + box.maxX) / 2, y: (box.minY + box.maxY) / 2 } : { x: 0, y: 0 }
-  const outer = instances.reduceRight((p, t) => applyTransform(p, t), inner)
-  const scale = instances.reduce((k, t) => k * (t.scale ?? 1), 1)
-  const [from, to, zoom] = way === 1 ? [outer, inner, view.zoom * scale] : [inner, outer, view.zoom / scale]
-  const at = { x: from.x * view.zoom + view.x, y: from.y * view.zoom + view.y }
-  return { zoom, x: at.x - to.x * zoom, y: at.y - to.y * zoom }
-}
-
 export const isDirty = (s: State = get()) => (s.base ?? s.doc) !== s.saved
-
-loadExtensions()

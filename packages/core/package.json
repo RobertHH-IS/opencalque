@@ -1,13 +1,13 @@
 {
   "name": "@opencalque/core",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0",
   "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p test"
   },
   "dependencies": {
     "clipper-lib": "6.4.2",

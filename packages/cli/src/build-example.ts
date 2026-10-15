@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 import { applyOps, componentsOf, createDocument, importComponents, parseDocument, serializeDocument, type Document, type NodeInput, type Op } from '@opencalque/core'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const library = (name: string) => parseDocument(JSON.parse(readFileSync(join(here, `../../../apps/web/src/warehouse/components/${name}.opencalque`), 'utf8')))
+const library = (name: string) => parseDocument(JSON.parse(readFileSync(join(here, `../../warehouse/components/${name}.opencalque`), 'utf8')))
 
 let doc: Document = applyOps(createDocument('Apartment'), [
   { op: 'update_node', id: 'page_1', patch: { name: 'Ground floor' } },

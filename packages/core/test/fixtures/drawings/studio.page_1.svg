@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1106.5 -1241.5 7603 5688" font-family="sans-serif">
+<rect x="-1106.5" y="-1241.5" width="7603" height="5688" fill="white"/>
+<path d="M-100 -100 L0 0 L100 100 L1200 100 L1200 -100 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M2700 -100 L2700 100 L5900 100 L6000 0 L6100 -100 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M6100 -100 L6000 0 L5900 100 L5900 1400 L6100 1400 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M6100 2600 L5900 2600 L5900 3900 L6000 4000 L6100 4100 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M6100 4100 L6000 4000 L5900 3900 L1900 3900 L1900 4100 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M1000 4100 L1000 3900 L100 3900 L0 4000 L-100 4100 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M-100 4100 L0 4000 L100 3900 L100 100 L0 0 L-100 -100 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M3650 0 L3550 0 L3550 1200 L3650 1200 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M3650 2000 L3550 2000 L3550 4000 L3650 4000 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+<path d="M-100 -100 L0 0 L100 100 L1200 100 L1200 -100 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M2700 -100 L2700 100 L5900 100 L6000 0 L6100 -100 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M6100 -100 L6000 0 L5900 100 L5900 1400 L6100 1400 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M6100 2600 L5900 2600 L5900 3900 L6000 4000 L6100 4100 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M6100 4100 L6000 4000 L5900 3900 L1900 3900 L1900 4100 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M1000 4100 L1000 3900 L100 3900 L0 4000 L-100 4100 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M-100 4100 L0 4000 L100 3900 L100 100 L0 0 L-100 -100 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M3650 0 L3550 0 L3550 1200 L3650 1200 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M3650 2000 L3550 2000 L3550 4000 L3650 4000 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M1900 4100 L1000 4100" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M1900 3900 L1000 3900" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M1900 3900 L1900 3000" fill="none" stroke="#1f1f1f" stroke-width="2" vector-effect="non-scaling-stroke"/>
+<path d="M1000 3900 L1001.927 3841.137 L1007.7 3782.526 L1017.293 3724.419 L1030.667 3667.063 L1047.763 3610.704 L1068.508 3555.585 L1092.815 3501.94 L1120.577 3450 L1151.677 3399.987 L1185.982 3352.115 L1223.344 3306.589 L1263.604 3263.604 L1306.589 3223.344 L1352.115 3185.982 L1399.987 3151.677 L1450 3120.577 L1501.94 3092.815 L1555.585 3068.508 L1610.704 3047.763 L1667.063 3030.667 L1724.419 3017.293 L1782.526 3007.7 L1841.137 3001.927 L1900 3000" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M3650 1200 L3650 2000" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M3550 1200 L3550 2000" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M3550 1200 L2750 1200" fill="none" stroke="#1f1f1f" stroke-width="2" vector-effect="non-scaling-stroke"/>
+<path d="M3550 2000 L3497.677 1998.287 L3445.579 1993.156 L3393.928 1984.628 L3342.945 1972.741 L3292.848 1957.544 L3243.853 1939.104 L3196.169 1917.498 L3150 1892.82 L3105.544 1865.176 L3062.991 1834.683 L3022.523 1801.472 L2984.315 1765.685 L2948.528 1727.477 L2915.317 1687.009 L2884.824 1644.456 L2857.18 1600 L2832.502 1553.831 L2810.896 1506.147 L2792.456 1457.152 L2777.259 1407.055 L2765.372 1356.072 L2756.844 1304.421 L2751.713 1252.323 L2750 1200" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M3800 3700 L4700 3700 L4700 1540 L4800 1540 L4800 3700 L5700 3700 L5700 640 L3800 640 Z" fill="#ffffff"/>
+<ellipse cx="4250" cy="3565" rx="23.625" ry="23.625" fill="#ffffff"/>
+<path d="M3800 3700 L4700 3700 L4700 1540 L4800 1540 L4800 3700 L5700 3700 L5700 640 L3800 640 Z" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M3800 3430 L4700 3430" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M3800 3160 L4700 3160" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M3800 2890 L4700 2890" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M3800 2620 L4700 2620" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M3800 2350 L4700 2350" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M3800 2080 L4700 2080" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M3800 1810 L4700 1810" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M3800 1540 L4700 1540" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4800 1540 L5700 1540" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4800 1810 L5700 1810" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4800 2080 L5700 2080" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4800 2350 L5700 2350" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4800 2620 L5700 2620" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4800 2890 L5700 2890" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4800 3160 L5700 3160" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4800 3430 L5700 3430" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M4250 3565 L4250 1090 L5250 1090 L5250 3565" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M5306.7 3470.5 L5250 3565 L5193.3 3470.5" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<ellipse cx="4250" cy="3565" rx="23.625" ry="23.625" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M1170 -100 L2730 -100 L2730 -150 L1170 -150 Z" fill="#ffffff"/>
+<path d="M1200 -100 L2700 -100" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M1200 100 L2700 100" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M1250 -100 L1250 100" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M2650 -100 L2650 100" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M1250 -25 L2650 -25" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M1250 25 L2650 25" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M1716.667 -100 L1716.667 100" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M2183.333 -100 L2183.333 100" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M1170 -100 L2730 -100 L2730 -150 L1170 -150 Z" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M6100 1370 L6100 2630 L6150 2630 L6150 1370 Z" fill="#ffffff"/>
+<path d="M6100 1400 L6100 2600" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M5900 1400 L5900 2600" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M6100 1450 L5900 1450" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M6100 2550 L5900 2550" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M6025 1450 L6025 2550" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M5975 1450 L5975 2550" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M6100 2000 L5900 2000" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M6100 1370 L6100 2630 L6150 2630 L6150 1370 Z" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>
+<path d="M700 750 L1900 750 L1900 1450 L700 1450 Z" fill="#ffffff"/>
+<ellipse cx="1000" cy="700" rx="200" ry="200" fill="#ffffff"/>
+<ellipse cx="1600" cy="700" rx="200" ry="200" fill="#ffffff"/>
+<path d="M700 750 L1900 750 L1900 1450 L700 1450 Z" fill="none" stroke="#2563eb" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<ellipse cx="1000" cy="700" rx="200" ry="200" fill="none" stroke="#2563eb" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<ellipse cx="1600" cy="700" rx="200" ry="200" fill="none" stroke="#2563eb" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M2950 2000 L2950 3200 L2250 3200 L2250 2000 Z" fill="#ffffff"/>
+<ellipse cx="3000" cy="2300" rx="200" ry="200" fill="#ffffff" transform="rotate(90 3000 2300)"/>
+<ellipse cx="3000" cy="2900" rx="200" ry="200" fill="#ffffff" transform="rotate(90 3000 2900)"/>
+<path d="M2950 2000 L2950 3200 L2250 3200 L2250 2000 Z" fill="none" stroke="#2563eb" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<ellipse cx="3000" cy="2300" rx="200" ry="200" fill="none" stroke="#2563eb" stroke-width="1" vector-effect="non-scaling-stroke" transform="rotate(90 3000 2300)"/>
+<ellipse cx="3000" cy="2900" rx="200" ry="200" fill="none" stroke="#2563eb" stroke-width="1" vector-effect="non-scaling-stroke" transform="rotate(90 3000 2900)"/>
+<path d="M0 0 L0 -760" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M6000 0 L6000 -760" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M0 -700 L6000 -700" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M-35.355 -664.645 L35.355 -735.355" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M5964.645 -664.645 L6035.355 -735.355" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<text x="3000" y="-745" font-size="150" fill="#b91c1c" text-anchor="middle">6000</text>
+<path d="M0 0 L-760 0" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M0 4000 L-760 4000" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M-700 0 L-700 4000" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M-735.355 -35.355 L-664.645 35.355" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M-735.355 3964.645 L-664.645 4035.355" fill="none" stroke="#b91c1c" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<text x="-655" y="2000" font-size="150" fill="#b91c1c" text-anchor="middle" transform="rotate(90 -655 2000)">4000</text>
+<text x="900" y="3300" font-size="200" fill="#b91c1c">Living room</text>
+</svg>

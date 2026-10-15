@@ -1,0 +1,244 @@
+import { type Node, TEXT_FIELDS, type Pattern } from '@opencalque/core'
+import { msg, t } from '../../i18n'
+import { registry } from '../../extensions'
+
+/* The fields of the Properties panel, by type of object: which properties are shown, under which heading, as what kind of field. */
+
+export interface Option {
+  value: string
+  label: string
+}
+
+export interface FieldSpec {
+  /** Property path, one or two levels deep: "x", "a.x", "props.width", "style.stroke". */
+  path: string
+  label: string
+  /** 'dash' is a checkbox standing for a dash pattern; 'opacity' a slider from 0 to 1, shown as a percentage. */
+  type: 'number' | 'string' | 'boolean' | 'color' | 'dash' | 'weight' | 'pattern' | 'opacity'
+  /** Heading the field appears under. Defaults to "Geometry". */
+  section?: string
+  /** Shown when the property is unset. */
+  fallback?: number | string | boolean
+  /** Allowed values of a string property, shown as a dropdown. An empty value means unset. */
+  options?: Option[]
+  /** A text that may run over several lines. */
+  multiline?: boolean
+  /** The number is a length in mm, edited in the user's unit. */
+  length?: boolean
+  /** The property may be cleared by emptying the field. */
+  optional?: boolean
+  /** For a color: what an unset value means, e.g. "from layer". */
+  unset?: string
+  /** Shown only for objects this is true of: a polygon has no ends, a line no fill. */
+  when?: (node: Node) => boolean
+  /** For a fill: the pattern it takes from elsewhere (its wall type) when it has none of its own. */
+  pattern?: Pattern
+  /** The options are the symbols of a line's end, shown as pictures to pick from: of its first end or of its last. */
+  ends?: 'start' | 'end'
+  /** Set for one object at a time only, as a name: several are not given the same one at once. */
+  single?: boolean
+}
+
+export const GEOMETRY = msg('Geometry')
+
+const num = (path: string, label: string, fallback?: number, section?: string): FieldSpec => ({ path, label, type: 'number', fallback, section })
+
+/** A number that is a distance: shown and typed in the user's unit. */
+const len = (path: string, label: string, fallback?: number, section?: string): FieldSpec => ({ ...num(path, label, fallback, section), length: true })
+
+const options = (...pairs: [string, string][]): Option[] => pairs.map(([value, label]) => ({ value, label }))
+
+const FONTS = options(['', msg('Sans-serif')], ['"Arial Narrow", sans-serif', msg('Condensed')], ['serif', msg('Serif')], ['monospace', msg('Monospace')])
+
+const MARKERS = options(['tick', msg('Tick')], ['arrow', msg('Arrow')], ['open-arrow', msg('Open arrow')], ['dot', msg('Dot')], ['none', msg('None')])
+
+const AB = [len('a.x', msg('X1')), len('a.y', msg('Y1')), len('b.x', msg('X2')), len('b.y', msg('Y2'))]
+
+// No "mirror" box: it could only say left to right (top to bottom is that and a half turn), so a
+// thing mirrored top to bottom read as mirrored and turned 180°. Mirroring is a command (Shift+H,
+// Shift+V), which knows both.
+const PLACEMENT: FieldSpec[] = [len('x', msg('X')), len('y', msg('Y')), num('rotation', msg('Rotation'), 0)]
+
+const stroke = (section: string): FieldSpec[] => [
+  { path: 'style.stroke', label: msg('Color'), type: 'color', section, fallback: '#1f1f1f', unset: msg('from layer') },
+  { path: 'style.strokeWidth', label: msg('Weight'), type: 'weight', section, fallback: 1 },
+  { path: 'style.dash', label: msg('Line'), type: 'dash', section },
+]
+
+/** The look of a shape in two parts, each said by its name: its outline, and what covers its inside. */
+export const STROKE = msg('Stroke')
+
+const FILL = msg('Fill')
+
+/** What covers the inside of a shape: a colour, and a pattern over it. */
+const fill = (when?: FieldSpec['when']): FieldSpec[] => [
+  { path: 'style.fill', label: msg('Color'), type: 'color', section: FILL, fallback: '#ffffff', unset: msg('default'), when },
+  { path: 'style.pattern', label: msg('Pattern'), type: 'pattern', section: FILL, when },
+]
+
+const STYLE: FieldSpec[] = [...stroke(STROKE), ...fill()]
+
+/** A room in two parts: the name written in it (with its area), and its floor. */
+const ROOM_NAME = msg('Name')
+
+const FLOOR = msg('Floor')
+
+/** Where the look of a selection is changed, and so where it can be taken from another object. */
+export const LOOK_SECTIONS = [STROKE, 'Style', FLOOR]
+
+export const DIMENSION: FieldSpec[] = [
+  ...AB,
+  len('offset', msg('Offset')),
+  ...stroke(msg('Dimension line')),
+  { path: 'startMarker', label: msg('Start'), type: 'string', section: msg('Ends'), fallback: 'tick', options: MARKERS, ends: 'start' },
+  { path: 'endMarker', label: msg('End'), type: 'string', section: msg('Ends'), fallback: 'tick', options: MARKERS, ends: 'end' },
+  len('markerSize', msg('Size'), 100, msg('Ends')),
+  { path: 'extension.stroke', label: msg('Color'), type: 'color', section: msg('Extension lines'), fallback: '#1f1f1f', unset: msg('from line') },
+  { ...num('extension.strokeWidth', msg('Weight'), undefined, msg('Extension lines')), optional: true },
+  { path: 'extension.dash', label: msg('Dashed'), type: 'dash', section: msg('Extension lines') },
+  len('extensionGap', msg('Gap'), 0, msg('Extension lines')),
+  { path: 'text', label: msg('Override'), type: 'string', section: msg('Text'), optional: true },
+  { path: 'font', label: msg('Font'), type: 'string', section: msg('Text'), options: FONTS },
+  len('size', msg('Size'), 150, msg('Text')),
+  { path: 'textColor', label: msg('Color'), type: 'color', section: msg('Text'), fallback: '#1f1f1f', unset: msg('from line') },
+  { path: 'textPosition', label: msg('Position'), type: 'string', section: msg('Text'), fallback: 'above', options: options(['above', msg('Above line')], ['center', msg('On line')], ['below', msg('Below line')]) },
+  { path: 'textRotation', label: msg('Rotation'), type: 'string', section: msg('Text'), fallback: 'aligned', options: options(['aligned', msg('Along line')], ['horizontal', msg('Horizontal')]) },
+  // Which way the head turns to read the text of a vertical dimension.
+  {
+    path: 'verticalText',
+    label: msg('Vertical text'),
+    type: 'string',
+    section: msg('Text'),
+    fallback: 'down',
+    options: options(['up', msg('Bottom to top (head turned left)')], ['down', msg('Top to bottom (head turned right)')]),
+  },
+  { path: 'unit', label: msg('Unit'), type: 'string', section: msg('Text'), fallback: 'mm', options: options(['mm', 'mm'], ['cm', 'cm'], ['m', 'm'], ['in', 'in'], ['ft', 'ft'], ['ft-in', msg('ft and in')]) },
+  { ...num('decimals', msg('Decimals'), undefined, msg('Text')), optional: true },
+  { path: 'showUnit', label: msg('Show unit'), type: 'boolean', section: msg('Text'), fallback: false },
+]
+
+/** The symbols an annotation's leader can end in. A bullet is the dot. */
+const TIPS = options(['arrow', msg('Arrow')], ['open-arrow', msg('Open arrow')], ['dot', msg('Dot')], ['tick', msg('Tick')], ['none', msg('None')])
+
+export const ANNOTATION: FieldSpec[] = [
+  { path: 'text', label: msg('Text'), type: 'string', multiline: true },
+  ...AB,
+  { path: 'startMarker', label: msg('At the tip'), type: 'string', section: msg('Ends'), fallback: 'arrow', options: TIPS, ends: 'start' },
+  { path: 'endMarker', label: msg('At the text'), type: 'string', section: msg('Ends'), fallback: 'none', options: TIPS, ends: 'end' },
+  { ...len('markerSize', msg('Size'), undefined, msg('Ends')), optional: true },
+  { path: 'shape', label: msg('Path'), type: 'string', section: msg('Line'), fallback: 'curve', options: options(['curve', msg('Curved')], ['straight', msg('Straight')], ['elbow', msg('Elbow (square turn)')]) },
+  num('bend', msg('Curve'), 0.2, msg('Line')),
+  ...stroke(msg('Line')),
+  len('size', msg('Size'), 200, msg('Text')),
+  { path: 'font', label: msg('Font'), type: 'string', section: msg('Text'), options: FONTS },
+]
+
+/** The symbols at the ends of a plain line, which has none unless asked. */
+const LINE_ENDS: FieldSpec[] = [
+  { path: 'startMarker', label: msg('Start'), type: 'string', section: msg('Ends'), fallback: 'none', options: TIPS, ends: 'start' },
+  { path: 'endMarker', label: msg('End'), type: 'string', section: msg('Ends'), fallback: 'none', options: TIPS, ends: 'end' },
+  len('markerSize', msg('Size'), 150, msg('Ends')),
+]
+
+const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
+  line: [...AB, ...LINE_ENDS, ...stroke(STROKE)],
+  wall: [...AB, len('bulge', msg('Curve'), 0), len('thickness', msg('Thickness')), { ...len('height', msg('Height')), optional: true }, ...STYLE],
+  dimension: DIMENSION,
+  annotation: ANNOTATION,
+  rect: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), ...STYLE],
+  // A paper's size is its format and scale, and where it lies is typed at the top of its panel: it has no geometry section.
+  paper: [],
+  // Its name is drawn, so it is set here rather than only in the Structure panel. Where the name is
+  // written is where the room is: its X and Y are the name's.
+  room: [
+    { path: 'name', label: msg('Name'), type: 'string', section: ROOM_NAME, optional: true, single: true },
+    len('x', msg('X'), undefined, ROOM_NAME),
+    len('y', msg('Y'), undefined, ROOM_NAME),
+    // Said as the text's: under "Name", a bare size or colour could be taken for the room's.
+    len('size', msg('Text size'), 250, ROOM_NAME),
+    { path: 'style.stroke', label: msg('Text colour'), type: 'color', section: ROOM_NAME, fallback: '#1f1f1f', unset: msg('from layer') },
+    { path: 'showArea', label: msg('Show area'), type: 'boolean', section: ROOM_NAME, fallback: true },
+    { path: 'style.fill', label: msg('Color'), type: 'color', section: FLOOR, fallback: '#dfe6f0', unset: msg('default') },
+    { path: 'style.pattern', label: msg('Pattern'), type: 'pattern', section: FLOOR },
+  ],
+  divider: AB,
+  ellipse: [
+    len('cx', msg('X')),
+    len('cy', msg('Y')),
+    len('rx', msg('Radius X')),
+    len('ry', msg('Radius Y')),
+    num('rotation', msg('Rotation'), 0),
+    // Given a start or an end, the ellipse is drawn as an arc between them; emptied, it is whole again.
+    { ...num('from', msg('Arc from (°)')), optional: true },
+    { ...num('to', msg('Arc to (°)')), optional: true },
+    ...STYLE,
+  ],
+  text: [
+    { path: 'text', label: msg('Text'), type: 'string', multiline: true },
+    len('x', msg('X')),
+    len('y', msg('Y')),
+    len('size', msg('Size')),
+    num('rotation', msg('Rotation'), 0),
+    { path: 'font', label: msg('Font'), type: 'string', options: FONTS },
+    { path: 'bold', label: msg('Bold'), type: 'boolean', fallback: false },
+    { path: 'align', label: msg('Alignment'), type: 'string', options: options(['', msg('Left')], ['center', msg('Centred')], ['right', msg('Right')]) },
+    { path: 'style.stroke', label: msg('Color'), type: 'color', section: msg('Style'), fallback: '#1f1f1f', unset: msg('from layer') },
+  ],
+  // Open, a polyline has ends and nothing inside it; closed, a polygon, the other way round. Closing,
+  // opening, curving and straightening it are commands (Object menu, right-click), not properties.
+  polyline: [
+    ...LINE_ENDS.map((field) => ({ ...field, when: (node: Node) => !(node.type === 'polyline' && node.closed) })),
+    ...stroke(STROKE),
+    ...fill((node) => node.type === 'polyline' && !!node.closed),
+  ],
+  image: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), { path: 'opacity', label: msg('Opacity'), type: 'opacity', fallback: 1 }],
+  // Of everything in it, on top of the opacity of each thing. Not under Style, whose eyedropper takes a stroke and a fill.
+  group: [{ path: 'opacity', label: msg('Opacity'), type: 'opacity', fallback: 1, section: msg('Appearance') }],
+  // A placed component looks as the component does, in the colour of its layer where the
+  // component gives none: it has no stroke or fill of its own to set (see fieldsOf).
+  instance: PLACEMENT,
+  parametric: PLACEMENT,
+}
+
+/** The fields only a sheet can fill in: offered for the texts of what is on every sheet, and not elsewhere, where they would stay as written. */
+export const SHEET_FIELDS: string[] = ['sheet', 'scale', 'format']
+
+/** What each field of a text is called. */
+export const FIELD_NAMES: Record<(typeof TEXT_FIELDS)[number], string> = {
+  date: msg('Today’s date'),
+  page: msg('Name of the page'),
+  'page-number': msg('Number of the page'),
+  pages: msg('Number of pages'),
+  document: msg('Name of the drawing'),
+  project: msg('Project'),
+  client: msg('Client'),
+  address: msg('Address'),
+  author: msg('Author'),
+  sheet: msg('Name of the sheet'),
+  scale: msg('Scale of the sheet'),
+  format: msg('Format of the sheet'),
+}
+
+/** The properties several objects all have, to be set on all of them at once. */
+export function commonFields(nodes: Node[]): FieldSpec[] {
+  const [first, ...rest] = nodes.map(fieldsOf)
+  return first.filter((field) => rest.every((fields) => fields.some((other) => other.path === field.path && other.type === field.type && other.label === field.label)))
+}
+
+export function fieldsOf(node: Node): FieldSpec[] {
+  const fields = FIELDS[node.type] ?? []
+  // One that was given a look of its own by an earlier version keeps it, shown so that it can be changed or taken off.
+  if (node.type === 'instance') return node.style ? [...fields, ...STYLE] : fields
+  if (node.type !== 'parametric') return fields
+  const params = registry.parametric.get(node.kind)?.params ?? []
+  const own = params.map((p): FieldSpec => ({
+    path: `props.${p.key}`,
+    label: p.label,
+    type: p.type,
+    length: p.unit === 'length',
+    fallback: p.default,
+    // A value may be said differently for one parameter: "Single" glazing is not a "Single" door.
+    options: p.options?.map((value) => ({ value, label: t(`${p.label}: ${value}`) !== `${p.label}: ${value}` ? `${p.label}: ${value}` : value })),
+  }))
+  return [...fields, ...own, ...STYLE]
+}

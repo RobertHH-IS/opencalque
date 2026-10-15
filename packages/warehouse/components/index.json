@@ -86,6 +86,20 @@
         "Desk with chair": "デスクといす",
         "Wardrobe": "ワードローブ",
         "Coffee table, round": "丸いローテーブル"
+      },
+      "ko": {
+        "Furniture": "가구",
+        "Beds, seating, tables and storage for furnishing a plan.": "평면도에 가구를 배치하기 위한 침대, 의자, 테이블, 수납가구.",
+        "Double bed": "더블 침대",
+        "Single bed": "싱글 침대",
+        "Sofa, two seats": "2인용 소파",
+        "Armchair": "안락의자",
+        "Chair": "의자",
+        "Dining table, six chairs": "식탁, 의자 6개",
+        "1800 × 900 table": "1800 × 900 테이블",
+        "Desk with chair": "책상과 의자",
+        "Wardrobe": "옷장",
+        "Coffee table, round": "원형 커피 테이블"
       }
     }
   },
@@ -130,6 +144,13 @@
         "Toilet": "便器",
         "Shower tray": "シャワーパン",
         "Toilet, wall-hung": "壁掛け便器"
+      },
+      "ko": {
+        "Bathroom": "욕실",
+        "Sanitary fittings.": "위생 기구.",
+        "Toilet": "양변기",
+        "Shower tray": "샤워 트레이",
+        "Toilet, wall-hung": "벽걸이 양변기"
       }
     }
   },
@@ -169,6 +190,12 @@
         "Units and appliances on a 600 mm module.": "600 mm モジュールのキャビネットと家電。",
         "Base unit": "ベースキャビネット",
         "Washing machine": "洗濯機"
+      },
+      "ko": {
+        "Kitchen": "주방",
+        "Units and appliances on a 600 mm module.": "600 mm 모듈의 수납장과 가전.",
+        "Base unit": "하부장",
+        "Washing machine": "세탁기"
       }
     }
   },
@@ -328,6 +355,36 @@
         "Smoke detector": "煙感知器",
         "Extractor fan": "換気扇",
         "Electric radiator": "電気ヒーター"
+      },
+      "ko": {
+        "Electrical": "전기",
+        "Lights, wall lights, sockets, switches and other symbols for an electrical plan.": "전기 설비도에 쓰는 조명, 벽등, 콘센트, 스위치 등의 기호.",
+        "Ceiling light": "천장등",
+        "Pendant light": "펜던트 조명",
+        "Wall light": "벽등",
+        "Top edge on the wall": "위쪽 변을 벽에 붙임",
+        "Recessed spotlight": "매입등",
+        "Light strip": "라인 조명",
+        "Socket": "콘센트",
+        "Double socket": "2구 콘센트",
+        "Socket, 32 A": "32 A 콘센트",
+        "For a cooker. Top edge on the wall": "전기레인지용. 위쪽 변을 벽에 붙임",
+        "TV socket": "TV 단자",
+        "Network socket": "LAN 단자",
+        "Switch": "스위치",
+        "One-way": "단로",
+        "Double switch": "2구 스위치",
+        "Two circuits": "2회로",
+        "Two-way switch": "3로 스위치",
+        "One of two controlling the same light": "같은 조명을 두 곳에서 켜고 끄는 스위치 중 하나",
+        "Push button": "푸시 버튼",
+        "Dimmer": "조광기",
+        "Switch with a dimmer": "조광 스위치",
+        "Consumer unit": "분전반",
+        "Junction box": "정션 박스",
+        "Smoke detector": "연기 감지기",
+        "Extractor fan": "환풍기",
+        "Electric radiator": "전기 라디에이터"
       }
     }
   }

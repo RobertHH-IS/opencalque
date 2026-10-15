@@ -5,11 +5,13 @@ import { resetLayout } from './dock'
 import { LANGUAGES, msg, t } from './i18n'
 import { platform } from './platform'
 import { CLAUDE_MODELS, setAiPrefs, setPrefs, usePrefs } from './prefs'
-import { BUILT_IN_EXTENSION, toast, useStore } from './store'
+import { BUILT_IN_EXTENSION } from './extensions'
+import { useStore } from './store'
+import { toast, useWindows } from './windows'
 import { FRACTIONS, UNITS } from './units'
 import { ExtensionWarehouse } from './WarehouseDialog'
 
-const close = () => useStore.setState({ preferencesOpen: false })
+const close = () => useWindows.setState({ preferencesOpen: false })
 
 function Toggle(props: { label: string; checked: boolean; onChange: (checked: boolean) => void }) {
   return (
@@ -266,14 +268,14 @@ const PAGES: [id: string, title: string, icon: LucideIcon, page: () => React.Rea
 
 /** The app's settings: a list of pages on the left, the chosen page on the right. */
 export function Preferences() {
-  const open = useStore((s) => s.preferencesOpen)
-  const asked = useStore((s) => s.preferencesPage)
+  const open = useWindows((s) => s.preferencesOpen)
+  const asked = useWindows((s) => s.preferencesPage)
   const [current, setCurrent] = useState(PAGES[0][0])
   // A command that opens Preferences on a given page (Extensions…) says which, once.
   useEffect(() => {
     if (!asked) return
     setCurrent(asked)
-    useStore.setState({ preferencesPage: null })
+    useWindows.setState({ preferencesPage: null })
   }, [asked])
   if (!open) return null
   const [, title, , Page] = PAGES.find(([id]) => id === current) ?? PAGES[0]

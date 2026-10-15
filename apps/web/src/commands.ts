@@ -41,7 +41,11 @@ import {
   alignSelection,
   distributeSelection,
 } from './actions'
-import { apply, editComponent, redo, registry, select, setTool, showPage, toast, undo, useStore, type Tool } from './store'
+import { registry } from './extensions'
+import { editComponent, showPage } from './navigation'
+import { apply, redo, select, setTool, undo, useStore } from './store'
+import { type Tool } from './tools'
+import { toast, useWindows } from './windows'
 import { PANELS, resetLayout, togglePanel, useDock, type PanelId } from './dock'
 import { drawing } from './canvas/drawing'
 import { importFile } from './drop'
@@ -148,7 +152,7 @@ const STATIC: Command[] = [
   { id: 'file.saveAs', title: msg('Save as…'), category: 'File', keys: ['Mod+Shift+S'], global: true, interrupts: true, run: () => saveDocument(true) },
   { id: 'file.autosave', title: msg('Save automatically'), category: 'File', checked: () => prefs().autosave, run: () => setPrefs({ autosave: !prefs().autosave }) },
   { id: 'file.import', title: msg('Import…'), category: 'File', keys: ['Mod+I'], global: true, interrupts: true, keywords: 'pdf picture image dxf library components extension plan', run: importFile },
-  { id: 'file.export', title: msg('Export…'), category: 'File', keys: ['Mod+P', 'Mod+E'], global: true, interrupts: true, keywords: 'pdf svg dxf print', run: () => useStore.setState({ exportOpen: true }) },
+  { id: 'file.export', title: msg('Export…'), category: 'File', keys: ['Mod+P', 'Mod+E'], global: true, interrupts: true, keywords: 'pdf svg dxf print', run: () => useWindows.setState({ exportOpen: true }) },
   { id: 'file.importPlan', title: msg('Import floor plan (PDF or picture)…'), category: 'File', interrupts: true, run: importFloorPlan },
   { id: 'file.importDxf', title: msg('Import DXF (from other CAD programs)…'), category: 'File', interrupts: true, run: importDxf },
   { id: 'file.importLibrary', title: msg('Import component library…'), category: 'File', interrupts: true, run: importLibrary },
@@ -251,9 +255,9 @@ const STATIC: Command[] = [
   panel('properties'),
   panel('assistant', ['Mod+J']),
   { id: 'view.resetLayout', title: msg('Reset the panel layout'), category: 'View', run: resetLayout },
-  { id: 'help.welcome', title: msg('Welcome window…'), category: 'General', global: true, run: () => useStore.setState({ welcomeOpen: true }) },
-  { id: 'help.about', title: msg('About OpenCalque and what is new…'), category: 'General', global: true, run: () => useStore.setState({ aboutOpen: true }) },
-  { id: 'prefs.open', title: msg('Preferences…'), category: 'General', keys: ['Mod+,'], global: true, run: () => useStore.setState({ preferencesOpen: true }) },
+  { id: 'help.welcome', title: msg('Welcome window…'), category: 'General', global: true, run: () => useWindows.setState({ welcomeOpen: true }) },
+  { id: 'help.about', title: msg('About OpenCalque and what is new…'), category: 'General', global: true, run: () => useWindows.setState({ aboutOpen: true }) },
+  { id: 'prefs.open', title: msg('Preferences…'), category: 'General', keys: ['Mod+,'], global: true, run: () => useWindows.setState({ preferencesOpen: true }) },
   { id: 'view.zoomOut', title: msg('Zoom out'), category: 'View', keys: ['-', 'Mod+-'], run: () => zoomBy(0.8) },
 
   tool('select', msg('Select'), 'V'),
@@ -284,8 +288,8 @@ const STATIC: Command[] = [
   tool('divider', msg('Room divider'), 'Shift+A'),
   { id: 'tool.calibrate', title: msg('Set the scale of an imported plan'), category: 'Tools', run: () => setTool('calibrate') },
 
-  { id: 'warehouse.components', title: msg('Component library…'), category: 'Insert', global: true, run: () => useStore.setState({ warehouse: 'components' }) },
-  { id: 'warehouse.extensions', title: msg('Extensions…'), category: 'General', global: true, run: () => useStore.setState({ preferencesOpen: true, preferencesPage: 'extensions' }) },
+  { id: 'warehouse.components', title: msg('Component library…'), category: 'Insert', global: true, run: () => useWindows.setState({ warehouse: 'components' }) },
+  { id: 'warehouse.extensions', title: msg('Extensions…'), category: 'General', global: true, run: () => useWindows.setState({ preferencesOpen: true, preferencesPage: 'extensions' }) },
   { id: 'page.add', title: msg('Add page'), category: 'Pages', run: () => apply([{ op: 'add_node', node: { type: 'page', name: t('Page {n}', { n: pagesOf(get().doc).length + 1 }) } }]) },
   { id: 'layer.add', title: msg('Add layer'), category: 'Layers', run: () => apply([{ op: 'add_layer', layer: { name: t('Layer {n}', { n: Object.keys(get().doc.layers).length + 1 }) } }]) },
 ]

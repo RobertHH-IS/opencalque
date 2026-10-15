@@ -1,14 +1,15 @@
 import { useEffect, type FunctionComponent } from 'react'
-import { DockviewReact, themeLight, type DockviewApi, type DockviewReadyEvent, type DockviewTheme } from 'dockview-react'
+import { DockviewReact, getPanelData, themeLight, type DockviewApi, type DockviewGroupPanel, type DockviewReadyEvent, type DockviewTheme, type DockviewWillShowOverlayLocationEvent } from 'dockview-react'
 import 'dockview-react/dist/styles/dockview.css'
 import { PANELS, registerDock, useDock, type PanelId } from './dock'
 import { Guard } from './Guard'
+import { MoreTabs } from './MoreTabs'
 import { t } from './i18n'
 import { AssistantPanel } from './panels/AssistantPanel'
 import { Colors, Layers, Objects, Pages } from './panels/LeftPanel'
 import { WallTypes } from './panels/WallTypesPanel'
 import { DimensionStyles } from './panels/DimensionStylesPanel'
-import { Properties } from './panels/RightPanel'
+import { Properties } from './panels/properties/Properties'
 import { Stage } from './Stage'
 
 const STORAGE_KEY = 'opencalque.layout'
@@ -19,13 +20,15 @@ const KNOWN_KEY = 'opencalque.layout.panels'
 const SPLIT_MIN_WIDTH = 520
 
 /**
- * How dragging a panel looks: tabs slide apart and a thin line marks where the tab will land,
- * and the area a panel would take is outlined rather than only tinted.
+ * How dragging a panel looks: the tabs stay where they are and a short bar (styles.css) marks
+ * where the tab will land, and the area a panel would take is outlined rather than only tinted.
+ * The library's other way, tabs sliding apart around a gap, moved them under the pointer as it
+ * went, and lost a drop let go of once they had slid.
  */
 const THEME: DockviewTheme = {
   ...themeLight,
   dndTabIndicator: 'line',
-  tabAnimation: 'smooth',
+  tabAnimation: 'default',
   dndPanelOverlay: 'content',
   dndOverlayBorder: '2px solid var(--dv-active-sash-color)',
 }
@@ -74,7 +77,8 @@ function pinCanvas(api: DockviewApi): void {
  * Leaves out the drop zones that would give a useless result, so the ones offered while dragging
  * are all sensible:
  * - on the drawing, a panel can dock along a side but never becomes a tab of it;
- * - a narrow column is not split into two narrower ones; panels there stack or share tabs.
+ * - a narrow column is not split into two narrower ones; panels there stack or share tabs;
+ * - a tab is shown no place in its own row that would leave it where it is (`leavesInPlace`).
  */
 function limitDropZones(api: DockviewApi): void {
   api.onWillShowOverlay((event) => {
@@ -84,8 +88,52 @@ function limitDropZones(api: DockviewApi): void {
       if (event.kind !== 'content' || event.position === 'center') event.preventDefault()
     } else if (event.kind === 'content' && (event.position === 'left' || event.position === 'right') && group.element.clientWidth < SPLIT_MIN_WIDTH) {
       event.preventDefault()
+    } else if ((event.kind === 'tab' || event.kind === 'header_space') && leavesInPlace(event, group)) {
+      event.preventDefault()
     }
   })
+}
+
+/**
+ * Whether a tab dropped here would stay where it is: on either side of itself, or after the last
+ * tab when it is the last. No bar is shown there, and letting go does nothing.
+ */
+function leavesInPlace(event: DockviewWillShowOverlayLocationEvent, group: DockviewGroupPanel): boolean {
+  const data = event.getData()
+  if (!data?.panelId || data.groupId !== group.id) return false
+  const from = group.panels.findIndex((panel) => panel.id === data.panelId)
+  let to = group.panels.length
+  if (event.kind === 'tab') {
+    // The event names the group's tab in front, not the one under the pointer.
+    const { clientX, clientY } = event.nativeEvent as MouseEvent
+    const tab = document.elementFromPoint(clientX, clientY)?.closest('.dv-tab')
+    const tabs = [...(tab?.parentElement?.children ?? [])].filter((element) => element.classList.contains('dv-tab'))
+    if (!tab || !tabs.includes(tab)) return false
+    to = tabs.indexOf(tab) + (event.position === 'right' ? 1 : 0)
+  }
+  return to === from || to === from + 1
+}
+
+/**
+ * Panels are dragged with pointer events (`dndStrategy="pointer"`) rather than the browser's drag
+ * and drop, whose cursor on Windows said "not allowed" as a drag began and at every edge between
+ * two elements on the way: the browser asks the page too late. While one is dragged, the page has
+ * the class `dock-dragging`, which keeps one cursor over everything and the tabs without hover.
+ * Returns what stops it.
+ */
+function markDrags(): () => void {
+  const root = document.documentElement
+  const move = (event: PointerEvent) => root.classList.toggle('dock-dragging', event.buttons !== 0 && getPanelData() !== undefined)
+  const end = () => root.classList.remove('dock-dragging')
+  window.addEventListener('pointermove', move, true)
+  window.addEventListener('pointerup', end, true)
+  window.addEventListener('pointercancel', end, true)
+  return () => {
+    end()
+    window.removeEventListener('pointermove', move, true)
+    window.removeEventListener('pointerup', end, true)
+    window.removeEventListener('pointercancel', end, true)
+  }
 }
 
 function arrange(api: DockviewApi): void {
@@ -153,6 +201,7 @@ function restore(api: DockviewApi): void {
  */
 export function Layout() {
   useEffect(() => () => registerDock(null), [])
+  useEffect(markDrags, [])
 
   const onReady = ({ api }: DockviewReadyEvent) => {
     restore(api)
@@ -200,5 +249,7 @@ export function Layout() {
     })
   }
 
-  return <DockviewReact className="dock" theme={THEME} components={COMPONENTS} onReady={onReady} />
+  // A row of tabs never scrolls: those that do not fit are behind the "···" of `MoreTabs`, and
+  // neither the library's scroll bar nor its own list of them is wanted.
+  return <DockviewReact className="dock" theme={THEME} dndStrategy="pointer" scrollbars="native" disableTabsOverflowList rightHeaderActionsComponent={MoreTabs} components={COMPONENTS} onReady={onReady} />
 }

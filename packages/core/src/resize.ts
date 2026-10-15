@@ -90,6 +90,18 @@ const MOVES: { left?: true; right?: true; top?: true; bottom?: true }[] = [
 /** A point of the frame, given in the frame's own terms (0 to width across, 0 to height down), on the drawing. */
 const place = (frame: ResizeFrame, local: Vec2) => add(frame.origin, rotate(local, frame.rotation))
 
+/** An upright box as a frame. */
+export const boundsFrame = (b: Bounds): ResizeFrame => ({ origin: { x: b.minX, y: b.minY }, rotation: 0, width: b.maxX - b.minX, height: b.maxY - b.minY })
+
+/** The middle of a frame, on the drawing. */
+export const frameMiddle = (frame: ResizeFrame): Vec2 => place(frame, { x: frame.width / 2, y: frame.height / 2 })
+
+/** Whether a point of the drawing is inside a frame, or no further than `margin` outside it. */
+export function frameContains(frame: ResizeFrame, p: Vec2, margin = 0): boolean {
+  const local = rotate(sub(p, frame.origin), -frame.rotation)
+  return local.x >= -margin && local.x <= frame.width + margin && local.y >= -margin && local.y <= frame.height + margin
+}
+
 /** Where the eight grips are on the drawing, in the order of `MOVES`. */
 export function frameGrips(frame: ResizeFrame): Vec2[] {
   const { width: w, height: h } = frame

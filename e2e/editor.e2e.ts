@@ -1,102 +1,13 @@
 import { readFileSync } from 'node:fs'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test } from '@playwright/test'
+import { canvas, choose, drawing, drawingOnScreen, drawWall, failOnErrors, librarySection, objectRows, recordSaves, startWith } from './support'
 
 /**
  * The editor in a browser, as people use it. Each test starts from a fresh profile: no drawing, no
  * settings, the welcome window turned off unless the test wants it.
  */
 
-/** Settings stored before the app starts, as Preferences would store them. */
-async function startWith(page: Page, prefs: Record<string, unknown> = {}) {
-  await page.addInitScript((stored) => {
-    if (!sessionStorage.getItem('started')) {
-      localStorage.setItem('opencalque.prefs', JSON.stringify({ showWelcome: false, unit: 'mm', language: 'en', ...stored }))
-      sessionStorage.setItem('started', '1')
-    }
-  }, prefs)
-}
-
-/**
- * Stands in for the browser's save dialog (File System Access API), which a test cannot answer:
- * every save is recorded in `window.saves` instead of written to disk.
- */
-async function recordSaves(page: Page) {
-  await page.addInitScript(() => {
-    const saves: string[] = []
-    ;(window as any).saves = saves
-    ;(window as any).showSaveFilePicker = async ({ suggestedName }: { suggestedName: string }) => ({
-      name: suggestedName,
-      createWritable: async () => {
-        let content = ''
-        return { write: async (data: unknown) => void (content = typeof data === 'string' ? data : '(bytes)'), close: async () => void saves.push(content) }
-      },
-    })
-  })
-}
-
-const canvas = (page: Page) => page.locator('.stage canvas')
-const objectRows = (page: Page) => page.locator('[data-panel="objects"] .row')
-/** A section of the component library, in the list on its left, by its name. */
-const librarySection = (page: Page, name: string) => page.locator('.warehouse-section', { has: page.locator('.warehouse-section-name', { hasText: new RegExp(`^${name}$`) }) })
-
-/** Draws a wall from one point of the canvas to another, in CSS pixels from its top-left corner. */
-async function drawWall(page: Page, from: [number, number], to: [number, number]) {
-  const box = (await canvas(page).boundingBox())!
-  await page.keyboard.press('w')
-  await page.mouse.click(box.x + from[0], box.y + from[1])
-  await page.mouse.click(box.x + to[0], box.y + to[1])
-  await page.keyboard.press('Escape')
-  await page.keyboard.press('v')
-}
-
-/** Chooses a file for the next file dialog the page opens. */
-async function choose(page: Page, open: () => Promise<void>, name: string, content: string) {
-  const chooser = page.waitForEvent('filechooser')
-  await open()
-  await (await chooser).setFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(content) })
-}
-
-/**
- * Where a point of the drawing is on the page, for a drawing brought into view as it opened: read
- * from the status bar, which says where the pointer is in millimetres, at two places.
- */
-async function drawingOnScreen(page: Page): Promise<(x: number, y: number) => [number, number]> {
-  const box = (await canvas(page).boundingBox())!
-  const reading = async (x: number, y: number) => {
-    await page.mouse.move(box.x + x, box.y + y)
-    const text = (await page.locator('.status span').nth(1).textContent())!.replaceAll(String.fromCharCode(0x2212), '-').replace(/[^\d.,-]/g, '')
-    const [wx, wy] = text.split(',').map(Number)
-    return { x: wx, y: wy }
-  }
-  const p = await reading(100, 100)
-  const q = await reading(700, 500)
-  const zoom = 600 / (q.x - p.x)
-  return (x, y) => [box.x + 100 + (x - p.x) * zoom, box.y + 100 + (y - p.y) * zoom]
-}
-
-const drawing = (nodes: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
-  JSON.stringify({
-    format: 'opencalque',
-    version: 1,
-    id: 'doc_test',
-    name: 'Test',
-    unit: 'mm',
-    layers: { layer_1: { id: 'layer_1', name: 'Layer 1', order: 'a0' } },
-    nodes: { page_1: { id: 'page_1', type: 'page', name: 'Page 1', parent: null, order: 'a0' }, ...nodes },
-    ...extra,
-  })
-
-test.beforeEach(async ({ page }) => {
-  const errors: string[] = []
-  page.on('pageerror', (error) => errors.push(error.message))
-  page.on('console', (message) => message.type() === 'error' && errors.push(message.text()))
-  ;(page as any).errors = errors
-})
-
-test.afterEach(async ({ page }) => {
-  // No script error and no Content-Security-Policy violation, whatever the test did.
-  expect((page as any).errors).toEqual([])
-})
+failOnErrors()
 
 test('draws a wall, undoes and redoes it', async ({ page }) => {
   await startWith(page)
@@ -490,7 +401,7 @@ test('brings a washbasin against a wall of a plan whose walls are grouped', asyn
 
 test('lists the furniture by room in the component library, the adjustable pieces with the rest', async ({ page }) => {
   // The adjustable furniture installed as 1.0.0-rc.3 shipped it, all of it listed as furniture: the copy that ships now replaces it.
-  const furniture = JSON.parse(readFileSync('apps/web/src/warehouse/extensions/furniture.json', 'utf8'))
+  const furniture = JSON.parse(readFileSync('packages/warehouse/extensions/furniture.json', 'utf8'))
   const old = { ...furniture, version: '1.1.0', objects: furniture.objects.map((object: Record<string, unknown>) => ({ ...object, category: 'furniture' })) }
   await startWith(page, { extensions: { installed: { [old.id]: old }, disabled: [] } })
   await page.goto('/')
@@ -504,6 +415,41 @@ test('lists the furniture by room in the component library, the adjustable piece
   // What is shown can be copied into the drawing at once.
   await page.getByRole('button', { name: 'Add all of these' }).click()
   await expect(page.locator('.toast')).toContainText('2 components added')
+})
+
+test('drags a component from the library onto the drawing, where it is let go', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await librarySection(page, 'Dining room').click()
+  const card = (await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Chair$/ }) }).boundingBox())!
+  const box = (await canvas(page).boundingBox())!
+  await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2)
+  await page.mouse.down()
+  // The library closes as soon as the card is dragged, and the chair follows the pointer.
+  await page.mouse.move(card.x + card.width / 2 + 20, card.y + card.height / 2, { steps: 4 })
+  await expect(page.getByRole('dialog', { name: 'Component library' })).toBeHidden()
+  // At the first zoom (0.1 px/mm, the origin at 320, 220): let go at (-200, 800) mm, a chair is put there, one, and selected.
+  await page.mouse.move(box.x + 300, box.y + 300, { steps: 8 })
+  await page.mouse.up()
+  await expect(objectRows(page)).toHaveCount(1)
+  await expect(page.locator('[data-panel="objects"] .row.selected')).toHaveText(/Chair/)
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('X')).toHaveValue('-200')
+  await expect(field('Y')).toHaveValue('800')
+  // Done: a click on the drawing now selects, it places nothing more.
+  await page.mouse.click(box.x + 600, box.y + 500)
+  await expect(objectRows(page)).toHaveCount(1)
+  // Let go beside the drawing, over a panel, it stays on the pointer as after a click on its card.
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x - 40, box.y + 300, { steps: 8 })
+  await page.mouse.up()
+  await expect(objectRows(page)).toHaveCount(1)
+  await page.mouse.move(box.x + 500, box.y + 300, { steps: 4 })
+  await page.mouse.click(box.x + 500, box.y + 300)
+  await expect(objectRows(page)).toHaveCount(2)
 })
 
 test('opens the component library on the section looked at last', async ({ page }) => {
@@ -625,7 +571,7 @@ test('makes a group see-through from its properties, one drag of the slider bein
 
 test('resizes a table by its side, the furniture installed before it could be', async ({ page }) => {
   // Installed as it was before it said how it is resized: the copy that ships now replaces it.
-  const furniture = JSON.parse(readFileSync('apps/web/src/warehouse/extensions/furniture.json', 'utf8'))
+  const furniture = JSON.parse(readFileSync('packages/warehouse/extensions/furniture.json', 'utf8'))
   const old = { ...furniture, version: '1.0.0', objects: furniture.objects.map(({ box: _, ...object }: Record<string, unknown>) => object) }
   await startWith(page, { extensions: { installed: { [old.id]: old }, disabled: [] } })
   await page.goto('/')
@@ -718,6 +664,57 @@ test('turns a rectangle about its middle from the angle typed, and arranges it f
   await page.getByTitle('Arrange: stacking order, align, space evenly').click()
   await expect(page.getByRole('menuitem', { name: 'Bring to front' })).toBeEnabled()
   await expect(page.getByRole('menuitem', { name: 'Align left' })).toBeDisabled()
+})
+
+test('turns a compass by its knob, its box turning with it, and turns it again from where the knob went', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Compass \(north\)$/ }) }).click()
+  const box = (await canvas(page).boundingBox())!
+  // At the first zoom (0.1 px/mm, the origin at 320, 220).
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('Escape')
+  await objectRows(page).filter({ hasText: 'Compass (north)' }).click()
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  const x = Number(await field('X').inputValue())
+  const y = Number(await field('Y').inputValue())
+  const centre = { x: 320 + x * 0.1, y: 220 + y * 0.1 }
+  const grabs = async (at: { x: number; y: number }) => {
+    await page.mouse.move(box.x + at.x, box.y + at.y)
+    return (await canvas(page).evaluate((el) => el.style.cursor)) === 'grab'
+  }
+  // The knob is above the middle of the box, which is as wide each side of the compass's centre.
+  const above: number[] = []
+  for (let dy = 40; dy < 160; dy++) if (await grabs({ x: centre.x, y: centre.y - dy })) above.push(dy)
+  expect(above.length).toBeGreaterThan(0)
+  const knob = { x: centre.x, y: centre.y - (above[0] + above[above.length - 1]) / 2 }
+  // The box reaches from the letter down to the south point, 600 mm below the centre, and turns
+  // about its middle. Its knob stands 22 px off its top, which is drawn 3.5 px out.
+  const top = knob.y + 25.5
+  const bottom = centre.y + 60
+  const middle = { x: centre.x, y: (top + bottom) / 2 }
+  const turn = async (from: { x: number; y: number }, to: { x: number; y: number }) => {
+    await page.mouse.move(box.x + from.x, box.y + from.y)
+    await page.mouse.down()
+    await page.keyboard.down('Shift')
+    await page.mouse.move(box.x + to.x, box.y + to.y, { steps: 8 })
+    await page.mouse.up()
+    await page.keyboard.up('Shift')
+  }
+  // A quarter turn clockwise: from above the middle to its right.
+  await turn(knob, { x: middle.x + 150, y: middle.y })
+  await expect(field('Rotation')).toHaveValue('90')
+  // The box turned with the compass rather than growing around it: its knob is now to the right
+  // of the middle, as far out as it was above it, and not above the upright box around the
+  // compass lying on its side, 840 mm (84 px) high.
+  const reach = middle.y - knob.y
+  expect(await grabs({ x: middle.x + reach, y: middle.y })).toBe(true)
+  expect(await grabs({ x: middle.x, y: middle.y - 42 - 25.5 })).toBe(false)
+  await turn({ x: middle.x + reach, y: middle.y }, { x: middle.x, y: middle.y + 150 })
+  await expect(field('Rotation')).toHaveValue('180')
+  // Turned a half about the middle, which never moved: the centre is as far below it as it was above.
+  await expect(field('X')).toHaveValue(String(x))
 })
 
 test('shows in the Structure list what is picked on the drawing, however far down', async ({ page }) => {
@@ -959,6 +956,56 @@ test('shows every value of a dimension style whole, in the narrow side panel', a
   expect((await font.boundingBox())!.width).toBeGreaterThan(180)
 })
 
+test('leaves out whole the tabs a narrow column has no room for, lists them behind a "···", and brings one chosen there into the row', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const all = ['Structure', 'Colours', 'Wall types', 'Dimension styles']
+  const header = page.locator('.dv-tabs-and-actions-container', { has: page.locator('.dv-tab', { hasText: 'Structure' }) })
+  const row = header.locator('.dv-tabs-container')
+  const shown = row.locator('.dv-tab:visible')
+  const more = header.getByRole('button', { name: 'More tabs' })
+  await expect(row.locator('.dv-tab')).toHaveText(all)
+  // In a column of about 250 px, some of the four tabs are left out; those shown are whole.
+  await expect(more).toBeVisible()
+  const names = await shown.allInnerTexts()
+  expect(names.length).toBeLessThan(all.length)
+  expect(names).toContain('Structure')
+  const edge = (await row.boundingBox())!
+  for (const tab of await shown.all()) {
+    const box = (await tab.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(edge.x + edge.width + 0.5)
+  }
+  expect(await row.evaluate((element) => element.scrollWidth - element.clientWidth)).toBeLessThanOrEqual(0)
+
+  // The "···" lists exactly those left out; the last, chosen, comes in front and into the row.
+  await more.click()
+  const items = page.getByRole('menu').getByRole('menuitem')
+  const left = all.filter((name) => !names.includes(name))
+  await expect(items).toHaveText(left)
+  await items.last().click()
+  await expect(page.getByRole('menu')).toHaveCount(0)
+  await expect(row.locator('.dv-tab.dv-active-tab')).toHaveText(left[left.length - 1])
+  await expect(shown.filter({ hasText: left[left.length - 1] })).toBeVisible()
+  await expect(page.locator('[data-panel="dimensionStyles"]')).toBeVisible()
+
+  // Tabs are dragged into another order, a bar showing where one would land; none where it would stay.
+  const top = page.locator('.dv-tabs-and-actions-container', { has: page.locator('.dv-tab', { hasText: 'Pages' }) })
+  const pages = top.locator('.dv-tab')
+  const marks = top.locator('.dv-drop-target-selection')
+  const a = (await pages.nth(0).boundingBox())!
+  const b = (await pages.nth(1).boundingBox())!
+  const y = a.y + a.height / 2
+  await page.mouse.move(a.x + a.width / 2, y)
+  await page.mouse.down()
+  await page.mouse.move(a.x + a.width / 2 + 10, y, { steps: 2 })
+  await page.mouse.move(b.x + 8, y, { steps: 6 })
+  await expect(marks).toHaveCount(0)
+  await page.mouse.move(b.x + b.width - 8, y, { steps: 4 })
+  await expect(marks).toHaveCount(1)
+  await page.mouse.up()
+  await expect(pages).toHaveText(['Pages', 'Layers'])
+})
+
 test('imports a DXF of twenty thousand lines in a few seconds', async ({ page }) => {
   await startWith(page)
   await page.goto('/')
@@ -1072,4 +1119,20 @@ test('tells the assistant what is selected, and applies what it answers', async 
   expect(newest).toContain('thanks')
   expect(newest).toContain('chose not to send what is selected')
   expect(newest).not.toContain('<selection>')
+})
+
+test('shows the version and its notes under About, and the licences of what the app includes', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  await page.keyboard.press('Control+k')
+  await page.keyboard.type('About OpenCalque')
+  await page.keyboard.press('Enter')
+  const about = page.locator('.dialog.about')
+  await expect(about.locator('.about-notes h4').first()).toContainText(/^Version \d+\.\d+\.\d+/)
+  await about.getByRole('button', { name: 'Licences' }).click()
+  // Loaded only now, from THIRD-PARTY-NOTICES.txt: the fonts and the packages of others the build holds.
+  await expect(about.locator('.about-licences')).toContainText('pdfjs-dist')
+  await expect(about.locator('.about-licences')).toContainText('SIL OPEN FONT LICENSE')
+  await about.getByRole('button', { name: 'What is new' }).click()
+  await expect(about.locator('.about-licences')).toHaveCount(0)
 })

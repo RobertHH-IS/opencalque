@@ -14,7 +14,7 @@ import {
   type Command,
 } from './commands'
 import { t } from './i18n'
-import { toast } from './store'
+import { toast } from './windows'
 
 const close = () => useCommands.setState({ paletteOpen: false })
 

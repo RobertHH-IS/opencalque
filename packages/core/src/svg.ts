@@ -1,4 +1,4 @@
-import { parseColor } from './pdf'
+import { parseColor } from './colors'
 import { buildScene, paintOrder, sceneBounds, type PaintStep } from './scene'
 import type { Registry } from './registry'
 import type { Document } from './schema'

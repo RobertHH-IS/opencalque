@@ -2,7 +2,8 @@ import { serializeDocument } from '@opencalque/core'
 import { t } from './i18n'
 import { platform } from './platform'
 import { usePrefs } from './prefs'
-import { isDirty, toast, useStore } from './store'
+import { isDirty, useStore } from './store'
+import { toast } from './windows'
 
 /** How long the drawing must have been left alone before it is saved, in milliseconds. */
 const DELAY = 2000

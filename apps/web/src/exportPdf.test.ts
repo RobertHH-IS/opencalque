@@ -3,14 +3,13 @@ import { toPDF } from '@opencalque/core'
 import { exportPdf } from './actions'
 import { pdfFonts } from './pdfFonts'
 import { platform } from './platform'
-import { toast } from './store'
+import { toast } from './windows'
 
 vi.mock('@opencalque/core', async (original) => ({
   ...await original<typeof import('@opencalque/core')>(),
   pdfFontCharacters: vi.fn(() => ['中']),
   toPDF: vi.fn(() => new Uint8Array([37, 80, 68, 70])),
 }))
-vi.mock('./canvas/draw', () => ({ gridStep: vi.fn() }))
 vi.mock('./prefs', () => ({ usePrefs: { getState: () => ({}) } }))
 vi.mock('./pdfFonts', () => ({ pdfFonts: vi.fn() }))
 vi.mock('./platform', () => ({ platform: { save: vi.fn() } }))
@@ -19,9 +18,9 @@ vi.mock('./store', () => ({
     getState: () => ({ doc: { name: 'Drawing', nodes: { sheet: { id: 'sheet', type: 'paper' } } }, selection: [] }),
     subscribe: vi.fn(),
   },
-  registry: {},
-  toast: vi.fn(),
 }))
+vi.mock('./extensions', () => ({ registry: {} }))
+vi.mock('./windows', () => ({ toast: vi.fn(), useWindows: { setState: vi.fn() } }))
 
 function deferred<T>() {
   let resolve!: (value: T) => void

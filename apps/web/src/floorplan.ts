@@ -3,7 +3,9 @@ import { guarded, zoomToFit } from './actions'
 import { showPanel } from './dock'
 import { t } from './i18n'
 import { platform } from './platform'
-import { apply, registry, setTool, toast, useStore } from './store'
+import { registry } from './extensions'
+import { apply, setTool, useStore } from './store'
+import { toast } from './windows'
 
 /** Largest side, in pixels, of the picture kept in the drawing. Bigger scans are scaled down. */
 const MAX_PIXELS = 4096

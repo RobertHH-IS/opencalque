@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "id": "opencalque.electrical",
   "name": "Electrical symbols",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "author": "OpenCalque",
   "description": "Sockets, switches and light points for electrical layouts.",
   "translations": {
@@ -66,6 +66,18 @@
       "Two-way": "3 路",
       "Size": "サイズ",
       "Place the flat side against the wall.": "平らな側を壁に付けて置いてください。"
+    },
+    "ko": {
+      "Electrical symbols": "전기 기호",
+      "Sockets, switches and light points for electrical layouts.": "전기 설비도에 쓰는 콘센트, 스위치, 조명 기호.",
+      "Socket": "콘센트",
+      "Switch": "스위치",
+      "Ceiling light": "천장등",
+      "Wall light": "벽등",
+      "Count": "개수",
+      "Two-way": "3로",
+      "Size": "크기",
+      "Place the flat side against the wall.": "평평한 쪽을 벽에 붙여 놓으세요."
     }
   },
   "objects": [

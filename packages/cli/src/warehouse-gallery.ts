@@ -4,20 +4,19 @@
  * and the parametric objects of the bundled extensions at their default sizes. All are drawn at
  * the same scale, so their sizes compare. `pnpm warehouse:gallery [out.html]` writes it and prints where.
  */
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { applyOps, createDocument, declarativeExtension, importComponents, parseDocument, Registry, toSVG, type Document, type Op } from '@opencalque/core'
-import { architecture } from '@opencalque/ext-architecture'
+import { applyOps, createDocument, importComponents, parseDocument, toSVG, type Document, type Op } from '@opencalque/core'
+import { standardRegistry } from '@opencalque/warehouse'
 
 const out = process.argv[2] ?? join(tmpdir(), 'opencalque-warehouse-gallery.html')
-const warehouse = join(dirname(fileURLToPath(import.meta.url)), '../../../apps/web/src/warehouse')
+const warehouse = join(dirname(fileURLToPath(import.meta.url)), '../../warehouse')
 /** Millimetres of the drawing to one pixel of the page. */
 const MM_PER_PX = 8
 
-const registry = new Registry().use(architecture)
-for (const file of readdirSync(join(warehouse, 'extensions'))) registry.use(declarativeExtension(JSON.parse(readFileSync(join(warehouse, 'extensions', file), 'utf8'))))
+const registry = standardRegistry()
 
 const escape = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;')
 /** The page of a drawing as a picture at the gallery's scale. */

@@ -79,6 +79,21 @@ describe('PDF export', () => {
     expect((await page.getOperatorList()).fnArray.length).toBeGreaterThan(5)
   })
 
+  it('prints Korean in the Korean font', async () => {
+    const font = (name: string) => new Uint8Array(readFileSync(resolve(__dirname, '../../../fonts', name)))
+    const sheet = applyOps(createDocument('우리 집'), [
+      add({ type: 'paper', id: 'p', name: '1층 평면도', x: 0, y: 0, width: 21000, height: 14850, scale: 50, titleBlock: { author: '김민준' } }),
+      add({ type: 'text', x: 3000, y: 5000, text: '거실 22.04 m²', size: 220 }),
+      add({ type: 'text', x: 3000, y: 8000, text: '침실 · 安房', size: 220, bold: true, align: 'center' }),
+    ])
+    const bytes = toPDF(sheet, registry, undefined, { fonts: [font('NotoSans-Regular.ttf'), font('NotoSansKR-Regular.ttf')] })
+    expect(new TextDecoder('latin1').decode(bytes)).toMatch(/\/BaseFont \/[A-Z]{6}\+NotoSansKR-Regular /)
+    const page = await (await open(bytes)).getPage(1)
+    // The spaces, in a standard font, come back as pieces of their own.
+    const words = (await page.getTextContent()).items.map((item: any) => item.str).join('')
+    for (const expected of ['거실', '22.04', '침실', '安房', '우리 집', '1층 평면도', '김민준']) expect(words).toContain(expected)
+  })
+
   it('exports only the papers asked for, and says so when there is none', () => {
     expect(new TextDecoder('latin1').decode(toPDF(doc, registry, ['a4']))).toContain('/Count 1')
     expect(() => toPDF(createDocument(), registry)).toThrow(/no paper/)

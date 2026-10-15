@@ -1,6 +1,6 @@
 {
   "name": "@opencalque/web",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "type": "module",
@@ -8,12 +8,14 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.node.json",
+    "notices": "node scripts/notices.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",
     "@opencalque/core": "workspace:*",
     "@opencalque/ext-architecture": "workspace:*",
+    "@opencalque/warehouse": "workspace:*",
     "dockview-react": "^8.4.1",
     "lucide-react": "^1.53.0",
     "pdfjs-dist": "^6.4.299",

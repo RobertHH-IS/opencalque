@@ -1,5 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "types": ["node", "vite/client"] },
-  "include": ["src", "vite.config.ts", "csp.ts"]
+  "compilerOptions": { "lib": ["ES2023", "DOM", "DOM.Iterable"], "types": ["vite/client"] },
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
 }

@@ -1,3 +1,4 @@
+import { parseColor } from './colors'
 import { rotate, type Vec2 } from './geometry'
 import { decodePng } from './png'
 import { PRINT_MM_PER_PIXEL, type Primitive } from './primitives'
@@ -60,24 +61,6 @@ function encode(text: string): number[] {
 const textWidth = (bytes: number[], size: number) => bytes.reduce((sum, b) => sum + (b >= 32 && b < 127 ? WIDTHS[b - 32] : 556), 0) * (size / 1000)
 
 const n = (value: number) => String(Math.round(value * 1000) / 1000)
-
-/** A CSS colour as red, green, blue (0 to 1) and opacity, or null for none. Hex and rgb() forms are understood. */
-export function parseColor(color: string | undefined): { r: number; g: number; b: number; a: number } | null {
-  if (!color || color === 'none' || color === 'transparent') return null
-  const hex = /^#([0-9a-f]{3,8})$/i.exec(color.trim())?.[1]
-  if (hex) {
-    const full = hex.length <= 4 ? [...hex].map((c) => c + c).join('') : hex
-    const part = (i: number) => parseInt(full.slice(i, i + 2), 16) / 255
-    return { r: part(0), g: part(2), b: part(4), a: full.length >= 8 ? part(6) : 1 }
-  }
-  const parts = /^rgba?\(([^)]+)\)$/i.exec(color.trim())?.[1].split(/[\s,/]+/).filter(Boolean)
-  if (parts && parts.length >= 3) {
-    const alpha = parts[3] === undefined ? 1 : parts[3].endsWith('%') ? parseFloat(parts[3]) / 100 : parseFloat(parts[3])
-    return { r: parseFloat(parts[0]) / 255, g: parseFloat(parts[1]) / 255, b: parseFloat(parts[2]) / 255, a: alpha }
-  }
-  // Anything else (a colour name) prints as ink rather than being left out.
-  return color === 'white' ? { r: 1, g: 1, b: 1, a: 1 } : { r: 0, g: 0, b: 0, a: 1 }
-}
 
 function fromBase64(text: string): Uint8Array {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
@@ -296,6 +279,18 @@ function papersOf(doc: Document, paperIds?: string[]): Paper[] {
 export function pdfFontCharacters(doc: Document, registry: Registry, paperIds?: string[]): string[] {
   const texts = papersOf(doc, paperIds).flatMap((paper) => sheetPrimitives(doc, paper, registry).flatMap((prim) => (prim.kind === 'text' && !printable(prim.text) ? [prim.text] : [])))
   return [...new Set(texts.flatMap((text) => [...text]))].filter((char) => !printable(char))
+}
+
+/**
+ * The fonts the app ships (`fonts/<name>-Regular.ttf`) that a PDF of these characters tries, in
+ * order. Chinese, Japanese and Korean share many characters but draw them differently, so the
+ * text's language decides which comes first: Japanese when it has kana or the interface is in
+ * Japanese, Korean when it has Hangul or the interface is in Korean, Chinese otherwise.
+ */
+export function pdfFontNames(characters: string[], language?: string): string[] {
+  const japanese = language === 'ja' || characters.some((char) => /[぀-ヿ]/.test(char))
+  const korean = language === 'ko' || characters.some((char) => /[ᄀ-ᇿ㄰-㆏ꥠ-꥿가-퟿]/.test(char))
+  return ['NotoSans', ...(japanese ? ['NotoSansJP'] : []), ...(korean ? ['NotoSansKR'] : []), 'NotoSansSC']
 }
 
 export interface PdfOptions {

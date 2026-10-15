@@ -4,7 +4,9 @@ import { platform } from './platform'
 import { PLAN_EXTENSIONS, placeFloorPlan } from './floorplan'
 import { t } from './i18n'
 import { setPrefs, usePrefs } from './prefs'
-import { isDirty, loadDocument, loadExtensions, toast, useStore } from './store'
+import { loadExtensions } from './extensions'
+import { isDirty, loadDocument, useStore } from './store'
+import { toast } from './windows'
 
 const extensionOf = (name: string) => /\.([^.]+)$/.exec(name)?.[1].toLowerCase() ?? ''
 

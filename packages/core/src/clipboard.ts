@@ -48,17 +48,19 @@ export function isClipboard(doc: Document): boolean {
 /**
  * Adds the contents of a clipboard document under `parent`, moved by `offset`. Components come
  * along (or are reused when they were pasted before); nodes go to the layer of the same name, or
- * to `fallbackLayer` when the drawing has none. Returns the ids of the pasted top-level nodes.
+ * to `fallbackLayer` when the drawing has none. Returns the new document, the operations that
+ * make it, and the ids of the pasted top-level nodes.
  */
-export function pasteNodes(doc: Document, clip: Document, parent: string, offset: Vec2, fallbackLayer?: string): { doc: Document; ids: string[] } {
+export function pasteNodes(doc: Document, clip: Document, parent: string, offset: Vec2, fallbackLayer?: string): { doc: Document; ops: Op[]; ids: string[] } {
   const page = pagesOf(clip)[0]
   if (!page) throw new OpError('Nothing to paste')
   const withComponents = importComponents(doc, clip)
   // What is pasted is new where it lands: on top, as anything drawn there next would be.
   const { ops, top } = transplantOps(withComponents.doc, clip, page.id, parent, { components: withComponents.imported, fallbackLayer, onTop: true })
   let pasted = applyOps(withComponents.doc, ops)
-  pasted = applyOps(pasted, top.flatMap((id) => moveOps(pasted, pasted.nodes[id], offset)))
-  return { doc: pasted, ids: top }
+  const moves = top.flatMap((id) => moveOps(pasted, pasted.nodes[id], offset))
+  pasted = applyOps(pasted, moves)
+  return { doc: pasted, ops: [...withComponents.ops, ...ops, ...moves], ids: top }
 }
 
 /** A point that tells where a node is, to know whether two nodes of the same kind lie in the same place. */

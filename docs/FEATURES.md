@@ -2,7 +2,7 @@
 
 What the app does today, the ten big features chosen to do next and where each stands, and the longer backlog. For how things are built, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Last updated: 2026-10-13 (1.0.0-rc.1).
+Last updated: 2026-10-15 (1.0.0).
 
 ## 1. What exists today
 
@@ -54,7 +54,7 @@ Last updated: 2026-10-13 (1.0.0-rc.1).
 
 ### Reusing and extending
 - **Component library**: one searchable, illustrated grid of everything that can be placed: doors, windows, stairs and other parametric objects, the drawing's own components, and the warehouse libraries. Its sections are listed down its left side under Rooms, Building and Drawing, each counting what it holds or what a search found in it; a search looks through all of them. Door and window also have their own toolbar buttons.
-- **Component warehouse**: browse libraries of ready-made symbols (furniture, bathroom, kitchen and electrical ship with the app, named in the app's six languages; the furniture is listed by room: living room, dining room, bedroom, office; each symbol drawn in detail as seen from above), search, and click to place. Parametric objects are listed among the components of their kind, marked with a badge. More libraries can come from a catalog published on the web.
+- **Component warehouse**: browse libraries of ready-made symbols (furniture, bathroom, kitchen and electrical ship with the app, named in the app's seven languages; the furniture is listed by room: living room, dining room, bedroom, office; each symbol drawn in detail as seen from above), search, and click or drag onto the drawing to place. What is placed is always the library's symbol: one changed in the drawing since it was brought in stays as it is, beside it. Parametric objects are listed among the components of their kind, marked with a badge. More libraries can come from a catalog published on the web.
 - **Extension warehouse**: install extensions that add new parametric objects (electrical symbols, plan annotations and adjustable furniture ship with the app), from the catalog, a web catalog or a file. The adjustable table, bed and shelving are resized on the plan by their sides, like a rectangle. These extensions are data, not programs, so installing one cannot run code.
 - Any drawing can be imported as a component library.
 
@@ -78,9 +78,9 @@ Last updated: 2026-10-13 (1.0.0-rc.1).
 - **Crash recovery**: unsaved work is copied aside as it changes and offered back after a crash. **Backups** (desktop): each drawing is copied before the app first writes over it.
 - **Drawings stay readable**: what a newer version adds is kept; a newer format is refused with a message; a drawing with a broken reference opens repaired, with a note.
 - A fault in one panel leaves the rest of the window working, and the drawing can always be saved.
-- English, French, Spanish, German, Chinese and Japanese.
+- English, French, Spanish, German, Chinese, Japanese and Korean.
 - Files are readable JSON with a published schema; a command-line tool creates, validates, edits and exports drawings.
-- Export to PDF at true scale (one page per paper, with a title block), to SVG and to DXF. Text in any script but Korean prints in the PDF: Chinese, Japanese, Greek, Cyrillic and Central European letters come from fonts shipped with the app, only the glyphs used embedded.
+- Export to PDF at true scale (one page per paper, with a title block), to SVG and to DXF. Chinese, Japanese, Korean, Greek, Cyrillic and Central European text prints in the PDF, in fonts shipped with the app, only the glyphs used embedded.
 
 ## 2. The next ten big features
 
@@ -88,7 +88,7 @@ Ranked by how much each one moves the app from "promising" to "usable for real w
 
 | # | Feature | Status |
 | --- | --- | --- |
-| 1 | **Component warehouse** | **Done.** Bundled libraries, search, click to place, web catalogs. |
+| 1 | **Component warehouse** | **Done.** Bundled libraries, search, click or drag to place, web catalogs. |
 | 2 | **Extension warehouse** | **Done** for data-only extensions (new parametric objects). Extensions that add tools or commands still have to be compiled in. |
 | 3 | **Groups, stacking order, right-click menu** | **Done.** |
 | 4 | **Cut, copy, paste** | **Done**, including across drawings. |

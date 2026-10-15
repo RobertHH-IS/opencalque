@@ -1,9 +1,10 @@
 import { generateKeyBetween } from 'fractional-indexing'
+import { host } from './host'
 import { FORMAT, FORMAT_VERSION, type ContainerNode, type Document, type Layer, type Node } from './schema'
 
 export function newId(prefix = 'n'): string {
   const alphabet = '0123456789abcdefghijklmnopqrstuvwxyz'
-  const bytes = crypto.getRandomValues(new Uint8Array(10))
+  const bytes = host.crypto.getRandomValues(new Uint8Array(10))
   return `${prefix}_${Array.from(bytes, (b) => alphabet[b % 36]).join('')}`
 }
 

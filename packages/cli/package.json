@@ -1,6 +1,6 @@
 {
   "name": "@opencalque/cli",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -12,6 +12,7 @@
   "dependencies": {
     "@opencalque/core": "workspace:*",
     "@opencalque/ext-architecture": "workspace:*",
+    "@opencalque/warehouse": "workspace:*",
     "zod": "^4.6.5"
   }
 }

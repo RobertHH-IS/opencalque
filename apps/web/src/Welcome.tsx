@@ -9,8 +9,9 @@ import { VERSION } from './release'
 import { isDirty, useStore } from './store'
 import { IconButton } from './ui'
 import { UNITS } from './units'
+import { useWindows } from './windows'
 
-const close = () => useStore.setState({ welcomeOpen: false })
+const close = () => useWindows.setState({ welcomeOpen: false })
 
 /** The mark of the app: sheets of tracing paper lying on one another. */
 export function Logo({ size }: { size: number }) {
@@ -39,7 +40,7 @@ function Choice(props: { icon: LucideIcon; title: string; note: string; onClick:
  * with the app.
  */
 export function Welcome() {
-  const open = useStore((s) => s.welcomeOpen)
+  const open = useWindows((s) => s.welcomeOpen)
   const show = usePrefs((p) => p.showWelcome)
   const chosenLanguage = usePrefs((p) => p.language)
   const chosenUnit = usePrefs((p) => p.unit)
@@ -159,7 +160,7 @@ export function Welcome() {
             <input type="checkbox" checked={show} onChange={(e) => setPrefs({ showWelcome: e.target.checked })} />
             {t('Show this window when the app starts')}
           </label>
-          <button className="text-button" onClick={() => useStore.setState({ welcomeOpen: false, aboutOpen: true })}>
+          <button className="text-button" onClick={() => useWindows.setState({ welcomeOpen: false, aboutOpen: true })}>
             {t('What is new in version {version}', { version: VERSION })}
           </button>
         </footer>

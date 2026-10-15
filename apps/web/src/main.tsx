@@ -6,12 +6,14 @@ import { App } from './App'
 import { Guard } from './Guard'
 import { setLanguage } from './i18n'
 import { usePrefs } from './prefs'
-import { loadDocument, registry, useStore } from './store'
+import { loadExtensions, registry, useExtensions } from './extensions'
+import { loadDocument } from './store'
 import { startTheme } from './theme'
 import './styles.css'
 
 // The language is known only now, so the first empty drawing is made here, with its page and
 // layer named in it.
+loadExtensions()
 setLanguage(usePrefs.getState().language, registry.translations)
 startTheme()
 loadDocument(blankDocument(), null)
@@ -22,7 +24,7 @@ function Root() {
   const unit = usePrefs((p) => p.unit)
   const fraction = usePrefs((p) => p.fraction)
   // Extensions bring their own translations, so the language is set again when they change.
-  useStore((s) => s.extensionsVersion)
+  useExtensions((s) => s.version)
   setLanguage(language, registry.translations)
   return <App key={`${language} ${unit} ${fraction}`} />
 }

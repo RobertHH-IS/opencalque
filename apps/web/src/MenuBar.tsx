@@ -7,6 +7,7 @@ import { usePrefs } from './prefs'
 import { apply, isDirty, useStore } from './store'
 import { EditableText } from './ui'
 import { Logo } from './Welcome'
+import { useWindows } from './windows'
 
 /**
  * What each menu holds: command ids, null for a separator, or "@Category" for every command of a
@@ -111,7 +112,7 @@ export function MenuBar() {
         </div>
       ))}
       {/* Not a menu: the one thing behind it is the window that says what this is and what is new. */}
-      <button className="menubar-item" onClick={() => useStore.setState({ aboutOpen: true })}>
+      <button className="menubar-item" onClick={() => useWindows.setState({ aboutOpen: true })}>
         {t('About')}
       </button>
       <div className="menubar-name">

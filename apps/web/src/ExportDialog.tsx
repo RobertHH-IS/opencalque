@@ -4,10 +4,12 @@ import { pagesOf, pdfFontCharacters } from '@opencalque/core'
 import { exportDxf, exportPdf, exportQuantities, exportSvg, type PdfExportStage } from './actions'
 import { language, msg, t } from './i18n'
 import { preparePdfFonts } from './pdfFonts'
-import { apply, registry, useStore } from './store'
+import { registry } from './extensions'
+import { apply, useStore } from './store'
 import { Field, labelOf } from './ui'
+import { useWindows } from './windows'
 
-const close = () => useStore.setState({ exportOpen: false })
+const close = () => useWindows.setState({ exportOpen: false })
 
 type Format = 'pdf' | 'svg' | 'dxf' | 'csv'
 const PROGRESS: Record<PdfExportStage, string> = {
@@ -29,7 +31,7 @@ const FORMATS: [Format, string, string, LucideIcon][] = [
  * made of papers, one page each; an SVG or a DXF holds one page of the drawing.
  */
 export function ExportDialog() {
-  const open = useStore((s) => s.exportOpen)
+  const open = useWindows((s) => s.exportOpen)
   const doc = useStore((s) => s.doc)
   const page = useStore((s) => s.page)
   const selection = useStore((s) => s.selection)
@@ -52,7 +54,7 @@ export function ExportDialog() {
   }, [open])
   // A PDF that needs a font gets it loading now, while the papers are chosen: the Chinese one is large.
   useEffect(() => {
-    if (open && format === 'pdf' && papers.length > 0) preparePdfFonts(pdfFontCharacters(doc, registry), language() === 'ja')
+    if (open && format === 'pdf' && papers.length > 0) preparePdfFonts(pdfFontCharacters(doc, registry), language())
   }, [open, format])
   useEffect(() => () => running.current?.abort(), [])
 

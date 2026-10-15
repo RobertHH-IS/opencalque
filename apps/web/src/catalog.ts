@@ -1,9 +1,10 @@
 import { DeclarativeExtensionSchema, parseDocument, type DeclarativeExtension, type Document } from '@opencalque/core'
-import bundledIndex from './warehouse/components/index.json'
+import bundledIndex from '@opencalque/warehouse/components/index.json'
+export { bundledExtensions } from '@opencalque/warehouse'
 
 /**
  * The warehouse: component libraries and extensions that can be added to the app. Some ship with
- * it (the files under ./warehouse); more can come from a catalog published anywhere on the web.
+ * it (`packages/warehouse`); more can come from a catalog published anywhere on the web.
  *
  * A catalog is a JSON file:
  *   { "libraries":  [{ "name": "…", "description": "…", "file": "relative/or/absolute.opencalque" }],
@@ -32,18 +33,14 @@ export interface Library {
 
 // Vite turns these into separate files fetched only when a library is opened. Importing them,
 // rather than fetching by URL, also works in the desktop app, which is loaded from disk.
-const libraryFiles = import.meta.glob('./warehouse/components/*.opencalque', { query: '?raw', import: 'default' }) as Record<string, () => Promise<string>>
-const extensionFiles = import.meta.glob('./warehouse/extensions/*.json', { eager: true, import: 'default' }) as Record<string, unknown>
+// A glob takes no package name, hence the path to the package.
+const libraryFiles = import.meta.glob('../../../packages/warehouse/components/*.opencalque', { query: '?raw', import: 'default' }) as Record<string, () => Promise<string>>
 
 export function bundledLibraries(): Library[] {
   return (bundledIndex as unknown as (Omit<Library, 'load'> & { file: string })[]).map((entry) => ({
     ...entry,
-    load: async () => parseDocument(JSON.parse(await libraryFiles[`./warehouse/components/${entry.file}`]())),
+    load: async () => parseDocument(JSON.parse(await libraryFiles[`../../../packages/warehouse/components/${entry.file}`]())),
   }))
-}
-
-export function bundledExtensions(): DeclarativeExtension[] {
-  return Object.values(extensionFiles).map((json) => DeclarativeExtensionSchema.parse(json))
 }
 
 /** Reads a catalog from the web. Entries that cannot be read are skipped rather than failing the lot. */

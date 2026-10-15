@@ -11,18 +11,23 @@ it, in this order:
 - `NotoSansJP-Regular.ttf` (5.5 MB): Japanese. It comes before the Chinese font for a Japanese
   text (one with kana, or exported while the app is in Japanese), because the two draw many of the
   same kanji differently. Licence: `OFL-NotoSansJP.txt`.
+- `NotoSansKR-Regular.ttf` (5.7 MB): Korean, every Hangul syllable and the hanja in Korean use.
+  It comes before the Chinese font for a Korean text (one with Hangul, or exported while the app
+  is in Korean), and after the Japanese one when a text is both. Licence: `OFL-NotoSansKR.txt`.
 
-All three are under the SIL Open Font License 1.1, which lets them be bundled with the app and
-embedded in documents. The web editor downloads one only when a PDF needs it.
+`pdfFontNames` in `packages/core/src/pdf.ts` gives that order. All four are under the SIL Open Font
+License 1.1, which lets them be bundled with the app and embedded in documents. The web editor
+downloads one only when a PDF needs it.
 
 They were made with fontTools from the variable fonts in https://github.com/google/fonts
-(`ofl/notosans/NotoSans[wdth,wght].ttf`, `ofl/notosanssc/NotoSansSC[wght].ttf` and
-`ofl/notosansjp/NotoSansJP[wght].ttf`): the Regular weight taken out, then hinting, layout features
-and vertical metrics removed, which the PDF writer does not use.
+(`ofl/notosans/NotoSans[wdth,wght].ttf`, `ofl/notosanssc/NotoSansSC[wght].ttf`,
+`ofl/notosansjp/NotoSansJP[wght].ttf` and `ofl/notosanskr/NotoSansKR[wght].ttf`): the Regular
+weight taken out, then hinting, layout features and vertical metrics removed, which the PDF writer
+does not use.
 
 ```sh
 fonttools varLib.instancer "NotoSans[wdth,wght].ttf" wght=400 wdth=100 --update-name-table -o static.ttf
-# or, for NotoSansSC[wght].ttf and NotoSansJP[wght].ttf: ... wght=400 --update-name-table -o static.ttf
+# or, for NotoSansSC, NotoSansJP and NotoSansKR[wght].ttf: ... wght=400 --update-name-table -o static.ttf
 pyftsubset static.ttf --unicodes='*' --no-hinting --layout-features='' \
   --drop-tables+=BASE,GDEF,GPOS,GSUB,STAT,vhea,vmtx,gasp,DSIG,MVAR --name-IDs='*' --notdef-outline \
   --output-file=NotoSans-Regular.ttf

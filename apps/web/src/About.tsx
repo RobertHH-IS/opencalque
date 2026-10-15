@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react'
 import { msg, t } from './i18n'
 import { RELEASES, REPOSITORY, VERSION } from './release'
 import { useStore } from './store'
 import { Logo } from './Welcome'
+import { useWindows } from './windows'
 
-const close = () => useStore.setState({ aboutOpen: false })
+const close = () => useWindows.setState({ aboutOpen: false })
 
 /** The headings the changelog files changes under, so that they can be shown in the user's language. */
 const HEADINGS: Record<string, string> = { New: msg('New'), Improved: msg('Improved'), Fixed: msg('Fixed') }
@@ -15,11 +17,26 @@ const LINKS: [string, string][] = [
 ]
 
 /**
+ * The licences of what the app includes (THIRD-PARTY-NOTICES.txt, written by `pnpm notices`),
+ * fetched only when asked for: they are long, and in English, as licences are.
+ */
+function Licences() {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    import('../../../THIRD-PARTY-NOTICES.txt?raw').then((file) => setText(file.default))
+  }, [])
+  return <pre className="about-licences">{text ?? t('Loading…')}</pre>
+}
+
+/**
  * What the app is, which version this is, and what changed in each version. The notes come from
  * CHANGELOG.md, the same text that describes each release on GitHub; they are written in English.
+ * The licences of the software and fonts it includes are shown in their place on demand.
  */
 export function About() {
-  const open = useStore((s) => s.aboutOpen)
+  const open = useWindows((s) => s.aboutOpen)
+  const [licences, setLicences] = useState(false)
+  useEffect(() => setLicences(false), [open])
   if (!open) return null
   return (
     <div className="palette-backdrop" onMouseDown={close} onKeyDown={(e) => e.key === 'Escape' && close()}>
@@ -36,6 +53,9 @@ export function About() {
                   {t(name)}
                 </a>
               ))}
+              <button className="link-button" onClick={() => setLicences(!licences)}>
+                {licences ? t('What is new') : t('Licences')}
+              </button>
             </p>
           </div>
           <button className="text-button" autoFocus onClick={close}>
@@ -43,8 +63,9 @@ export function About() {
           </button>
         </div>
         <div className="about-notes">
-          <h3>{t('What is new')}</h3>
-          {RELEASES.map((release, i) => (
+          <h3>{licences ? t('Licences') : t('What is new')}</h3>
+          {licences && <Licences />}
+          {!licences && RELEASES.map((release, i) => (
             <article key={release.version} className={i === 0 ? 'latest' : ''}>
               <h4>
                 {t('Version {version}', { version: release.version })}

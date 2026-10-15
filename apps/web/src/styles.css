@@ -9,8 +9,10 @@
   --accent: #0d99ff;
   --accent-soft: #e5f4ff;
   --on-accent: #ffffff;
-  /* The tinted strip behind panel tabs, and a tab in it under the pointer. */
-  --strip: #f4f4f4;
+  /* A panel's tab in front, and another under the pointer. */
+  --tab-front: #ebebeb;
+  --tab-hover: #f5f5f5;
+  /* A button under the pointer on a tinted background (the sections of Preferences). */
   --strip-hover: #ececec;
   /* Components and banners. */
   --special: #7b61ff;
@@ -39,7 +41,8 @@
   --hover: #383838;
   --pressed: #505050;
   --accent-soft: #1d3a52;
-  --strip: #232323;
+  --tab-front: #3f3f3f;
+  --tab-hover: #353535;
   --strip-hover: #303030;
   --special: #9d8bff;
   --danger: #ff6369;
@@ -107,11 +110,12 @@ select {
   --dv-active-sash-color: var(--accent);
 }
 
-/* Tabs: like the tabs of a folder. The row is a tinted strip; the tab in front is a flat piece of
-   the panel beneath it, joined to it, with a line of colour along its top. */
+/* Tabs: the names of the panels in a row above them, the one in front on a soft rounded
+   background. A tab takes the whole height of the row, to be easy to grab, and the background is
+   drawn on what is inside it. A row never scrolls: the tabs that do not fit are left out whole and
+   listed behind the "···" after the others (`MoreTabs.tsx`). */
 
 .dock {
-  --dv-tabs-and-actions-container-background-color: var(--strip);
   --dv-tabs-and-actions-container-height: 34px;
   --dv-activegroup-visiblepanel-tab-background-color: transparent;
   --dv-activegroup-hiddenpanel-tab-background-color: transparent;
@@ -119,62 +123,230 @@ select {
   --dv-inactivegroup-hiddenpanel-tab-background-color: transparent;
 }
 
-/* The line under the strip is drawn inside it, so that the tab in front can cover it. */
+/* The line under the row is drawn inside it, and the first tab takes the room before it: every
+   point of the row belongs to a tab or to its empty part, where a dragged tab can be dropped, so
+   that the cursor never turns to "not allowed" on the way. */
 .dock .dv-tabs-and-actions-container {
   box-shadow: inset 0 -1px 0 var(--border);
 }
 
+/* Nothing to clip: the tabs that do not fit are left out whole, and the bar marking a drop after the
+   last one goes past its edge. */
 .dock .dv-tabs-container {
   gap: 0;
   padding: 0;
+  overflow: visible;
 }
 
-.dock .dv-tab {
+.dock .dv-tabs-container > .dv-tab:first-child {
+  padding-left: 4px;
+}
+
+.dock .dv-tabs-container .dv-tab {
+  display: flex;
+  align-items: center;
   height: 100%;
   margin: 0;
-  padding: 0 6px 0 12px;
-  border-right: 1px solid var(--border);
-  border-radius: 0;
+  padding: 0 1px;
   color: var(--muted);
   font-weight: 500;
-  transition: background-color 80ms, color 80ms;
 }
 
-.dock .dv-tab.dv-inactive-tab:hover {
-  background-color: var(--strip-hover);
+/* Left out for want of room, by `MoreTabs`. */
+.dock .dv-tabs-container .dv-tab.tab-hidden {
+  display: none;
+}
+
+/* Alone in a row too narrow even for it, the tab in front gives up the end of its name. While
+   `MoreTabs` measures the row, every tab is at its full width. */
+.dock .dv-tabs-container .dv-tab.dv-active-tab {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.dock .dv-tabs-container.tabs-measuring .dv-tab {
+  flex-shrink: 0;
+}
+
+.dock .dv-tabs-container .dv-tab .dv-default-tab {
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px 0 10px;
+  border-radius: 6px;
+}
+
+.dock .dv-tabs-container .dv-tab.dv-inactive-tab:hover {
   color: var(--text);
 }
 
-.dock .dv-tab.dv-active-tab {
-  background-color: var(--bg);
-  box-shadow: inset 0 2px 0 var(--accent);
+.dock .dv-tabs-container .dv-tab.dv-inactive-tab:hover .dv-default-tab {
+  background-color: var(--tab-hover);
+}
+
+.dock .dv-tabs-container .dv-tab.dv-active-tab {
   color: var(--text);
 }
 
-/* The close cross is small and shows only on the tab under the pointer. */
-.dock .dv-tab .dv-default-tab-action {
-  padding: 3px;
+.dock .dv-tabs-container .dv-tab.dv-active-tab .dv-default-tab {
+  background-color: var(--tab-front);
+}
+
+.dock .dv-tabs-container .dv-default-tab .dv-default-tab-content {
+  min-width: 0;
+  margin-right: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The close cross shows on the tab under the pointer, in room of its own on every tab, so that
+   nothing moves when it shows and it never covers the name. */
+.dock .dv-tabs-container .dv-default-tab .dv-default-tab-action {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  padding: 0;
   border-radius: 4px;
   color: var(--muted);
   visibility: hidden;
 }
 
-.dock .dv-tab .dv-default-tab-action svg {
+.dock .dv-tabs-container .dv-tab:hover .dv-default-tab .dv-default-tab-action {
+  visibility: visible;
+}
+
+/* While a panel is dragged (`dock-dragging`, set in Layout.tsx), the pointer is placing, not
+   pointing: one cursor over everything, which no element changes on the way, and no hover. */
+html.dock-dragging,
+html.dock-dragging * {
+  cursor: grabbing !important;
+}
+
+html.dock-dragging .dock .dv-tabs-container .dv-tab:hover .dv-default-tab .dv-default-tab-action {
+  visibility: hidden;
+}
+
+html.dock-dragging .dock .dv-tabs-container .dv-tab.dv-inactive-tab:hover {
+  color: var(--muted);
+}
+
+html.dock-dragging .dock .dv-tabs-container .dv-tab.dv-inactive-tab:hover .dv-default-tab {
+  background-color: transparent;
+}
+
+.dock .dv-tabs-container .dv-default-tab .dv-default-tab-action:hover {
+  border-radius: 4px;
+  background-color: var(--pressed);
+  color: var(--text);
+}
+
+.dock .dv-default-tab-action svg {
   width: 8px;
   height: 8px;
 }
 
-.dock .dv-tab:hover .dv-default-tab-action {
-  visibility: visible;
+/* Where a dragged tab will land: a short bar between two tabs, or after the last one when it is
+   over the empty part of the row, rather than a tinted box. Said with the weight of the library's
+   rules for the edges of a drop area, which would draw a line the whole height of the row. The bar
+   is drawn at the left of the library's mark, 4 px wide, which is moved so that the bar lies across
+   the boundary between two tabs, at the same place whichever of the two the pointer is on. */
+.dock .dv-tabs-container .dv-drop-target > .dv-drop-target-dropzone > .dv-drop-target-selection.dv-drop-target-selection-line,
+.dock .dv-void-container.dv-drop-target > .dv-drop-target-dropzone > .dv-drop-target-selection.dv-drop-target-center {
+  border: 0;
+  background: linear-gradient(var(--accent), var(--accent)) left center / 2px 24px no-repeat;
+  /* The library slides its mark from where it was: from one tab to the next, it swept across. */
+  transition: none;
 }
 
-/* The library shows it on the tab in front; said again with more weight. */
-.dock .dv-tab.dv-active-tab:not(:hover) .dv-default-tab-action {
-  visibility: hidden;
+/* At the right edge of a tab: its mark starts 4 px before it. */
+.dock .dv-tabs-container .dv-drop-target > .dv-drop-target-dropzone > .dv-drop-target-selection.dv-drop-target-selection-line.dv-drop-target-right {
+  margin-left: 3px;
 }
 
-.dock .dv-tab .dv-default-tab-action:hover {
-  background-color: var(--pressed);
+.dock .dv-tabs-container .dv-drop-target > .dv-drop-target-dropzone > .dv-drop-target-selection.dv-drop-target-selection-line.dv-drop-target-left {
+  margin-left: -1px;
+}
+
+/* Before the first tab, inside the room it takes. */
+.dock .dv-tabs-container > .dv-tab:first-child > .dv-drop-target-dropzone > .dv-drop-target-selection.dv-drop-target-selection-line.dv-drop-target-left {
+  margin-left: 2px;
+}
+
+/* The empty part of the row starts where the last tab ends. */
+.dock .dv-void-container.dv-drop-target > .dv-drop-target-dropzone > .dv-drop-target-selection.dv-drop-target-center {
+  margin-left: -1px;
+}
+
+/* The tab that follows the pointer while it is dragged: a copy the library makes of it, in <body>,
+   outside the panels, so it is styled here as the tab in front looks, lifted, without its cross. */
+body > .dv-tab-ghost-drag .dv-default-tab {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 6px;
+  background-color: var(--tab-front);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 16%), 0 0 0 1px var(--ring);
+  color: var(--text);
+}
+
+body > .dv-tab.dv-tab-ghost-drag .dv-default-tab .dv-default-tab-action,
+body > .dv-tab-ghost-drag::after {
+  display: none;
+}
+
+/* The "···" when some tabs are left out, at the right end of the row, and the list of them it
+   opens. It lies over the end of the empty part of the row (the header's right actions are taken
+   out of its flow), and lets a drag through to it. Its width and margin are in MORE_WIDTH in
+   MoreTabs.tsx. */
+.dock .dv-tabs-and-actions-container {
+  position: relative;
+}
+
+.dock .dv-tabs-and-actions-container > .dv-right-actions-container {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+
+.tab-more-anchor {
+  display: flex;
+  align-items: center;
+  height: 100%;
+}
+
+.tab-more {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 6px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+html.dock-dragging .tab-more {
+  pointer-events: none;
+}
+
+.tab-more:hover,
+.tab-more[aria-expanded='true'] {
+  background-color: var(--tab-hover);
+  color: var(--text);
+}
+
+.context-menu.tab-menu {
+  width: auto;
+  min-width: 160px;
+  max-width: 280px;
 }
 
 .dock-panel {
@@ -293,6 +465,11 @@ select {
 .section {
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
+}
+
+/* The last section of a panel draws no line under itself: the edge of the panel is one already. */
+.dock-panel .section:last-child {
+  border-bottom: 0;
 }
 
 .section h3 {
@@ -1752,10 +1929,16 @@ button.crumb.ahead:hover {
   background: var(--bg);
   text-align: left;
   cursor: pointer;
+  /* A card is dragged onto the drawing: the drag must not select its text. */
+  user-select: none;
 }
 
 .warehouse-card {
   position: relative;
+}
+
+.warehouse-card input {
+  user-select: text;
 }
 
 /* A parametric object, marked in the corner of its card */
@@ -2194,8 +2377,27 @@ button.crumb.ahead:hover {
   text-decoration: none;
 }
 
-.about-links a:hover {
+.about-links a:hover,
+.about-links .link-button:hover {
   text-decoration: underline;
+}
+
+.about-links .link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+}
+
+.about-licences {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text);
 }
 
 .about-notes {

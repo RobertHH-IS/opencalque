@@ -1,0 +1,76 @@
+import { t } from './i18n'
+
+/**
+ * The editor's tools: which there are, which share a toolbar button, and what the hint bar says at
+ * each step of using one (`hintsFor`). What a tool does on the drawing is in `canvas/gestures/`
+ * (`PRESSES`, and the gestures it starts); its command and shortcut are in `commands.ts` (`tool(…)`).
+ */
+export type Tool = 'select' | 'hand' | 'line' | 'rect' | 'ellipse' | 'wall' | 'dimension' | 'measure' | 'angle' | 'split' | 'rotate' | 'calibrate' | 'eyedropper' | 'text' | 'annotation' | 'paper' | 'room' | 'divider' | 'place'
+
+/** The plain shapes, which share one toolbar button. */
+export const SHAPE_TOOLS: Tool[] = ['line', 'rect', 'ellipse']
+/** The tools for naming spaces, which share another. */
+export const ROOM_TOOLS: Tool[] = ['room', 'divider']
+/** The tools for writing on the drawing, which share a third. */
+export const TEXT_TOOLS: Tool[] = ['text', 'annotation', 'dimension']
+/** The tools that read something off the drawing without adding to it. */
+export const MEASURE_TOOLS: Tool[] = ['measure', 'angle']
+
+/** A key and what it does; an empty key is a plain instruction. */
+export type Hint = [key: string, text: string]
+
+/**
+ * What to do next with the tool in use, and the keys that matter at this very step: nothing is
+ * shown that cannot be used yet. Each hint is a key and what it does; an empty key is a plain
+ * instruction, and the first one is always the next thing to do.
+ */
+export function hintsFor(tool: Tool, step: number, opening: boolean, selected = false): Hint[] {
+  const free: Hint = ['Alt', t('ignores the grid and snapping')]
+  // What measures the drawing never takes a point from the grid (MEASURING in canvas/gesture.ts).
+  const unsnapped: Hint = ['Alt', t('ignores snapping')]
+  const onDrawing: Hint = ['', t('points go on what is drawn, not on the grid')]
+  const heldStraight: Hint = ['Shift', t('keeps to 45° steps and stops on the lines it crosses')]
+  const angles: Hint = ['Shift', t('keeps to 45° steps')]
+  const typed: Hint = ['0-9', t('type an exact length')]
+  const held: Hint = ['↑ ←', t('holds it upright or level')]
+  switch (tool) {
+    case 'wall':
+      if (step === 0) return [['', t('Click where the wall starts')]]
+      // A loop needs at least two walls drawn before a third can close it.
+      return [['', t('Click the next corner')], typed, angles, held, free, ...(step >= 3 ? [['', t('Double-click closes the loop')] as Hint] : []), ['Esc', t('finishes')]]
+    case 'room':
+      return [['', t('Click inside a closed region of walls')]]
+    case 'divider':
+      return step === 0 ? [['', t('Click where the divider starts, on a wall')]] : [['', t('Click where it ends, on the wall opposite')], angles, held, free, ['Esc', t('finishes')]]
+    case 'line':
+      // One segment is a line, several a polyline; closed, a shape that can be filled.
+      if (step === 0) return [['', t('Click where the line starts')]]
+      return [['', step === 1 ? t('Click where it ends') : t('Click the next point')], typed, angles, held, free, ...(step >= 3 ? [['', t('Double-click, or click the first point, to close the shape')] as Hint] : []), ['Esc', t('finishes')]]
+    case 'rect':
+    case 'ellipse':
+      return step === 0 ? [['', t('Click a corner, or type a width and a height first and click to place it')]] : [['', t('Click the opposite corner')], ['0-9', t('type an exact size')], free]
+    case 'paper':
+      return step === 0 ? [['', t('Click a corner of the sheet')]] : [['', t('Pull towards a format to take it, or click anywhere for a size of your own')], ['Alt', t('any size')]]
+    case 'dimension':
+      return step === 0 ? [['', t('Click the first point to measure from')], onDrawing] : step === 1 ? [['', t('Click the second point')], onDrawing, heldStraight, unsnapped] : [['', t('Click where the dimension line should sit')], free]
+    case 'rotate':
+      if (!selected) return [['', t('Select what to turn first: click it')]]
+      if (step === 0) return [['', t('Click the point to turn it about')]]
+      if (step === 1) return [['', t('Click where the turn starts from: the line from the pivot to there')], angles, free, ['Esc', t('cancels')]]
+      return [['', t('Click where that line goes: the selection turns with it')], ['0-9', t('type an exact angle')], ['Shift', t('keeps to 15° steps')], ['Alt', t('turns freely')], ['Esc', t('cancels')]]
+    case 'split':
+      return [['', t('Click a wall, a line or a polyline where it should be cut')], ['', t('the lengths either side are shown')], ['Alt', t('ignores the grid')]]
+    case 'measure':
+      return step === 0 ? [['', t('Click the first point')], onDrawing] : [['', t('Click the second point')], onDrawing, heldStraight, unsnapped]
+    case 'angle':
+      return step === 0 ? [['', t('Click the corner of the angle')], onDrawing] : step === 1 ? [['', t('Click a point along its first side')], unsnapped] : [['', t('Click a point along its second side')], unsnapped]
+    case 'text':
+      return [['', t('Click where the text starts, then type')]]
+    case 'annotation':
+      return step === 0 ? [['', t('Click what the note is about')]] : [['', t('Click where the note goes, then type it')], free]
+    case 'place':
+      return opening ? [['', t('Click a wall to place it')], ['R', t('rotates')], ['Alt', t('places it freely, off walls and grid')]] : [['', t('Click to place it')], ['R', t('rotates')], free]
+    default:
+      return []
+  }
+}

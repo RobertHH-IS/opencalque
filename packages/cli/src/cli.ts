@@ -1,30 +1,30 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
-import * as z from 'zod'
 import {
   applyOps,
   childrenOf,
   componentsOf,
   createDocument,
-  DocumentSchema,
+  documentJsonSchema,
   dxfOps,
   layersOf,
   newId,
-  OpSchema,
+  extensionJsonSchema,
+  opsJsonSchema,
   pagesOf,
   parseOps,
   readDocument,
-  Registry,
   serializeDocument,
   toDXF,
   toSVG,
   type Document,
   toPDF,
   pdfFontCharacters,
+  pdfFontNames,
   unknownProperties,
 } from '@opencalque/core'
-import { architecture } from '@opencalque/ext-architecture'
+import { standardRegistry } from '@opencalque/warehouse'
 
 const USAGE = `opencalque <command>
 
@@ -40,13 +40,14 @@ const USAGE = `opencalque <command>
   pdf <file> [--out <file.pdf>] Export every paper as a page of a PDF, at its real size and scale
   dxf <file> [--page <id>] [--out <file.dxf>]
                                Export a page to DXF for other CAD programs
-  schema [--out <dir>]         Print or write the JSON Schemas of documents and operations
+  schema [--out <dir>]         Print or write the JSON Schemas of documents, operations and extensions written as data
   --version                    Print the version
 `
 
 const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
 
-const registry = new Registry().use(architecture)
+// The built-in extension and those that ship with the app, so that what the editor draws is drawn here too.
+const registry = standardRegistry()
 const args = process.argv.slice(2)
 
 function flag(name: string): string | undefined {
@@ -161,11 +162,10 @@ function main(): void {
     }
     case 'pdf': {
       const doc = read(file)
-      // Letters the standard PDF fonts lack are printed in the fonts the app ships; kanji in their
-      // Japanese forms when the drawing has kana, so is Japanese.
+      // Letters the standard PDF fonts lack are printed in the fonts the app ships; Chinese
+      // characters in their Japanese or Korean forms when the drawing has kana or Hangul.
       const characters = pdfFontCharacters(doc, registry)
-      const order = characters.some((char) => /[\u3040-\u30ff]/.test(char)) ? ['NotoSans', 'NotoSansJP', 'NotoSansSC'] : ['NotoSans', 'NotoSansSC']
-      const fonts = characters.length === 0 ? [] : order.map((name) => new Uint8Array(readFileSync(new URL(`../../../fonts/${name}-Regular.ttf`, import.meta.url))))
+      const fonts = characters.length === 0 ? [] : pdfFontNames(characters).map((name) => new Uint8Array(readFileSync(new URL(`../../../fonts/${name}-Regular.ttf`, import.meta.url))))
       const pdf = toPDF(doc, registry, undefined, { fonts })
       if (out) writeFileSync(out, pdf)
       else process.stdout.write(pdf)
@@ -180,8 +180,9 @@ function main(): void {
     }
     case 'schema': {
       const schemas = {
-        'document.schema.json': z.toJSONSchema(DocumentSchema),
-        'ops.schema.json': z.toJSONSchema(z.array(OpSchema)),
+        'document.schema.json': documentJsonSchema(),
+        'ops.schema.json': opsJsonSchema(),
+        'extension.schema.json': extensionJsonSchema(),
       }
       for (const [name, schema] of Object.entries(schemas)) {
         const json = JSON.stringify(schema, null, 2) + '\n'

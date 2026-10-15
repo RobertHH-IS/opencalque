@@ -2,6 +2,7 @@ import { de } from './locales/de'
 import { es } from './locales/es'
 import { fr } from './locales/fr'
 import { ja } from './locales/ja'
+import { ko } from './locales/ko'
 import { zh } from './locales/zh'
 
 /**
@@ -17,9 +18,10 @@ export const LANGUAGES: [code: string, name: string][] = [
   ['de', 'Deutsch'],
   ['zh', '中文'],
   ['ja', '日本語'],
+  ['ko', '한국어'],
 ]
 
-export const LOCALES: Record<string, Record<string, string>> = { fr, es, de, zh, ja }
+export const LOCALES: Record<string, Record<string, string>> = { fr, es, de, zh, ja, ko }
 
 let app: Record<string, string> = {}
 let extensions: Record<string, string> = {}

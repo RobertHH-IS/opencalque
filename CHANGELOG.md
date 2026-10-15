@@ -4,6 +4,49 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 1.0.0 — 2026-10-15
+
+The first stable version of OpenCalque. From this version on, a drawing stays readable by every later version: what a newer version adds is kept when an older one opens and saves it, and a drawing an older version cannot read is refused with a message rather than half-read and saved back. This is what changed since 0.8.5; the notes of the release candidates, 1.0.0-rc.1 to rc.4, give the details.
+
+### New
+- The interface in Korean, chosen under Preferences › Language or followed from the system, with the component library, doors, windows and stairs named in Korean too. Korean text in an exported PDF prints in a Korean font that ships with the app.
+- Unsaved work survives a crash: a moment after each change the drawing is copied aside, and the next start offers it back in the welcome window. The desktop app also keeps a copy of each drawing as it was before it first writes over it (File › Show backups of drawings), and saves by writing beside the file and then putting it in place, so a crash while saving never leaves a half-written file.
+- A drawing written by hand or by a script that refers to something missing opens with the problem put right and a note saying so, instead of being refused or refusing every change.
+- A wall can be drawn by one of its faces and keep it, so that walls of different thicknesses stay flush inside; made thicker or thinner from one side by dragging that face; and made longer or shorter by the line across its free end. Joined walls stay joined, walls that stop against it keep reaching it, and its doors and windows stay in its middle.
+- Things are resized by their sides on the plan, the side opposite staying put: rectangles and ellipses, placed components (stretched one way, and given their proportions back from their properties), stairs in whole steps, the adjustable table, bed and shelving, and doors and windows by either of their ends.
+- Washbasins of one or two bowls, a bathtub, a hob, a sink, a fridge and an American fridge are parametric objects whose bowls, zones and rims keep their size as they are resized; a corner sofa takes a seat for about every 65 cm of its sides; the bathroom library has a wall-hung toilet, and windows can have triple glazing. Those placed from a library before stay as they were.
+- A parametric object can be vectorized into a component of the shapes it draws, and a component ungrouped back into objects of the drawing.
+- The assistant knows what is selected: a label above the message box says what will be sent, and a click on its × leaves it out of one message.
+- Colours can follow the colour of the layer and can be see-through; the colour window has an eyedropper; a group can be made see-through as a whole.
+- Dimension styles, shared by the dimensions drawn in them; and the text of a vertical dimension can read from bottom to top, as ISO 129 asks, or from top to bottom.
+- Paste in place (Ctrl+Shift+V). Inside a group or a component, the top-left corner of the drawing shows the way there from the page, each place on it one click back out, and the places just left one click back in.
+- A card of the component library can be dragged onto the drawing, and is put down where the button is let go.
+- On macOS, a drawing double-clicked in the Finder, or dropped on the app in the Dock, opens in the app.
+
+### Improved
+- Large drawings are much faster: a DXF of twenty thousand lines is imported in a fraction of a second instead of forty seconds, a plan of two thousand walls redraws in a few hundredths of a second while it is dragged, and the Structure panel lists any number of objects.
+- Rooms are found from the walls as they are drawn: a room closes exactly when its walls touch, its floor runs along their faces, and it no longer depends on the order the walls were drawn in or which way round. A room's floor takes a colour and a pattern directly, and a selected room shows only its outline.
+- The component library is larger, with its sections down its left side, the furniture listed by room, and every section searched at once; it opens on the section looked at last, adds a whole section at once, and its furniture and fittings are drawn in detail as seen from above.
+- Paste puts things where you are looking, on top of what is there; something cut out of a component and pasted on the page lands where the component drew it.
+- The points of dimensions, measurements and angles snap to what is drawn, never to the grid. With Shift a wall, a line or a dimension keeps to its direction and still stops on the lines it crosses and comes level with what is pointed at; something moved lines up with what is inside groups.
+- The properties panel is lighter: arranging is in the toolbar's Arrange menu, renaming in the Structure panel, an angle typed turns an object about its middle, and line weights are six pen sizes shown with a sample.
+- The Structure panel shows what is picked on the drawing, and its rows are dragged into and out of groups.
+- The panels' tabs are quieter; a row of tabs too narrow for them all shows those that fit whole and lists the others behind a "···"; dragging a panel by its tab is steadier.
+- The right-click menu shows only what applies to what was clicked.
+- The assistant is told more precisely how drawings work and which properties it wrote mean nothing, can read chosen objects in large drawings, and offers Claude Haiku 5.5.
+- The desktop app asks once before the assistant reaches an AI service that is not on this computer, its window can no longer be sent to another page, and the installed program can no longer be started as a plain Node program.
+- The command line: new refuses to replace a file without --force, validate lists what opening a file would put right, apply warns about properties the format does not know, and --version prints the version.
+
+### Fixed
+- A drawing with a wall whose wall type was missing refused every change; copying a wall with a wall type, or a dimension with a style, into another drawing failed.
+- An order such as "top", written by the assistant or a script, stopped anything more from being added to that page.
+- A stair or a window given a huge number of steps or panes, or an extension object repeated a huge number of times, froze the app.
+- Ctrl+X followed quickly by Esc cut nothing, and something pasted could go back under what had been drawn after it.
+- What is stacked under the walls in the Structure panel was drawn over them.
+- Ctrl+Z and the other shortcuts did nothing right after a slider was dragged or a box ticked in the properties panel.
+- A component taken from the library is always the library's own: one placed before and changed in the drawing since stays as it is, and the library's comes in beside it.
+- Drawings exported from the command line (as SVG, PDF or DXF) show the adjustable furniture, the plan annotations and the electrical symbols of the extensions that ship with the app, where they showed a placeholder box.
+
 ## 1.0.0-rc.4 — 2026-10-15
 
 ### New

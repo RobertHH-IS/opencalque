@@ -6,6 +6,7 @@ import { fillFields } from './fields'
 import { formatFeetInches } from './imperial'
 import { applyModifiers, movedModifiers, segmentsInside, HATCH_INK, patternStrokes } from './modifiers'
 import { primitiveBounds, transformPrimitive, type Primitive } from './primitives'
+import { tidy, turned, type Placing } from './similarity'
 import { sheetContentOf } from './templates'
 import type { Op } from './ops'
 import type { Registry } from './registry'
@@ -60,6 +61,14 @@ export interface NodeKind<N> {
    * a kind does not say.
    */
   snapLines?(node: N, drawn: Vec2[][]): Vec2[][]
+  /**
+   * The patch that turns, mirrors and scales the node as `t` says, keeping what the node means:
+   * a wall's thickness and a text's size scale with it, a parametric object has its lengths scaled
+   * rather than being stretched, text and pictures go to their mirrored place but stay readable, a
+   * paper stays upright. Null for what is never transformed (a page, a component). `transformOps`
+   * moves the node's modifiers, and goes through what a group holds.
+   */
+  transform(node: N, t: Placing, registry: Registry): Record<string, unknown> | null
 }
 
 const moveXY = (node: { x: number; y: number }, d: Vec2) => ({ x: node.x + d.x, y: node.y + d.y })
@@ -76,6 +85,17 @@ function rectCorners(node: NodeOf<'rect'>): Vec2[] {
   ]
   return local.map((p) => add(rotate(p, node.rotation ?? 0), node))
 }
+
+/** A box with a top-left corner and a turn (a rectangle, a picture) transformed: it cannot itself be mirrored, so it goes to its mirrored place. */
+const transformBox = (node: { x: number; y: number; width: number; height: number; rotation?: number }, t: Placing) => ({
+  ...t.box(node, node.width),
+  width: t.length(node.width),
+  height: t.length(node.height),
+  rotation: t.angle(node.rotation),
+})
+const transformAB = (node: { a: Vec2; b: Vec2 }, t: Placing) => ({ a: t.point(node.a), b: t.point(node.b) })
+/** An end marker's size, scaled when the node gives one. */
+const markerSize = (node: { markerSize?: number }, t: Placing) => (node.markerSize === undefined ? {} : { markerSize: t.length(node.markerSize) })
 
 const boxCorners = (node: { x: number; y: number; width: number; height: number }): Vec2[] => [
   { x: node.x, y: node.y },
@@ -450,8 +470,8 @@ function fadedPrimitive(prim: Primitive, by: number): Primitive {
 }
 
 const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
-  page: { primitives: () => [], move: () => ({}) },
-  component: { primitives: () => [], move: () => ({}) },
+  page: { primitives: () => [], move: () => ({}), transform: () => null },
+  component: { primitives: () => [], move: () => ({}), transform: () => null },
   group: {
     primitives: (node, ctx) => {
       const prims = childrenOf(ctx.doc, node.id)
@@ -462,25 +482,29 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       const by = node.opacity ?? 1
       return by >= 1 ? prims : prims.map((prim) => fadedPrimitive(prim, by))
     },
-    // A group has nothing of its own to move; see moveOps.
+    // A group has nothing of its own to move or transform; see moveOps and transformOps.
     move: () => ({}),
+    transform: () => ({}),
   },
   line: {
     primitives: (node) => [{ kind: 'path', points: [node.a, node.b] }, ...endMarkers([node.a, node.b], node)],
     move: moveAB,
     handles: handlesAB,
     moveHandle: moveHandleAB,
+    transform: (node, t) => ({ ...transformAB(node, t), ...markerSize(node, t) }),
   },
   polyline: {
     primitives: (node) => [{ kind: 'path', points: node.smooth ? smoothPoints(node.points, node.closed) : node.points, closed: node.closed }, ...(node.closed ? [] : endMarkers(node.points, node))],
     move: (node, d) => ({ points: node.points.map((p) => add(p, d)) }),
     handles: (node) => node.points,
     moveHandle: (node, index, p) => ({ points: node.points.map((q, i) => (i === index ? p : q)) }),
+    transform: (node, t) => ({ points: node.points.map((p) => t.point(p)), ...markerSize(node, t) }),
   },
   rect: {
     primitives: (node) => [{ kind: 'path', points: rectCorners(node), closed: true }],
     move: moveXY,
     // No points of its own to drag: it is resized as a box, by a frame that turns with it (resize.ts).
+    transform: transformBox,
   },
   room: {
     primitives: (node, ctx) => {
@@ -498,12 +522,14 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     // The floor is not something to snap to; the walls around it are.
     snapPoints: () => [],
     snapLines: () => [],
+    transform: (node, t) => ({ ...t.point(node), ...(node.size === undefined && t.scale === 1 ? {} : { size: t.length(node.size ?? 250) }) }),
   },
   divider: {
     primitives: (node) => [{ kind: 'path', points: [node.a, node.b], stroke: DIVIDER_INK, dash: [8, 6], own: true }],
     move: moveAB,
     handles: handlesAB,
     moveHandle: moveHandleAB,
+    transform: transformAB,
   },
   paper: {
     primitives: (node, ctx) => [{ kind: 'path', points: boxCorners(node), closed: true, fill: PAPER_FILL, stroke: PAPER_EDGE, backdrop: true }, ...titleBlock(node, ctx.doc), ...sheetContent(node, ctx)],
@@ -512,6 +538,14 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     moveHandle: (node, index, p) => {
       const fixed = boxCorners(node)[(index + 2) % 4]
       return { x: Math.min(p.x, fixed.x), y: Math.min(p.y, fixed.y), width: Math.abs(p.x - fixed.x), height: Math.abs(p.y - fixed.y) }
+    },
+    // A sheet stays upright, about its middle: a quarter turn swaps its sides.
+    transform: (node, t) => {
+      const centre = t.point({ x: node.x + node.width / 2, y: node.y + node.height / 2 })
+      const quarter = Math.abs((((t.turn % 180) + 180) % 180) - 90) < 1e-6
+      const width = t.length(quarter ? node.height : node.width)
+      const height = t.length(quarter ? node.width : node.height)
+      return { x: tidy(centre.x - width / 2), y: tidy(centre.y - height / 2), width, height }
     },
   },
   ellipse: {
@@ -528,11 +562,20 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       const points = ellipseArc({ ...node, ...arc })
       return [centre, points[0], points[points.length - 1]]
     },
+    transform: (node, t) => {
+      const centre = t.point({ x: node.cx, y: node.cy })
+      // Mirrored, an arc runs the other way round: its ends swap, each to the other side of the axis.
+      const ends = arcOf(node)
+      const arc = t.mirror && ends ? { from: turned(180 - ends.to), to: turned(180 - ends.from) } : {}
+      return { cx: centre.x, cy: centre.y, rx: t.length(node.rx), ry: t.length(node.ry), rotation: t.angle(node.rotation), ...arc }
+    },
   },
   text: {
     primitives: (node, ctx) => textLines(said(node.text, node.parent, ctx), node, node.size, { rotation: node.rotation, font: node.font, align: node.align, bold: node.bold }),
     move: moveXY,
     snapPoints: (node) => [{ x: node.x, y: node.y }],
+    // Its width is not known exactly without the renderer's font; this matches the estimate used for picking.
+    transform: (node, t) => ({ ...t.box(node, node.text.length * node.size * 0.55), size: t.length(node.size), rotation: t.angle(node.rotation) }),
   },
   annotation: {
     primitives: annotationPrimitives,
@@ -555,6 +598,13 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     snapPoints: (node) => [node.a, node.b],
     // A leader points at things; it is not one of them.
     snapLines: () => [],
+    transform: (node, t) => ({
+      ...transformAB(node, t),
+      ...(node.size === undefined && t.scale === 1 ? {} : { size: t.length(node.size ?? ANNOTATION_TEXT_SIZE) }),
+      ...markerSize(node, t),
+      // Which side the leader bows to is a matter of handedness, which a mirror reverses.
+      ...(t.mirror ? { bend: -(node.bend ?? ANNOTATION_BEND) } : {}),
+    }),
   },
   wall: {
     primitives: (node, ctx) => {
@@ -581,6 +631,13 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     snapPoints: (node) => (node.bulge ? [node.a, node.b, wallMiddle(node)] : [node.a, node.b]),
     // Its faces as drawn, and its line (its middle, or the face it is drawn by), which is where another wall comes to meet it.
     snapLines: (node, drawn) => [...drawn, wallPoints(node)],
+    transform: (node, t) => {
+      // The side a curved wall bows to, its left and right faces, and the face it is drawn by are
+      // matters of handedness, which a mirror reverses: the same face is then on the other hand.
+      const swapped = t.mirror && node.edges && (node.edges.left || node.edges.right) ? { edges: { ...node.edges, left: node.edges.right, right: node.edges.left } } : {}
+      const justify = t.mirror && (node.justify === 'left' || node.justify === 'right') ? { justify: node.justify === 'left' ? 'right' : 'left' } : {}
+      return { ...transformAB(node, t), thickness: t.length(node.thickness), ...(node.bulge ? { bulge: t.length(node.bulge * (t.mirror ? -1 : 1)) } : {}), ...swapped, ...justify }
+    },
   },
   dimension: {
     primitives: (node, ctx) => dimensionPrimitives(styledDimension(ctx.doc, node)),
@@ -594,6 +651,14 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     },
     snapPoints: handlesAB,
     snapLines: () => [],
+    transform: (node, t) => ({
+      ...transformAB(node, t),
+      // The side its line stands on is a matter of handedness, which a mirror reverses.
+      offset: t.length(node.offset * (t.mirror ? -1 : 1)),
+      ...(node.size === undefined ? {} : { size: t.length(node.size) }),
+      ...markerSize(node, t),
+      ...(node.extensionGap === undefined ? {} : { extensionGap: t.length(node.extensionGap) }),
+    }),
   },
   image: {
     primitives: (node, ctx) => {
@@ -606,6 +671,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     // A scanned plan is not geometry: nothing should snap to its corners.
     snapPoints: () => [],
     snapLines: () => [],
+    transform: transformBox,
   },
   instance: {
     primitives: (node, ctx) => {
@@ -622,6 +688,7 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     },
     move: moveXY,
     snapPoints: (node) => [{ x: node.x, y: node.y }],
+    transform: (node, t) => ({ ...t.point(node), rotation: t.angle(node.rotation), ...(t.mirror ? { flipX: !node.flipX } : {}), ...(t.scale === 1 ? {} : { scale: tidy((node.scale ?? 1) * t.scale) }) }),
   },
   parametric: {
     primitives: (node, ctx) => parametricPrimitives(node, ctx).map((p) => transformPrimitive(p, node)),
@@ -644,6 +711,21 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       const start = Math.min(along, size.value - MIN_STRETCH)
       const at = applyTransform({ x: start, y: 0 }, node)
       return { x: tidy(at.x), y: tidy(at.y), props: { ...node.props, [size.key]: tidy(size.value - start) } }
+    },
+    transform: (node, t, registry) => {
+      const patch: Record<string, unknown> = { ...t.point(node), rotation: t.angle(node.rotation), ...(t.mirror ? { flipX: !node.flipX } : {}) }
+      const kind = registry.parametric.get(node.kind)
+      if (t.scale !== 1 && kind) {
+        // A door twice the size is a door with twice the width, not a stretched drawing of one.
+        const props: Record<string, unknown> = { ...node.props }
+        for (const param of kind.params) {
+          if (param.unit !== 'length' || typeof param.default !== 'number') continue
+          const value = props[param.key]
+          props[param.key] = t.length(typeof value === 'number' ? value : param.default)
+        }
+        patch.props = props
+      }
+      return patch
     },
   },
 }

@@ -1,6 +1,6 @@
 {
   "name": "opencalque",
-  "version": "1.0.0-rc.4",
+  "version": "1.0.0",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@9.14.2",
@@ -20,6 +20,7 @@
     "warehouse": "tsx packages/cli/src/build-warehouse.ts",
     "warehouse:gallery": "tsx packages/cli/src/warehouse-gallery.ts",
     "example": "tsx packages/cli/src/build-example.ts",
+    "notices": "pnpm --filter @opencalque/web notices",
     "dist": "pnpm build && pnpm --filter @opencalque/desktop dist"
   },
   "devDependencies": {

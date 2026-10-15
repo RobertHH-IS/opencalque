@@ -86,24 +86,59 @@ const DEFAULTS: Prefs = {
 }
 
 const STORAGE_KEY = 'opencalque.prefs'
+const PROVIDERS = ['anthropic', 'claudeCli', 'ollama', 'compatible'] as const
+
+/** Whether the unit was chosen, rather than guessed from the system's language (`usualUnit`): once chosen, it is kept. */
+let unitChosen = false
 
 function load(): Prefs {
   try {
     const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}')
+    unitChosen = stored.unit !== undefined
     const ai = { ...DEFAULTS.ai, ...stored.ai }
-    for (const key of ['anthropic', 'claudeCli', 'ollama', 'compatible'] as const) ai[key] = { ...DEFAULTS.ai[key], ...ai[key] }
+    for (const key of PROVIDERS) ai[key] = { ...DEFAULTS.ai[key], ...ai[key] }
     return { ...DEFAULTS, ...stored, ai, extensions: { ...DEFAULTS.extensions, ...stored.extensions } }
   } catch {
     return DEFAULTS
   }
 }
 
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+/** What of `value` differs from `fallback`, key by key: what is the same is left out. */
+function differing<T extends object>(value: T, fallback: T): Partial<T> {
+  return Object.fromEntries(Object.entries(value).filter(([key, v]) => !same(v, (fallback as Record<string, unknown>)[key]))) as Partial<T>
+}
+
+/**
+ * What is written to storage: only what differs from the defaults, the settings of each AI
+ * provider one by one. A default changed in a later version (a newer model, a setting turned on)
+ * then reaches everyone who never chose otherwise, where storing every setting would keep the old
+ * defaults for good as soon as one setting was changed. The unit is kept once chosen.
+ */
+export function storedPrefs(prefs: Prefs): Record<string, unknown> {
+  const out: Record<string, unknown> = differing(prefs, DEFAULTS)
+  if (unitChosen) out.unit = prefs.unit
+  const ai: Record<string, unknown> = prefs.ai.provider === DEFAULTS.ai.provider ? {} : { provider: prefs.ai.provider }
+  for (const key of PROVIDERS) {
+    const own = differing(prefs.ai[key], DEFAULTS.ai[key])
+    if (Object.keys(own).length > 0) ai[key] = own
+  }
+  delete out.ai
+  if (Object.keys(ai).length > 0) out.ai = ai
+  delete out.extensions
+  const extensions = differing(prefs.extensions, DEFAULTS.extensions)
+  if (Object.keys(extensions).length > 0) out.extensions = extensions
+  return out
+}
+
 export const usePrefs = create<Prefs>(() => load())
 
 export function setPrefs(patch: Partial<Prefs>): void {
+  if (patch.unit !== undefined) unitChosen = true
   usePrefs.setState(patch)
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(usePrefs.getState()))
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(storedPrefs(usePrefs.getState())))
   } catch {
     // Storage can be unavailable (private windows); the change then lasts for this session.
   }

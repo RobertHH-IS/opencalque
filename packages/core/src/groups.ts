@@ -8,8 +8,9 @@ import type { Document } from './schema'
 /**
  * Puts nodes that share a parent into a new group, which takes the place of the topmost of them
  * in the stacking order. A group has no geometry of its own: its members keep their coordinates.
+ * Returns the new document and the operations that make it.
  */
-export function groupNodes(doc: Document, nodeIds: string[], name?: string): { doc: Document; groupId: string } {
+export function groupNodes(doc: Document, nodeIds: string[], name?: string): { doc: Document; ops: Op[]; groupId: string } {
   const picked = new Set(nodeIds)
   const first = doc.nodes[nodeIds[0]]
   if (!first || first.parent === null) throw new OpError('Select at least one object to group')
@@ -20,11 +21,11 @@ export function groupNodes(doc: Document, nodeIds: string[], name?: string): { d
     { op: 'add_node', node: { type: 'group', id: groupId, parent: first.parent, order: members[members.length - 1].order, ...(name ? { name } : {}) } },
     ...members.map((n): Op => ({ op: 'update_node', id: n.id, patch: { parent: groupId } })),
   ]
-  return { doc: applyOps(doc, ops), groupId }
+  return { doc: applyOps(doc, ops), ops, groupId }
 }
 
-/** Dissolves a group: its members take its place in its parent, in the same order. */
-export function ungroupNode(doc: Document, groupId: string): { doc: Document; childIds: string[] } {
+/** Dissolves a group: its members take its place in its parent, in the same order. Returns the new document and the operations that make it. */
+export function ungroupNode(doc: Document, groupId: string): { doc: Document; ops: Op[]; childIds: string[] } {
   const group = doc.nodes[groupId]
   if (group?.type !== 'group' || group.parent === null) throw new OpError('Select a group to ungroup')
   const siblings = childrenOf(doc, group.parent)
@@ -35,7 +36,7 @@ export function ungroupNode(doc: Document, groupId: string): { doc: Document; ch
     ...members.map((n, i): Op => ({ op: 'update_node', id: n.id, patch: { parent: group.parent, order: orders[i] } })),
     { op: 'remove_node', id: groupId },
   ]
-  return { doc: applyOps(doc, ops), childIds: members.map((n) => n.id) }
+  return { doc: applyOps(doc, ops), ops, childIds: members.map((n) => n.id) }
 }
 
 /**

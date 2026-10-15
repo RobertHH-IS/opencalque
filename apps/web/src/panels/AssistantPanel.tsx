@@ -21,6 +21,7 @@ import { msg, t, tn } from '../i18n'
 import { usePrefs } from '../prefs'
 import { useStore } from '../store'
 import { IconButton, labelOf } from '../ui'
+import { useWindows } from '../windows'
 
 const EXAMPLES = [
   msg('Draw a 5 × 4 m room with a door on the bottom wall'),
@@ -155,7 +156,7 @@ export function AssistantPanel() {
       <div className="assistant-panel">
         <div className="assistant-log">
           <p className="hint">{t('The assistant changes the drawing for you from a description. It needs an AI provider and, for most, an API key.')}</p>
-          <button className="text-button" onClick={() => useStore.setState({ preferencesOpen: true })}>
+          <button className="text-button" onClick={() => useWindows.setState({ preferencesOpen: true })}>
             {t('Set it up in Preferences')}
           </button>
         </div>

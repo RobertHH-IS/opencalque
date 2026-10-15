@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { componentsOf, declarativeExtension, Registry } from '@opencalque/core'
+import { applyOps, childrenOf, componentsOf, createDocument, declarativeExtension, importComponents, moveOps, Registry, type Op } from '@opencalque/core'
 import { bundledExtensions, bundledLibraries } from './catalog'
 
 /**
@@ -31,6 +31,25 @@ describe('the libraries that ship with the app', () => {
       const held = Object.fromEntries(componentsOf(await library.load()).map((component) => [component.id, component.name]))
       const expected = Object.fromEntries(PLACES[library.id].flatMap((name, i) => (name === null ? [] : [[`${library.id}_${i + 1}`, name]])))
       expect(held, library.id).toEqual(expected)
+    }
+  })
+
+  it('give a drawing one component for each placed several times, until it is changed there', async () => {
+    for (const library of bundledLibraries()) {
+      const source = await library.load()
+      const ids = componentsOf(source).map((component) => component.id)
+      const first = importComponents(createDocument(), source, ids, { original: true })
+      // Named in the user's language, as the component library does.
+      const named = applyOps(first.doc, Object.values(first.imported).map((id): Op => ({ op: 'update_node', id, patch: { name: `${first.doc.nodes[id].name}!` } })))
+      for (const id of ids) {
+        const again = importComponents(named, source, [id], { original: true })
+        expect(again.imported[id], `${library.id} ${id}`).toBe(first.imported[id])
+        expect(again.doc).toBe(named)
+      }
+      // Something of it moved in the drawing, it is the drawing's own: the library's comes in beside it.
+      const [part] = childrenOf(named, first.imported[ids[0]])
+      const moved = applyOps(named, moveOps(named, part, { x: 10, y: 0 }))
+      expect(importComponents(moved, source, [ids[0]], { original: true }).imported[ids[0]]).not.toBe(first.imported[ids[0]])
     }
   })
 })

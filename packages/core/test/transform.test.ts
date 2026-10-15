@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, boundsOf, buildScene, createDocument, Registry, transformOps, turnToOps, type Document, type Extension, type Op, type Similarity } from '../src'
+import { applyOps, applyTransform, boundsOf, buildScene, createDocument, frameGrips, frameMiddle, Registry, transformOps, turnedBox, turnToOps, type Document, type Extension, type Op, type Similarity } from '../src'
 
 const boxes: Extension = {
   id: 'test.boxes',
@@ -126,5 +126,41 @@ describe('turning to an angle typed in the properties panel', () => {
     expect(middle(d, 'label').x).toBeCloseTo(before.x, 3)
     expect(middle(d, 'label').y).toBeCloseTo(before.y, 3)
     expect(turnToOps(d, [d.nodes.label], 450, registry)).toEqual([])
+  })
+})
+
+describe('the box around a turned object', () => {
+  // A mark whose insertion point is not its middle, as a compass with its letter above it.
+  const marks = new Registry().use({
+    id: 'test.marks',
+    name: 'Marks',
+    version: '1',
+    activate: (api) =>
+      api.registerParametric({
+        kind: 'test.mark',
+        label: 'Mark',
+        params: [],
+        build: () => [{ kind: 'path', closed: true, points: [{ x: -100, y: -300 }, { x: 100, y: -300 }, { x: 100, y: 100 }, { x: -100, y: 100 }] }],
+      }),
+  })
+  const doc = applyOps(createDocument(), [add({ type: 'parametric', id: 'mark', kind: 'test.mark', props: {}, x: 1000, y: 1000 })])
+
+  it('is the box the object fills while it is not turned', () => {
+    expect(turnedBox(doc, doc.nodes.mark, marks)).toEqual({ origin: { x: 900, y: 700 }, rotation: 0, width: 200, height: 400 })
+  })
+
+  it('keeps its shape and its middle at any angle, its corners on the corners of the object', () => {
+    for (const degrees of [30, 90, 200]) {
+      const d = applyOps(doc, turnToOps(doc, [doc.nodes.mark], degrees, marks))
+      const box = turnedBox(d, d.nodes.mark, marks)!
+      expect(box.rotation).toBeCloseTo(degrees, 6)
+      expect(box.width).toBeCloseTo(200, 4)
+      expect(box.height).toBeCloseTo(400, 4)
+      expect(frameMiddle(box).x).toBeCloseTo(1000, 4)
+      expect(frameMiddle(box).y).toBeCloseTo(900, 4)
+      const corner = applyTransform({ x: -100, y: -300 }, d.nodes.mark as { x: number; y: number; rotation?: number })
+      expect(frameGrips(box)[0].x).toBeCloseTo(corner.x, 4)
+      expect(frameGrips(box)[0].y).toBeCloseTo(corner.y, 4)
+    }
   })
 })

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { applyOps, createDocument, dxfOps, pdfFontCharacters, readTrueType, Registry, toDXF, toPDF, type NodeInput, type Op } from '../src'
+import { applyOps, createDocument, dxfOps, pdfFontCharacters, pdfFontNames, readTrueType, Registry, toDXF, toPDF, type NodeInput, type Op } from '../src'
 
 const registry = new Registry()
 const add = (node: Record<string, unknown>): Op => ({ op: 'add_node', node: { parent: 'page_1', ...node } as NodeInput })
@@ -18,6 +18,10 @@ describe('TrueType fonts', () => {
     expect(sc.glyph(0x623f)).toBeGreaterThan(0) // 房
     expect(sc.advance(sc.glyph(0x623f))).toBe(sc.unitsPerEm)
     expect(sc.glyph(0xd55c)).toBe(0) // 한: no Korean in this font
+    const kr = readTrueType(font('NotoSansKR-Regular.ttf'))
+    expect(kr.name).toBe('NotoSansKR-Regular')
+    expect(kr.glyph(0xd55c)).toBeGreaterThan(0)
+    expect(kr.glyph(0x3131)).toBeGreaterThan(0) // ㄱ
     expect(readTrueType(latin).glyph(0x141)).toBeGreaterThan(0) // Ł
   })
 
@@ -44,6 +48,17 @@ describe('letters the standard PDF fonts lack', () => {
   it('lists them, and none for Western European text', () => {
     expect(pdfFontCharacters(sheet({ text: 'Façade, cœur – 3 m²' }), registry)).toEqual([])
     expect(pdfFontCharacters(sheet({ text: '房间 1' }), registry)).toEqual(['房', '间'])
+  })
+
+  it('tries the Japanese or the Korean font before the Chinese one for a text in that language', () => {
+    expect(pdfFontNames(['Ł'])).toEqual(['NotoSans', 'NotoSansSC'])
+    expect(pdfFontNames(['直', '角'])).toEqual(['NotoSans', 'NotoSansSC'])
+    expect(pdfFontNames(['直', '角'], 'ja')).toEqual(['NotoSans', 'NotoSansJP', 'NotoSansSC'])
+    expect(pdfFontNames(['直', '角'], 'ko')).toEqual(['NotoSans', 'NotoSansKR', 'NotoSansSC'])
+    expect(pdfFontNames(['거', '실'])).toEqual(['NotoSans', 'NotoSansKR', 'NotoSansSC'])
+    expect(pdfFontNames(['ㄱ'])).toEqual(['NotoSans', 'NotoSansKR', 'NotoSansSC'])
+    // Kana make a text Japanese, and the Korean font still prints its Hangul.
+    expect(pdfFontNames(['か', '거'])).toEqual(['NotoSans', 'NotoSansJP', 'NotoSansKR', 'NotoSansSC'])
   })
 
   it('prints them in the first given font that has them, embedding only the glyphs used', () => {
