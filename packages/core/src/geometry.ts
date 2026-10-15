@@ -142,6 +142,64 @@ export function smoothPoints(points: Vec2[], closed = false, steps = 12): Vec2[]
   return out
 }
 
+/**
+ * The points of a path with its corners rounded: each corner becomes an arc of `radius` (the same
+ * for every corner, or one per point in a list) touching the two sides it joins. A corner takes at
+ * most half of a side it shares with another corner, so a radius too large for its sides is made
+ * smaller. An open path keeps its two ends; `perQuarter` is how many stretches draw a quarter turn.
+ */
+export function roundCorners(points: Vec2[], radius: number | readonly number[], closed = true, perQuarter = 6): Vec2[] {
+  const n = points.length
+  if (n < 3) return points
+  const out: Vec2[] = []
+  const push = (p: Vec2) => {
+    const last = out[out.length - 1]
+    if (!last || Math.abs(last.x - p.x) > 1e-9 || Math.abs(last.y - p.y) > 1e-9) out.push(p)
+  }
+  for (let i = 0; i < n; i++) {
+    const p = points[i]
+    const r = typeof radius === 'number' ? radius : (radius[i] ?? 0)
+    if (!closed && (i === 0 || i === n - 1)) {
+      push(p)
+      continue
+    }
+    const prev = points[(i - 1 + n) % n]
+    const next = points[(i + 1) % n]
+    const u = norm(sub(prev, p))
+    const v = norm(sub(next, p))
+    // The angle the two sides make at this corner: none to round when they run on in a straight line.
+    const angle = Math.acos(Math.max(-1, Math.min(1, u.x * v.x + u.y * v.y)))
+    if (!(r > 0) || len(u) === 0 || len(v) === 0 || angle < 1e-6 || Math.PI - angle < 1e-6) {
+      push(p)
+      continue
+    }
+    // An end of an open path has no arc of its own, so the corner next to it may take the whole side.
+    const before = dist(prev, p) / (!closed && i === 1 ? 1 : 2)
+    const after = dist(next, p) / (!closed && i === n - 2 ? 1 : 2)
+    const tan = Math.tan(angle / 2)
+    const reach = Math.min(r / tan, before, after)
+    const radiusHere = reach * tan
+    const start = add(p, scale(u, reach))
+    const end = add(p, scale(v, reach))
+    const center = add(p, scale(norm(add(u, v)), radiusHere / Math.sin(angle / 2)))
+    const from = Math.atan2(start.y - center.y, start.x - center.x)
+    let sweep = Math.atan2(end.y - center.y, end.x - center.x) - from
+    if (sweep > Math.PI) sweep -= 2 * Math.PI
+    if (sweep < -Math.PI) sweep += 2 * Math.PI
+    const steps = Math.max(1, Math.ceil((Math.abs(sweep) / (Math.PI / 2)) * perQuarter))
+    for (let k = 0; k <= steps; k++) {
+      const a = from + (sweep * k) / steps
+      push({ x: center.x + radiusHere * Math.cos(a), y: center.y + radiusHere * Math.sin(a) })
+    }
+  }
+  // A closed path whose last arc ends where its first began.
+  if (closed && out.length > 1) {
+    const [first, last] = [out[0], out[out.length - 1]]
+    if (Math.abs(first.x - last.x) < 1e-9 && Math.abs(first.y - last.y) < 1e-9) out.pop()
+  }
+  return out
+}
+
 /** The points of an arc of an ellipse, clockwise on screen from one angle to another (a whole turn when they are equal). */
 export function ellipseArc(e: { cx: number; cy: number; rx: number; ry: number; rotation?: number; from: number; to: number }): Vec2[] {
   const sweep = (((e.to - e.from) % 360) + 360) % 360 || 360

@@ -952,6 +952,12 @@
               "type": {
                 "type": "string",
                 "const": "group"
+              },
+              "opacity": {
+                "description": "How opaque everything in the group is drawn, from 0 (not at all) to 1, on top of the opacity of each thing and of the groups around it. Defaults to 1.",
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
               }
             },
             "required": [

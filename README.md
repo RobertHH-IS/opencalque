@@ -339,7 +339,7 @@ An extension in the warehouse is **data, not code**. It describes objects with s
 }
 ```
 
-Shapes are `path`, `ellipse`, `arc` and `text`; each can have `when` (a condition) and `repeat` (a count, with the index available as `i`). Expressions support arithmetic, comparisons, `?:`, and `min max abs floor ceil round sqrt sin cos`. Text can embed values: `"{length / 1000} m"`. An `opening` makes the object cut walls like a door. The three bundled extensions are worked examples.
+Shapes are `path`, `ellipse`, `arc` and `text`; each can have `when` (a condition) and `repeat` (a count, with the index available as `i`). A `path` with a `radius` has its corners rounded, so a closed one stays one shape with a fill, like a cushion. Expressions support arithmetic, comparisons, `?:`, and `min max abs floor ceil round sqrt sin cos`. Text can embed values: `"{length / 1000} m"`. An `opening` makes the object cut walls like a door. The three bundled extensions are worked examples.
 
 ## Writing an extension in code
 

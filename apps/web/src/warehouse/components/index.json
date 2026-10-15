@@ -5,6 +5,17 @@
     "description": "Beds, seating, tables and storage for furnishing a plan.",
     "file": "furniture.opencalque",
     "components": 9,
+    "categories": {
+      "furniture_1": "bedroom",
+      "furniture_2": "bedroom",
+      "furniture_3": "living",
+      "furniture_4": "living",
+      "furniture_5": "dining",
+      "furniture_6": "dining",
+      "furniture_7": "office",
+      "furniture_8": "bedroom",
+      "furniture_9": "living"
+    },
     "translations": {
       "fr": {
         "Furniture": "Mobilier",
@@ -83,13 +94,12 @@
     "name": "Bathroom",
     "description": "Sanitary fittings.",
     "file": "bathroom.opencalque",
-    "components": 4,
+    "components": 3,
     "translations": {
       "fr": {
         "Bathroom": "Salle de bain",
         "Sanitary fittings.": "Appareils sanitaires.",
         "Toilet": "WC",
-        "Bathtub": "Baignoire",
         "Shower tray": "Receveur de douche",
         "Toilet, wall-hung": "WC suspendu"
       },
@@ -97,7 +107,6 @@
         "Bathroom": "Baño",
         "Sanitary fittings.": "Aparatos sanitarios.",
         "Toilet": "Inodoro",
-        "Bathtub": "Bañera",
         "Shower tray": "Plato de ducha",
         "Toilet, wall-hung": "Inodoro suspendido"
       },
@@ -105,7 +114,6 @@
         "Bathroom": "Bad",
         "Sanitary fittings.": "Sanitärobjekte.",
         "Toilet": "WC",
-        "Bathtub": "Badewanne",
         "Shower tray": "Duschwanne",
         "Toilet, wall-hung": "Wand-WC"
       },
@@ -113,7 +121,6 @@
         "Bathroom": "卫生间",
         "Sanitary fittings.": "卫生洁具。",
         "Toilet": "坐便器",
-        "Bathtub": "浴缸",
         "Shower tray": "淋浴底盘",
         "Toilet, wall-hung": "壁挂式坐便器"
       },
@@ -121,7 +128,6 @@
         "Bathroom": "浴室・トイレ",
         "Sanitary fittings.": "衛生器具。",
         "Toilet": "便器",
-        "Bathtub": "浴槽",
         "Shower tray": "シャワーパン",
         "Toilet, wall-hung": "壁掛け便器"
       }
@@ -132,51 +138,36 @@
     "name": "Kitchen",
     "description": "Units and appliances on a 600 mm module.",
     "file": "kitchen.opencalque",
-    "components": 5,
+    "components": 2,
     "translations": {
       "fr": {
         "Kitchen": "Cuisine",
         "Units and appliances on a 600 mm module.": "Meubles et appareils sur un module de 600 mm.",
         "Base unit": "Meuble bas",
-        "Sink unit": "Meuble évier",
-        "Hob": "Plaque de cuisson",
-        "Fridge": "Réfrigérateur",
         "Washing machine": "Lave-linge"
       },
       "es": {
         "Kitchen": "Cocina",
         "Units and appliances on a 600 mm module.": "Muebles y electrodomésticos en módulo de 600 mm.",
         "Base unit": "Mueble bajo",
-        "Sink unit": "Mueble fregadero",
-        "Hob": "Placa de cocción",
-        "Fridge": "Frigorífico",
         "Washing machine": "Lavadora"
       },
       "de": {
         "Kitchen": "Küche",
         "Units and appliances on a 600 mm module.": "Schränke und Geräte im 600-mm-Raster.",
         "Base unit": "Unterschrank",
-        "Sink unit": "Spülenschrank",
-        "Hob": "Kochfeld",
-        "Fridge": "Kühlschrank",
         "Washing machine": "Waschmaschine"
       },
       "zh": {
         "Kitchen": "厨房",
         "Units and appliances on a 600 mm module.": "按 600 mm 模数排布的橱柜和电器。",
         "Base unit": "地柜",
-        "Sink unit": "水槽柜",
-        "Hob": "灶台",
-        "Fridge": "冰箱",
         "Washing machine": "洗衣机"
       },
       "ja": {
         "Kitchen": "キッチン",
         "Units and appliances on a 600 mm module.": "600 mm モジュールのキャビネットと家電。",
         "Base unit": "ベースキャビネット",
-        "Sink unit": "シンクキャビネット",
-        "Hob": "コンロ",
-        "Fridge": "冷蔵庫",
         "Washing machine": "洗濯機"
       }
     }

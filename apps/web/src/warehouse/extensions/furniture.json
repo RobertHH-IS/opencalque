@@ -3,7 +3,7 @@
   "formatVersion": 1,
   "id": "opencalque.furniture",
   "name": "Adjustable furniture",
-  "version": "1.1.0",
+  "version": "1.3.0",
   "author": "OpenCalque",
   "description": "Tables, beds and shelving whose size and number of seats or bays you set.",
   "translations": {
@@ -71,7 +71,7 @@
   "objects": [
     {
       "kind": "furn.table",
-      "category": "furniture",
+      "category": "dining",
       "label": "Table with chairs",
       "params": [
         { "key": "length", "label": "Length", "type": "number", "default": 1800, "unit": "length" },
@@ -84,9 +84,10 @@
         {
           "repeat": { "count": "max(1, floor(seats / 2))" },
           "closed": true,
+          "radius": 50,
           "path": [
-            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 225", -450],
-            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 225", -450],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 225", -454],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 225", -454],
             ["(i + 0.5) * length / max(1, floor(seats / 2)) + 225", -50],
             ["(i + 0.5) * length / max(1, floor(seats / 2)) - 225", -50]
           ]
@@ -94,18 +95,61 @@
         {
           "repeat": { "count": "max(1, floor(seats / 2))" },
           "closed": true,
+          "radius": 22,
+          "path": [
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 193.6", -501.1],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 130.1", -517.1],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 65.4", -526.8],
+            ["(i + 0.5) * length / max(1, floor(seats / 2))", -530],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 65.4", -526.8],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 130.1", -517.1],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 193.6", -501.1],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 180.7", -459],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 121.4", -474],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 61.1", -483],
+            ["(i + 0.5) * length / max(1, floor(seats / 2))", -486],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 61.1", -483],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 121.4", -474],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 180.7", -459]
+          ]
+        },
+        {
+          "repeat": { "count": "max(1, floor(seats / 2))" },
+          "closed": true,
+          "radius": 50,
           "path": [
             ["(i + 0.5) * length / max(1, floor(seats / 2)) - 225", "width + 50"],
             ["(i + 0.5) * length / max(1, floor(seats / 2)) + 225", "width + 50"],
-            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 225", "width + 450"],
-            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 225", "width + 450"]
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 225", "width + 454"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 225", "width + 454"]
+          ]
+        },
+        {
+          "repeat": { "count": "max(1, floor(seats / 2))" },
+          "closed": true,
+          "radius": 22,
+          "path": [
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 193.6", "width + 501.1"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 130.1", "width + 517.1"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 65.4", "width + 526.8"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2))", "width + 530"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 65.4", "width + 526.8"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 130.1", "width + 517.1"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 193.6", "width + 501.1"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 180.7", "width + 459"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 121.4", "width + 474"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) + 61.1", "width + 483"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2))", "width + 486"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 61.1", "width + 483"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 121.4", "width + 474"],
+            ["(i + 0.5) * length / max(1, floor(seats / 2)) - 180.7", "width + 459"]
           ]
         }
       ]
     },
     {
       "kind": "furn.bed",
-      "category": "furniture",
+      "category": "bedroom",
       "label": "Bed",
       "params": [
         { "key": "width", "label": "Width", "type": "number", "default": 1600, "unit": "length" },
@@ -113,23 +157,33 @@
       ],
       "box": { "width": "width", "height": "length" },
       "draw": [
-        { "closed": true, "path": [[0, 0], ["width", 0], ["width", "length"], [0, "length"]] },
+        { "closed": true, "radius": 25, "path": [[0, 0], ["width", 0], ["width", "length"], [0, "length"]] },
+        { "path": [[0, 50], ["width", 50]] },
         {
           "repeat": { "count": "width >= 1400 ? 2 : 1" },
           "closed": true,
+          "radius": 90,
           "path": [
-            ["80 + i * width / 2", 80],
-            ["(width >= 1400 ? width / 2 : width) - 80 + i * width / 2", 80],
-            ["(width >= 1400 ? width / 2 : width) - 80 + i * width / 2", 460],
-            ["80 + i * width / 2", 460]
+            ["80 + i * ((width - 160 - ((width >= 1400 ? 2 : 1) - 1) * 60) / (width >= 1400 ? 2 : 1) + 60)", 100],
+            ["80 + i * ((width - 160 - ((width >= 1400 ? 2 : 1) - 1) * 60) / (width >= 1400 ? 2 : 1) + 60) + max(1, (width - 160 - ((width >= 1400 ? 2 : 1) - 1) * 60) / (width >= 1400 ? 2 : 1))", 100],
+            ["80 + i * ((width - 160 - ((width >= 1400 ? 2 : 1) - 1) * 60) / (width >= 1400 ? 2 : 1) + 60) + max(1, (width - 160 - ((width >= 1400 ? 2 : 1) - 1) * 60) / (width >= 1400 ? 2 : 1))", 480],
+            ["80 + i * ((width - 160 - ((width >= 1400 ? 2 : 1) - 1) * 60) / (width >= 1400 ? 2 : 1) + 60)", 480]
           ]
         },
-        { "path": [[0, 600], ["width", 600]] }
+        { "path": [[0, 620], ["width - min(500, width * 0.3)", 620]] },
+        {
+          "closed": true,
+          "path": [
+            ["width - min(500, width * 0.3)", 620],
+            ["width", "620 + min(500, width * 0.3)"],
+            ["width - min(500, width * 0.3)", "620 + min(500, width * 0.3)"]
+          ]
+        }
       ]
     },
     {
       "kind": "furn.shelf",
-      "category": "furniture",
+      "category": "living",
       "label": "Shelving unit",
       "params": [
         { "key": "length", "label": "Length", "type": "number", "default": 2000, "unit": "length" },

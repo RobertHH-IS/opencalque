@@ -16,6 +16,7 @@ pnpm build && pnpm smoke   # scripted interaction test; prints a folder of scree
 pnpm dist         # package the installer for this system (apps/desktop/dist)
 pnpm schema       # regenerate schema/*.json after changing packages/core/src/schema.ts
 pnpm rooms:gallery # draw the plans rooms are tested on, to look them over
+pnpm warehouse && pnpm warehouse:gallery # regenerate the bundled component libraries, then draw every symbol on one page
 ```
 
 Agent terminals have `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. Prefix Electron commands with `env -u ELECTRON_RUN_AS_NODE`.

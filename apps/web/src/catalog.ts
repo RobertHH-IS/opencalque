@@ -21,6 +21,12 @@ export interface Library {
   translations?: Record<string, Record<string, string>>
   /** Number of components, when known without opening the library. */
   components?: number
+  /**
+   * Where the component library lists components of this library, by their id: a room such as
+   * 'bedroom' or 'dining' (or any section of the library). One not given is listed under the
+   * library's name.
+   */
+  categories?: Record<string, string>
   load(): Promise<Document>
 }
 
@@ -44,7 +50,7 @@ export function bundledExtensions(): DeclarativeExtension[] {
 export async function remoteCatalog(url: string): Promise<{ libraries: Library[]; extensions: DeclarativeExtension[] }> {
   const response = await fetch(url)
   if (!response.ok) throw new Error(`${response.status} ${response.statusText}`)
-  const catalog = (await response.json()) as { libraries?: { name: string; description?: string; file: string; translations?: Library['translations'] }[]; extensions?: { file: string }[] }
+  const catalog = (await response.json()) as { libraries?: { name: string; description?: string; file: string; translations?: Library['translations']; categories?: unknown }[]; extensions?: { file: string }[] }
   const json = async (file: string) => (await fetch(new URL(file, url))).json()
 
   const libraries = (catalog.libraries ?? []).map((entry): Library => ({
@@ -52,6 +58,7 @@ export async function remoteCatalog(url: string): Promise<{ libraries: Library[]
     name: String(entry.name),
     description: String(entry.description ?? ''),
     translations: entry.translations,
+    categories: entry.categories && typeof entry.categories === 'object' ? Object.fromEntries(Object.entries(entry.categories).filter(([, room]) => typeof room === 'string')) : undefined,
     load: async () => parseDocument(await json(entry.file)),
   }))
   const extensions: DeclarativeExtension[] = []

@@ -73,7 +73,7 @@ import { t } from '../i18n'
 import { usePrefs } from '../prefs'
 import { useTheme } from '../theme'
 import { formatAngle, formatLength, formatNumber, unit, unitSuffix } from '../units'
-import { apply, cancel, commit, editComponent, preview, registry, select, setTool, useStore, type Tool, type View, selectCorner } from '../store'
+import { apply, cancel, commit, editComponent, forgetTrail, preview, registry, select, setTool, useStore, type Tool, type View, selectCorner } from '../store'
 import { DARK_AROUND_CANVAS, DARK_CANVAS, drawScene, gridStep, LIGHT_CANVAS, onPictureReady, type AngleMark, type Overlay, type SizeLabel, boxGrips, angleBetween } from './draw'
 import { drawing } from './drawing'
 
@@ -117,6 +117,7 @@ type Gesture =
    * not snap to.
    */
   | { kind: 'face'; wall: NodeOf<'wall'>; side: 'left' | 'right'; moving: string[] }
+  | { kind: 'end'; wall: NodeOf<'wall'>; end: 'a' | 'b' }
 
 /** The parts of a pointer event the canvas uses. */
 interface PointerAt {
@@ -266,6 +267,8 @@ function resizeCursor(d: Vec2): string {
 
 /** How thin a wall may be on screen, in pixels, and still have faces to drag: thinner, its faces and its middle are one. */
 const FACE_MIN = 8
+/** How near the point at a wall's free end, in pixels, a press moves that end anywhere, as a corner; further along its line across, only along the wall. */
+const END_POINT = 5
 /** The steps a dragged face changes a thickness by: at least 3 pixels of screen each, so 1 mm close up and 25 mm far out. */
 const thicknessStep = (zoom: number) => [1, 5, 10, 25, 50, 100].find((step) => step * zoom >= 3) ?? 100
 
@@ -540,6 +543,27 @@ export function CanvasView() {
     return off(side) <= reach ? { wall, side } : null
   }
 
+  /**
+   * The free end of the one selected wall whose line across is under a point of the canvas, which a
+   * press drags along the wall to make it longer or shorter, its direction kept. Only a straight
+   * wall's free end: where walls meet, their corner is moved instead. The point at the end still
+   * moves it anywhere.
+   */
+  const endAt = (at: Vec2): { wall: NodeOf<'wall'>; end: 'a' | 'b' } | null => {
+    const s = get()
+    const wall = s.tool === 'select' && s.selection.length === 1 ? s.doc.nodes[s.selection[0]] : undefined
+    if (wall?.type !== 'wall' || wall.bulge || wall.thickness * s.view.zoom < FACE_MIN || dist(wall.a, wall.b) < 1e-6) return null
+    if (sceneRef.current.find((item) => item.id === wall.id)?.locked) return null
+    const p = toWorld(at, s.view)
+    const reach = Math.min(5, (wall.thickness * s.view.zoom) / 4) / s.view.zoom
+    for (const end of ['a', 'b'] as const) {
+      if (wallEndsAt(s.doc, wall.parent, wall[end]).length !== 1) continue
+      if (dist({ x: wall[end].x * s.view.zoom + s.view.x, y: wall[end].y * s.view.zoom + s.view.y }, at) <= END_POINT) continue
+      if (wallEdgeLines(wall, s.doc, registry, end).some((line) => line.slice(1).some((q, i) => distToSegment(p, line[i], q) <= reach))) return { wall, end }
+    }
+    return null
+  }
+
   /** The pointer shown over a grip, so it says what dragging there does. */
   const [gripCursor, setGripCursor] = useState<string | null>(null)
 
@@ -596,7 +620,8 @@ export function CanvasView() {
   /**
    * Where a point lands after snapping: on what is drawn nearby (a point, the middle of a line, a
    * crossing, the foot of a perpendicular from `from`, or the line itself), else on the grid.
-   * Shift constrains to 45° steps from `from`; Alt turns snapping off.
+   * Shift holds it to 45° steps from `from`, where it still lines up with what is drawn
+   * (`heldLine`); Alt turns snapping off.
    */
   const snap = (world: Vec2, e: { altKey: boolean; shiftKey: boolean }, exclude: string[], from?: Vec2): { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } => {
     const { zoom } = get().view
@@ -610,9 +635,7 @@ export function CanvasView() {
     if (e.shiftKey && from) {
       const d = sub(world, from)
       const angle = Math.round(Math.atan2(d.y, d.x) / (Math.PI / 4)) * (Math.PI / 4)
-      if (measuring) return heldMeasure(world, from, angle, exclude)
-      const length = onGrid ? Math.round(len(d) / step) * step : len(d) * Math.cos(Math.atan2(d.y, d.x) - angle)
-      return { p: { x: round(from.x + Math.cos(angle) * length), y: round(from.y + Math.sin(angle) * length) }, marker: null }
+      return measuring ? heldMeasure(world, from, angle, exclude) : heldLine(world, from, angle, exclude)
     }
     const gridded = { x: Math.round(world.x / step) * step, y: Math.round(world.y / step) * step }
     const hit = snapToObjects ? snapTo(sceneRef.current, world, SNAP_REACH / zoom, { exclude, from, gridded: onGrid ? gridded : undefined }) : null
@@ -679,38 +702,63 @@ export function CanvasView() {
 
   /**
    * Keeps a point on the line through `from` at `angle`, whatever the grid says: the pointer only
-   * chooses how far along. That distance goes by grid steps, except near a wall the line crosses,
-   * where it stops on that wall's middle line. `forward` keeps it on the side the angle points to.
+   * chooses how far along. That distance goes by grid steps, except near a line the held line
+   * crosses, where it stops on it: a wall's line (its middle, or the face it is drawn by), or
+   * anything drawn, a wall's faces, the lines of a traced plan and the sides of shapes included.
+   * `forward` keeps it on the side the angle points to.
    */
   const alongLine = (world: Vec2, from: Vec2, angle: number, exclude: string[], forward = false): { p: Vec2; marker: Snap | null } => {
     const { zoom } = get().view
+    const { snapToGrid, snapToObjects } = usePrefs.getState()
     const step = gridStep(zoom)
     const dir = { x: Math.cos(angle), y: Math.sin(angle) }
     const pointed = (world.x - from.x) * dir.x + (world.y - from.y) * dir.y
-    let length = Math.round(pointed / step) * step
+    let length = snapToGrid ? Math.round(pointed / step) * step : pointed
     if (forward) length = Math.max(step, length)
     let crossing = false
     let reach = SNAP_REACH / zoom
-    for (const item of sceneRef.current) {
-      const wall = item.node
-      if (wall.type !== 'wall' || exclude.includes(item.id)) continue
-      // A curved wall is crossed somewhere along its curve.
-      const line = wallPoints(wall)
-      for (let i = 0; i + 1 < line.length; i++) {
-        const e = sub(line[i + 1], line[i])
-        const denom = dir.x * e.y - dir.y * e.x
-        if (Math.abs(denom) < 1e-9) continue
-        const between = sub(line[i], from)
-        const t = (between.x * e.y - between.y * e.x) / denom
-        const u = (between.x * dir.y - between.y * dir.x) / denom
-        if (u < 0 || u > 1 || (forward && t <= 0) || Math.abs(t - pointed) >= reach) continue
-        reach = Math.abs(t - pointed)
-        length = t
-        crossing = true
-      }
+    const here = { x: from.x + dir.x * pointed, y: from.y + dir.y * pointed }
+    const cross = (a: Vec2, b: Vec2) => {
+      const e = sub(b, a)
+      const denom = dir.x * e.y - dir.y * e.x
+      if (Math.abs(denom) < 1e-9) return
+      const between = sub(a, from)
+      const t = (between.x * e.y - between.y * e.x) / denom
+      const u = (between.x * dir.y - between.y * dir.x) / denom
+      if (u < -1e-9 || u > 1 + 1e-9 || (forward && t <= 0) || Math.abs(t - pointed) >= reach) return
+      reach = Math.abs(t - pointed)
+      length = t
+      crossing = true
+    }
+    for (const item of snapToObjects ? sceneRef.current : []) {
+      if (exclude.includes(item.id) || (item.bounds && !boundsContainPoint(item.bounds, here, reach))) continue
+      // A curved wall is crossed somewhere along its curve. Hatching, and the sheets and floors things lie on, are not crossed.
+      const lines = [
+        ...(item.node.type === 'wall' ? [wallPoints(item.node)] : []),
+        ...item.prims.flatMap((prim) => (prim.kind === 'path' && !prim.texture && !prim.backdrop ? [prim.closed ? [...prim.points, prim.points[0]] : prim.points] : [])),
+      ]
+      for (const line of lines) for (let i = 0; i + 1 < line.length; i++) cross(line[i], line[i + 1])
     }
     const p = { x: round(from.x + dir.x * length), y: round(from.y + dir.y * length) }
     return { p, marker: crossing ? { p, kind: 'crossing' } : null }
+  }
+
+  /**
+   * Where a point goes while its direction from `from` is held (`angle`), by Shift or by an arrow
+   * key: on that line, at what the pointer meets there. A point pointed at elsewhere (a corner, an
+   * end, a middle) brings it level with that point, with a link to show what it was taken from;
+   * otherwise it stops on a line the held line crosses near the pointer, or goes by grid steps.
+   */
+  const heldLine = (world: Vec2, from: Vec2, angle: number, exclude: string[]): { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } => {
+    const dir = { x: Math.cos(angle), y: Math.sin(angle) }
+    // A place merely somewhere along a line is not something pointed at; a point, a middle or a crossing is.
+    const pointed = snap(world, { altKey: false, shiftKey: false }, exclude).marker
+    if (pointed && pointed.kind !== 'edge') {
+      const t = (pointed.p.x - from.x) * dir.x + (pointed.p.y - from.y) * dir.y
+      const p = { x: round(from.x + dir.x * t), y: round(from.y + dir.y * t) }
+      return { p, marker: pointed, ...(dist(p, pointed.p) > 1e-6 ? { link: [pointed.p, p] as [Vec2, Vec2] } : {}) }
+    }
+    return alongLine(world, from, angle, exclude)
   }
 
   /**
@@ -723,15 +771,8 @@ export function CanvasView() {
   const lineEnd = (world: Vec2, e: { altKey: boolean; shiftKey: boolean }, exclude: string[], from: Vec2): { p: Vec2; marker: Snap | null; link?: [Vec2, Vec2] } => {
     const lock = get().axisLock
     if (!lock) return snap(world, e, exclude, from)
-    const onLine = (q: Vec2): Vec2 => (lock === 'x' ? { x: q.x, y: from.y } : { x: from.x, y: q.y })
-    if (e.altKey) return { p: onLine(world), marker: null }
-    // A place merely somewhere along a line is not something pointed at; a point, a middle or a crossing is.
-    const pointed = snap(world, { altKey: false, shiftKey: false }, exclude).marker
-    if (pointed && pointed.kind !== 'edge') {
-      const p = onLine(pointed.p)
-      return { p, marker: pointed, ...(dist(p, pointed.p) > 1e-6 ? { link: [pointed.p, p] as [Vec2, Vec2] } : {}) }
-    }
-    return alongLine(world, from, lock === 'x' ? 0 : Math.PI / 2, exclude)
+    if (e.altKey) return { p: lock === 'x' ? { x: world.x, y: from.y } : { x: from.x, y: world.y }, marker: null }
+    return heldLine(world, from, lock === 'x' ? 0 : Math.PI / 2, exclude)
   }
 
   /** Where the second point of the two-point shape being drawn goes, for the pointer where it is. */
@@ -945,6 +986,13 @@ export function CanvasView() {
           corner === 'knob'
             ? { kind: 'rotate', nodes, pivot: middle, from: Math.atan2(world.y - middle.y, world.x - middle.x) }
             : { kind: 'scale', nodes, pivot: points[(corner + 2) % 4], corner: points[corner] }
+        return
+      }
+      // The line across a free end of the selected wall (not the point on it): the end goes along the wall.
+      const ending = endAt(at)
+      if (ending) {
+        gesture.current = { kind: 'end', wall: ending.wall, end: ending.end }
+        useStore.setState({ wallFace: 'end drag' })
         return
       }
       // A wall end is a corner of the plan, shared by the walls that meet there: pressing on one
@@ -1251,6 +1299,26 @@ export function CanvasView() {
         }
         break
       }
+      case 'end': {
+        // The end goes along the wall, the other staying where it is: to a point or a line of
+        // something else the pointer is near, or by lengths that suit the zoom. Alt, as everywhere,
+        // leaves out both. The wall keeps its direction, and so its doors and windows their places.
+        const fixed = g.end === 'a' ? g.wall.b : g.wall.a
+        const along = norm(sub(g.wall[g.end], fixed))
+        const hit = !e.altKey && usePrefs.getState().snapToObjects ? snapTo(sceneRef.current, world, SNAP_REACH / s.view.zoom, { exclude: [g.wall.id] }) : null
+        const target = hit ? hit.p : world
+        const raw = (target.x - fixed.x) * along.x + (target.y - fixed.y) * along.y
+        const step = gridStep(s.view.zoom)
+        const length = Math.max(1, hit || e.altKey ? round(raw) : Math.round(raw / step) * step)
+        const p = { x: fixed.x + along.x * length, y: fixed.y + along.y * length }
+        if (hit) marker = { p: hit.p, kind: hit.kind }
+        previewed = preview([{ op: 'update_node', id: g.wall.id, patch: { [g.end]: p } }])
+        const now = get().doc.nodes[g.wall.id]
+        if (now?.type === 'wall') face = wallEdgeLines(now, get().doc, registry, g.end)
+        labels = sizes('wall', fixed, p).labels
+        status = t('Length {value}', { value: formatLength(length) })
+        break
+      }
       case 'crop': {
         const target = snap(world, e, [g.node.id])
         marker = target.marker
@@ -1368,18 +1436,22 @@ export function CanvasView() {
           // The pointer says what a press here would do: resize along a diagonal, turn, or move a point.
           const framed = frameCornerAt(at) ? null : frameGripAt(at)
           const grip = framed !== null ? null : (frameCornerAt(at) ?? gripAt(at))
-          const onCorner = s.tool === 'select' && framed === null && !grip && cornerAt(at) !== null
+          // On the line across a free end of the selected wall, a press makes it longer or shorter.
+          const ending = framed === null && !grip ? endAt(at) : null
+          const onCorner = s.tool === 'select' && framed === null && !grip && !ending && cornerAt(at) !== null
           const own = onCorner ? 0 : s.tool === 'select' ? handles.findIndex((h) => dist({ x: h.x * s.view.zoom + s.view.x, y: h.y * s.view.zoom + s.view.y }, at) < 7) : -1
           const boxed = ['rect', 'paper'].includes(s.doc.nodes[s.selection[0]]?.type ?? '')
           const diagonal = (corner: number) => (corner % 2 === 0 ? 'nwse-resize' : 'nesw-resize')
           const stretched = s.doc.nodes[s.selection[0]]?.type === 'parametric' && handles.length === 2
-          const pointer = framed !== null ? (framed === 'knob' ? 'grab' : frameCursor(framed)) : grip ? (grip.corner === 'knob' ? 'grab' : diagonal(grip.corner)) : own >= 0 ? (boxed ? diagonal(own) : stretched ? resizeCursor(sub(handles[1], handles[0])) : 'move') : null
+          const pointer = ending ? resizeCursor(sub(ending.wall.b, ending.wall.a)) : framed !== null ? (framed === 'knob' ? 'grab' : frameCursor(framed)) : grip ? (grip.corner === 'knob' ? 'grab' : diagonal(grip.corner)) : own >= 0 ? (boxed ? diagonal(own) : stretched ? resizeCursor(sub(handles[1], handles[0])) : 'move') : null
           // On a face of the selected wall, a press makes it thicker or thinner: the face is shown, and the pointer says across.
           const faced = pointer === null ? faceAt(at) : null
           if (faced) face = faceOf(faced.wall, s.doc, faced.side)
+          if (ending) face = wallEdgeLines(ending.wall, s.doc, registry, ending.end)
           const shown = pointer ?? (faced ? resizeCursor(wallNormal(faced.wall, world)) : null)
           if (shown !== gripCursor) setGripCursor(shown)
-          if (s.wallFace !== (faced ? 'hover' : null)) useStore.setState({ wallFace: faced ? 'hover' : null })
+          const over = ending ? 'end hover' : faced ? 'hover' : null
+          if (s.wallFace !== over) useStore.setState({ wallFace: over })
         }
         if (s.tool === 'room') {
           // A room is offered wherever the pointer is inside closed walls, as it would be: floor, name and area.
@@ -1464,6 +1536,7 @@ export function CanvasView() {
       case 'resize':
       case 'rotate':
       case 'face':
+      case 'end':
         // The box has changed under the pointer; the next movement works out what is there now.
         setGripCursor(null)
         if (s.axisLock) useStore.setState({ axisLock: null })
@@ -1565,6 +1638,8 @@ export function CanvasView() {
         else if (s.tool !== 'select') setTool('select')
         else if (s.selection.length > 0 || s.corner) select([])
         else if (s.scope !== s.page) editComponent(null)
+        // Out on the page with nothing to let go of but the places just left.
+        else if (s.trail) forgetTrail()
       } else if (e.key === 'Enter') reset()
     }
     const onKeyUp = (e: KeyboardEvent) => {

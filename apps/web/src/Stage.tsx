@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
+import { rootOf, type Document } from '@opencalque/core'
 import {
   BrickWall,
+  ChevronRight,
   ChevronUp,
   Circle,
   DoorOpen,
@@ -46,9 +48,10 @@ import { CanvasView } from './canvas/CanvasView'
 import { executeById, formatKey, useShortcutLabel } from './commands'
 import { msg, t } from './i18n'
 import { QuickBar } from './QuickBar'
-import { editComponent, redo, registry, MEASURE_TOOLS, ROOM_TOOLS, setTool, SHAPE_TOOLS, TEXT_TOOLS, undo, useStore, type Tool } from './store'
+import type { ScopeStep } from './scopePath'
+import { leaveTo, redo, registry, returnTo, trailAhead, MEASURE_TOOLS, ROOM_TOOLS, setTool, SHAPE_TOOLS, TEXT_TOOLS, undo, useStore, type Tool } from './store'
 import { TextEditor } from './TextEditor'
-import { IconButton, labelOf } from './ui'
+import { IconButton, labelOf, TypeIcon } from './ui'
 
 const ICONS: Partial<Record<Tool, [title: string, icon: LucideIcon]>> = {
   select: [msg('Select'), MousePointer2],
@@ -157,19 +160,14 @@ function ActionChoice({ action, disabled, onPick }: { action: GroupAction; disab
   )
 }
 
-/**
- * One button for several related tools: it shows the one used last, and the arrow beside it lists
- * the others, then any `actions`, which act on the selection at once rather than being tools.
- */
-function ToolGroup({ tools, current: shape, more, actions = [] }: { tools: Tool[]; current: Tool; more: string; actions?: GroupAction[] }) {
-  const selected = useStore((s) => s.selection.length > 0)
+/** A list that opens from a button: it closes on a press anywhere outside `ref`, or on any key. */
+function useMenu<T extends HTMLElement>() {
   const [open, setOpen] = useState(false)
-  const group = useRef<HTMLDivElement>(null)
-
+  const ref = useRef<T>(null)
   useEffect(() => {
     if (!open) return
     const onPointerDown = (e: PointerEvent) => {
-      if (!group.current?.contains(e.target as HTMLElement)) setOpen(false)
+      if (!ref.current?.contains(e.target as HTMLElement)) setOpen(false)
     }
     // A key pressed while the list is open is a shortcut or Esc: either way the list has had its turn.
     const onKeyDown = () => setOpen(false)
@@ -180,6 +178,16 @@ function ToolGroup({ tools, current: shape, more, actions = [] }: { tools: Tool[
       window.removeEventListener('keydown', onKeyDown, true)
     }
   }, [open])
+  return { open, setOpen, ref }
+}
+
+/**
+ * One button for several related tools: it shows the one used last, and the arrow beside it lists
+ * the others, then any `actions`, which act on the selection at once rather than being tools.
+ */
+function ToolGroup({ tools, current: shape, more, actions = [] }: { tools: Tool[]; current: Tool; more: string; actions?: GroupAction[] }) {
+  const selected = useStore((s) => s.selection.length > 0)
+  const { open, setOpen, ref: group } = useMenu<HTMLDivElement>()
 
   return (
     <div className="tool-group" ref={group}>
@@ -221,21 +229,7 @@ function ToolGroup({ tools, current: shape, more, actions = [] }: { tools: Tool[
 /** The button that aligns and spaces the selection; usable from two objects, spacing from three. */
 function ArrangeMenu() {
   const count = useStore((s) => s.selection.length)
-  const [open, setOpen] = useState(false)
-  const group = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (e: PointerEvent) => {
-      if (!group.current?.contains(e.target as HTMLElement)) setOpen(false)
-    }
-    const onKeyDown = () => setOpen(false)
-    window.addEventListener('pointerdown', onPointerDown, true)
-    window.addEventListener('keydown', onKeyDown, true)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown, true)
-      window.removeEventListener('keydown', onKeyDown, true)
-    }
-  }, [open])
+  const { open, setOpen, ref: group } = useMenu<HTMLDivElement>()
   // Nothing to arrange with nothing selected: the list closes rather than offering only greyed choices.
   useEffect(() => {
     if (count < 1) setOpen(false)
@@ -267,6 +261,10 @@ function ArrangeMenu() {
 }
 
 type Hint = [key: string, text: string]
+
+/** What is worth knowing about the space drawn in, once inside a component. */
+const COMPONENT_NOTE = msg('The red and green axes cross at the insertion point of the component')
+const SHEET_NOTE = msg('Drawn on a sheet as it prints, in millimetres of paper')
 
 /**
  * What to do next with the tool in use, and the keys that matter at this very step: nothing is
@@ -335,6 +333,10 @@ function Hints() {
   const dragging = useStore((s) => s.tool === 'select' && s.base !== null && !s.editingText)
   const walls = useStore((s) => s.selection.some((id) => s.doc.nodes[id]?.type === 'wall'))
   const face = useStore((s) => s.wallFace)
+  const inside = useStore((s) => {
+    const root = rootOf(s.doc, s.scope)
+    return root?.type !== 'component' ? null : root.sheet === undefined ? COMPONENT_NOTE : SHEET_NOTE
+  })
   // A rectangle or an ellipse alone is resized by the frame around it (resize.ts).
   // A placed component is stretched by such a frame too, Shift keeping its proportions.
   const boxed = useStore((s) => s.tool === 'select' && s.selection.length === 1 && ['rect', 'ellipse', 'instance'].includes(s.doc.nodes[s.selection[0]]?.type ?? ''))
@@ -357,12 +359,16 @@ function Hints() {
   // Ctrl grows a wall both ways, as it resizes from the middle in office programs; Alt keeps its meaning.
   else if (face === 'drag') hints = [['', t('The other face stays where it is; joined walls stay joined')], [formatKey('Mod'), t('grows both sides, the middle staying put')], ['Alt', t('ignores the grid and snapping')]]
   else if (face === 'hover' && !dragging) hints = [['', t('Drag the face to make the wall thicker or thinner on this side')], [formatKey('Mod'), t('both sides at once')]]
+  else if (face === 'end drag') hints = [['', t('The wall keeps its direction, its other end where it is')], ['Alt', t('ignores the grid and snapping')]]
+  else if (face === 'end hover' && !dragging) hints = [['', t('Drag the end to make the wall longer or shorter')], ['', t('the point at the end moves it anywhere')]]
   else if (dragging && stretchy) hints = [['', t('The side opposite stays where it is')], ['Alt', t('ignores the grid and snapping')]]
   else if (stretchy) hints = [['', t('Drag a side to make it longer or wider, a corner for both')], ['', t('the knob above turns it')]]
   else if (dragging && boxed) hints = [['Shift', t('keeps its proportions, from a corner')], ['Alt', t('ignores the grid and snapping')]]
   else if (boxed) hints = [['', t('Drag the middle of a side to change one size, a corner to change both')], ['', t('the knob above turns it')]]
   else if (dragging) hints = walls ? [['', t('Joined walls stretch to stay joined')], ['↑ ←', t('holds it upright or level')], ['Alt', t('moves it alone, off the grid')]] : [['Shift', t('keeps an end on its own line')], ['↑ ←', t('holds it upright or level')], ['Alt', t('ignores the grid and snapping')]]
   else hints = hintsFor(tool, step, opening, selected)
+  // With nothing else to say, inside a component: what its space is.
+  if (hints.length === 0 && inside) hints = [['', t(inside)]]
   if (hints.length === 0) return null
   return (
     <div className="hint-bar">
@@ -419,27 +425,143 @@ function Toolbar() {
   )
 }
 
-/** The drawing area: the canvas with everything that floats over it. */
-export function Stage() {
+/** How many places the breadcrumb shows before folding the middle of the way into a list. */
+const CRUMBS = 5
+
+/** What a place on the way to the scope is called. */
+function crumbName(doc: Document, id: string): string {
+  const node = doc.nodes[id]
+  return node.type === 'component' && node.sheet !== undefined ? t('On every sheet') : labelOf(doc, node)
+}
+
+/** A place on the way, with the picture the Structure list gives its kind. */
+function CrumbName({ id }: { id: string }) {
+  const doc = useStore((s) => s.doc)
+  const node = doc.nodes[id]
+  return (
+    <>
+      {node.type === 'component' && node.sheet !== undefined ? (
+        <i className="type-icon">
+          <StickyNote size={13} />
+        </i>
+      ) : (
+        <TypeIcon node={node} />
+      )}
+      <span>{crumbName(doc, id)}</span>
+    </>
+  )
+}
+
+/** Places in a row, the middle folded into one list when there are more than `most`, keeping `head` first and `tail` last. */
+function folded(steps: ScopeStep[], most: number, head: number, tail: number): (ScopeStep | ScopeStep[])[] {
+  return steps.length > most ? [...steps.slice(0, head), steps.slice(head, steps.length - tail), ...steps.slice(steps.length - tail)] : steps
+}
+
+/** The middle of a long way, as one button listing the places it holds; `ahead`, places just left to go back into. */
+function CrumbFold({ steps, ahead }: { steps: ScopeStep[]; ahead: boolean }) {
+  const doc = useStore((s) => s.doc)
+  const { open, setOpen, ref } = useMenu<HTMLDivElement>()
+  return (
+    <div className="crumb-fold" ref={ref}>
+      <button className={`crumb${ahead ? ' ahead' : ''}`} title={steps.map((step) => crumbName(doc, step.id)).join(' › ')} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span>…</span>
+      </button>
+      {open && (
+        <div className="menu-list crumb-menu" role="menu">
+          {steps.map((step) => (
+            <button
+              key={step.id}
+              role="menuitem"
+              onClick={() => {
+                setOpen(false)
+                ;(ahead ? returnTo : leaveTo)(step.id)
+              }}
+            >
+              <CrumbName id={step.id} />
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Where the editing is, while inside a group or a component: the way there from the page, each
+ * place on it a button that goes back out to it (Esc goes out one step). After it, faint, the
+ * places just left (`trail` in the store), to go back into at once; they stay on the page too. It
+ * sits in the corner, growing to the right, so that going one step further in or out moves nothing
+ * that was there.
+ */
+function Breadcrumb() {
   const doc = useStore((s) => s.doc)
   const scope = useStore((s) => s.scope)
   const page = useStore((s) => s.page)
+  const through = useStore((s) => s.through)
+  const trail = useStore((s) => s.trail)
+  const { path, steps: left } = trailAhead({ doc, page, scope, through, trail })
+  if (scope === page && left.length === 0) return null
+  const root = doc.nodes[path.steps[0]?.id]
+  // A component opened from the library is not seen on any page.
+  const unplaced = root?.type === 'component' && root.sheet === undefined
+  const inside = rootOf(doc, scope)
+  const note = inside?.type === 'component' ? t(inside.sheet === undefined ? COMPONENT_NOTE : SHEET_NOTE) : null
+  const here = path.steps[path.steps.length - 1]
+  // A long way keeps where it starts and the last places, the ones gone back to most; a long
+  // trail, the place next in and the one left last.
+  const shown = [...folded(path.steps, CRUMBS, 1, 3).map((item) => ({ item, ahead: false })), ...folded(left, 3, 1, 1).map((item) => ({ item, ahead: true }))]
+  return (
+    <nav className="breadcrumb" aria-label={t('Where you are editing')}>
+      {unplaced && (
+        <span className="crumb-lead">
+          <i className="type-icon">
+            <LibraryBig size={13} />
+          </i>
+          <span>{t('Component library')}</span>
+        </span>
+      )}
+      {shown.map(({ item, ahead }, i) => {
+        const separator = (i > 0 || unplaced) && <ChevronRight size={13} className={`crumb-sep${ahead ? ' ahead' : ''}`} aria-hidden />
+        if (Array.isArray(item))
+          return (
+            <Fragment key={ahead ? 'fold ahead' : 'fold'}>
+              {separator}
+              <CrumbFold steps={item} ahead={ahead} />
+            </Fragment>
+          )
+        const name = crumbName(doc, item.id)
+        return (
+          <Fragment key={item.id}>
+            {separator}
+            {item === here ? (
+              <span className="crumb here" aria-current="location" title={note ? `${name}\n${note}` : name}>
+                <CrumbName id={item.id} />
+              </span>
+            ) : ahead ? (
+              <button className="crumb ahead" title={t('Back into “{name}”', { name })} onClick={() => returnTo(item.id)}>
+                <CrumbName id={item.id} />
+              </button>
+            ) : (
+              <button className="crumb" title={name} onClick={() => leaveTo(item.id)}>
+                <CrumbName id={item.id} />
+              </button>
+            )}
+          </Fragment>
+        )
+      })}
+    </nav>
+  )
+}
+
+/** The drawing area: the canvas with everything that floats over it. */
+export function Stage() {
   const status = useStore((s) => s.status)
   const toast = useStore((s) => s.toast)
   const zoom = useStore((s) => s.view.zoom)
   return (
     <main className="stage">
       <CanvasView />
-      {scope !== page && (
-        <div className="banner">
-          {doc.nodes[scope]?.type === 'group'
-            ? t('Editing inside the group “{name}”.', { name: labelOf(doc, doc.nodes[scope]) })
-            : ((inside) => inside?.type === 'component' && inside.sheet !== undefined)(doc.nodes[scope])
-              ? t('Editing what is on every sheet, on a sheet as it prints, in millimetres of paper.')
-              : t('Editing component “{name}”. The red and green axes cross at its insertion point.', { name: labelOf(doc, doc.nodes[scope]) })}
-          <button onClick={() => editComponent(null)}>{t('Done')}</button>
-        </div>
-      )}
+      <Breadcrumb />
       {/* Readings, out of the way in the corner: how far the view is zoomed, and where the pointer is. */}
       <div className="status">
         <span title={t('Screen pixels per metre')}>{Math.round(zoom * 1000)} px/m</span>

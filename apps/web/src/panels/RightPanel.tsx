@@ -9,7 +9,7 @@ import { language, msg, t } from '../i18n'
 import { apply, editComponent, registry, setTool, toast, useStore, selectCorner } from '../store'
 import { ColorChoice, PatternRows } from '../ColorChoice'
 import { WeightChoice } from '../WeightChoice'
-import { DashPicker, Field, IconButton, JustifyPicker, labelOf, Section } from '../ui'
+import { DashPicker, Field, IconButton, JustifyPicker, labelOf, OpacitySlider, Section } from '../ui'
 import { dashIndex, DASHES } from '../strokes'
 import { formatLength, parseLength, unit } from '../units'
 
@@ -22,8 +22,8 @@ export interface FieldSpec {
   /** Property path, one or two levels deep: "x", "a.x", "props.width", "style.stroke". */
   path: string
   label: string
-  /** 'dash' is a checkbox standing for a dash pattern. */
-  type: 'number' | 'string' | 'boolean' | 'color' | 'dash' | 'weight' | 'pattern'
+  /** 'dash' is a checkbox standing for a dash pattern; 'opacity' a slider from 0 to 1, shown as a percentage. */
+  type: 'number' | 'string' | 'boolean' | 'color' | 'dash' | 'weight' | 'pattern' | 'opacity'
   /** Heading the field appears under. Defaults to "Geometry". */
   section?: string
   /** Shown when the property is unset. */
@@ -188,7 +188,9 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
     ...stroke(STROKE),
     ...fill((node) => node.type === 'polyline' && !!node.closed),
   ],
-  image: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), num('opacity', msg('Opacity'), 1)],
+  image: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), { path: 'opacity', label: msg('Opacity'), type: 'opacity', fallback: 1 }],
+  // Of everything in it, on top of the opacity of each thing. Not under Style, whose eyedropper takes a stroke and a fill.
+  group: [{ path: 'opacity', label: msg('Opacity'), type: 'opacity', fallback: 1, section: msg('Appearance') }],
   // A placed component looks as the component does, in the colour of its layer where the
   // component gives none: it has no stroke or fill of its own to set (see fieldsOf).
   instance: PLACEMENT,
@@ -324,7 +326,7 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
   }
   // A colour's row, or a weight's, is not a label: a label hands every click on it to the button
   // inside, which would open its window again just as a click there closed it.
-  const Row = field.type === 'color' || field.type === 'weight' ? 'div' : 'label'
+  const Row = field.type === 'color' || field.type === 'weight' || field.type === 'opacity' ? 'div' : 'label'
   return (
     <Row className="field">
       <span>{t(field.label)}</span>
@@ -337,6 +339,10 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
           }}
           onChange={(e) => commit(e.target.checked)}
         />
+      )}
+      {field.type === 'opacity' && (
+        // Fully opaque is said by saying nothing.
+        <OpacitySlider value={mixed ? undefined : (value as number)} onChange={(next) => commit(next >= 1 ? undefined : next)} />
       )}
       {field.type === 'weight' && (
         // Chosen as what it prints at; kept in the drawing as pixels of screen.

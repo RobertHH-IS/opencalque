@@ -127,7 +127,7 @@ ${JSON.stringify(kinds)}
 
 Kinds with "cutsWalls" are doors and windows. One cuts an opening when it lies on a wall: put its insertion point (x, y) in the middle of the wall's thickness (on its line for a wall without "justify", half its thickness off it towards the wall otherwise) and set its rotation to the wall's direction, the angle from the wall's "a" to "b". The opening then runs along the wall from the insertion point for its width. It adapts to the wall's thickness by itself, and moves with the wall only by being on it.
 
-A "group" holds several nodes so they are selected, moved and stacked as one. It has no coordinates of its own: to group nodes, add a group and set their "parent" to its id; to move a group, move the nodes inside it.
+A "group" holds several nodes so they are selected, moved and stacked as one. It has no coordinates of its own: to group nodes, add a group and set their "parent" to its id; to move a group, move the nodes inside it. Its "opacity" (0 to 1, 1 when left out) makes everything inside it see-through.
 
 A "component" is a reusable definition and an "instance" places it, with "x", "y", "rotation", "scale" and "flipX", and "scaleX" and "scaleY" to stretch it wider or taller than it is drawn. To repeat the same furniture or symbol several times, make one component and place instances of it; changing the component changes them all. An instance has no look of its own: what its component draws without a colour takes the colour of the instance's layer, so to show placed furniture grey (existing) or red (to demolish), put the instances on a layer of that colour rather than giving them a style.
 

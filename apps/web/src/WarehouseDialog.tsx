@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { applyOps, componentsOf, createDocument, declarativeExtension, importComponents, toSVG, type DeclarativeExtension, type Document, type Op, type ParametricKind } from '@opencalque/core'
-import { Pencil, SlidersHorizontal, TextCursorInput, Trash2 } from 'lucide-react'
-import { guarded, importLibrary, makeComponent } from './actions'
+import { Globe, HardDrive, Pencil, SlidersHorizontal, TextCursorInput, Trash2, X } from 'lucide-react'
+import { DRAWING_EXTENSIONS, guarded, importLibraryFrom } from './actions'
 import { language, msg, t, tn } from './i18n'
 import { platform } from './platform'
 import { setPrefs, usePrefs } from './prefs'
 import { apply, BUILT_IN_EXTENSION, editComponent, loadExtensions, registry, replaceDoc, setTool, toast, useStore } from './store'
 import { IconButton } from './ui'
 import { bundledExtensions, bundledLibraries, remoteCatalog, type Library } from './catalog'
+import { formatLength, formatNumber, unitSuffix } from './units'
 
 const close = () => useStore.setState({ warehouse: null })
 
@@ -33,20 +34,67 @@ interface Card {
   key: string
   group: string
   name: string
+  /** One short line under its name: the size it comes at, or a short note. */
   description: string
+  /** What its tooltip says about it besides how to place it, when that is more than its card shows. */
+  about?: string
   picture: string
   place(): void
   /** Id of the component, for one that belongs to the drawing and can therefore be renamed, edited and deleted here. */
   own?: string
   /** A parametric object: its sizes and options are set once placed. Marked on its card. */
   parametric?: boolean
+  /** The library a component of a library is in, and its id there. */
+  library?: { id: string; component: string }
 }
 
 /** Where parametric objects that say no category, or one nothing else is in, are listed. */
 const OBJECTS = 'objects'
 const DRAWING = 'drawing'
 /** Groups of parametric objects that no library is, by the category they say, and their names. */
-const CATEGORIES: Record<string, string> = { architecture: msg('Architecture'), annotation: msg('Annotation') }
+const CATEGORIES: Record<string, string> = {
+  architecture: msg('Architecture'),
+  annotation: msg('Annotation'),
+  living: msg('Living room'),
+  dining: msg('Dining room'),
+  bedroom: msg('Bedroom'),
+  office: msg('Office'),
+}
+/**
+ * The headings of the list of sections, each with the sections the app knows under it, in the
+ * order they are listed (the rooms in the order of a home). A section of any other name, a library
+ * from a web catalog for instance, comes after them, under Others, and the objects that say no
+ * category last of all.
+ */
+const HEADINGS: [heading: string, sections: string[]][] = [
+  [msg('Rooms'), ['living', 'dining', 'bedroom', 'kitchen', 'bathroom', 'office']],
+  [msg('Building'), ['architecture', 'electrical']],
+  [msg('Drawing'), ['annotation']],
+]
+const SECTION_KEY = 'opencalque.librarySection'
+
+/** The size a parametric object is placed at, in the unit the user works in: its box, or its length along a wall. */
+function defaultSize(kind: ParametricKind): string {
+  try {
+    const props = registry.resolveProps(kind, {})
+    if (kind.box) {
+      const box = kind.box.bounds(props)
+      return `${formatNumber(box.right - box.left)} × ${formatNumber(box.bottom - box.top)} ${unitSuffix()}`.trim()
+    }
+    return kind.size ? formatLength(Number(props[kind.size.x])) : ''
+  } catch {
+    return ''
+  }
+}
+
+/** The section of the component library looked at last, kept on this computer: the library opens on it again. */
+function lastSection(): string {
+  try {
+    return localStorage.getItem(SECTION_KEY) ?? 'all'
+  } catch {
+    return 'all'
+  }
+}
 
 /**
  * The component library: every object that can be placed, in one searchable grid. That is the
@@ -57,11 +105,14 @@ function Components({ libraries }: { libraries: Library[] }) {
   const doc = useStore((s) => s.doc)
   const version = useStore((s) => s.extensionsVersion)
   const [loaded, setLoaded] = useState<Record<string, Document>>({})
-  const [filter, setFilter] = useState('all')
+  const [chosenSection, setChosenSection] = useState(lastSection)
   const [search, setSearch] = useState('')
+  /** The section a search is narrowed to: all of them when it starts, and not remembered. */
+  const [searchSection, setSearchSection] = useState('all')
+  // The sizes on the cards are in the unit the user works in.
+  const lengthUnit = usePrefs((p) => p.unit)
   /** Key of the card whose name is being typed. */
   const [renaming, setRenaming] = useState<string | null>(null)
-  const hasSelection = useStore((s) => s.selection.length > 0)
 
   useEffect(() => {
     let stale = false
@@ -92,17 +143,28 @@ function Components({ libraries }: { libraries: Library[] }) {
       else toast(tn(ids.length, '{n} component added. It is in the component library, under “In this drawing”.', '{n} components added. They are in the component library, under “In this drawing”.'))
     })
 
-  // Parametric objects are listed among the components of the same kind (a table with the furniture),
-  // marked as such, rather than in a group of their own; those of a kind no library is make theirs.
+  // The sections: the drawing's own components first; then each library, split into the rooms its
+  // components are for (the furniture into living room, dining room, bedroom and office), under
+  // its own name for those that say none; and the sections parametric objects say. They are
+  // listed under the headings of HEADINGS, the others after them. Parametric objects are listed
+  // among the components of their kind (a table in the dining room), marked as such.
   const kinds = [...registry.parametric.values()]
-  const categories = [...new Set(kinds.map((kind) => kind.category ?? OBJECTS))].filter((category) => !libraries.some((l) => l.id === category))
-  const groups = [
-    { id: DRAWING, name: t('In this drawing') },
-    ...categories.filter((c) => c === 'architecture').map((id) => ({ id, name: t(CATEGORIES[id]) })),
-    ...libraries.map((l) => ({ id: l.id, name: own(l, l.name) })),
-    ...categories.filter((c) => c !== 'architecture' && c !== OBJECTS).map((id) => ({ id, name: CATEGORIES[id] ? t(CATEGORIES[id]) : t(id) })),
-    ...categories.filter((c) => c === OBJECTS).map((id) => ({ id, name: t('Other objects') })),
-  ]
+  const sectionsOf = (library: Library) => {
+    const rooms = Object.values(library.categories ?? {})
+    const all = library.components !== undefined && rooms.length >= library.components
+    return [...new Set(rooms), ...(all ? [] : [library.id])]
+  }
+  const present = new Set([...libraries.flatMap(sectionsOf), ...kinds.map((kind) => kind.category ?? OBJECTS)])
+  const known = HEADINGS.flatMap(([, ids]) => ids)
+  const rest = [...present].filter((id) => !known.includes(id)).sort((a, b) => Number(a === OBJECTS) - Number(b === OBJECTS))
+  const lists = [...HEADINGS.map(([heading, ids]) => ({ heading, ids: ids.filter((id) => present.has(id)) })), { heading: msg('Others'), ids: rest }].filter((list) => list.ids.length > 0)
+  const nameOf = (id: string) => {
+    const library = libraries.find((l) => l.id === id)
+    if (id === DRAWING) return t('In this drawing')
+    if (id === OBJECTS) return t('Other objects')
+    return library ? own(library, library.name) : CATEGORIES[id] ? t(CATEGORIES[id]) : t(id)
+  }
+  const groups = [DRAWING, ...lists.flatMap((list) => list.ids)].map((id) => ({ id, name: nameOf(id) }))
 
   // Pictures are the objects themselves, rendered the way the drawing renders them.
   const objectCards = useMemo(
@@ -112,11 +174,13 @@ function Components({ libraries }: { libraries: Library[] }) {
         group: kind.category ?? OBJECTS,
         parametric: true,
         name: t(kind.label),
-        description: kind.description ? t(kind.description) : '',
+        // The size it comes at; how it is placed and changed is said by its tooltip.
+        description: defaultSize(kind),
+        about: kind.description ? t(kind.description) : undefined,
         picture: objectPicture(kind),
         place: () => (close(), setTool('place', { type: 'parametric', kind: kind.kind })),
       })),
-    [version],
+    [version, lengthUnit],
   )
   const drawingCards = useMemo(
     () =>
@@ -137,7 +201,8 @@ function Components({ libraries }: { libraries: Library[] }) {
         const from = libraries.find((l) => l.id === id)
         return componentsOf(library).map((c): Card => ({
           key: `${id} ${c.id}`,
-          group: id,
+          group: from?.categories?.[c.id] ?? id,
+          library: { id, component: c.id },
           name: from ? own(from, c.name ?? c.id) : (c.name ?? c.id),
           description: from ? own(from, c.description ?? '') : (c.description ?? ''),
           picture: svgUrl(toSVG(library, c.id, registry)),
@@ -147,108 +212,191 @@ function Components({ libraries }: { libraries: Library[] }) {
     [loaded, version, libraries],
   )
 
+  /** Copies the components of a drawing on this computer into this one, and shows them where they now are. */
+  const fromFile = () =>
+    guarded(async () => {
+      const file = await platform.open(DRAWING_EXTENSIONS)
+      if (!file) return
+      importLibraryFrom(file.name, file.content)
+      setSearch('')
+      setFilter(DRAWING)
+    })
+
+  const setFilter = (section: string) => {
+    setChosenSection(section)
+    try {
+      localStorage.setItem(SECTION_KEY, section)
+    } catch {
+      // Without storage the library opens on All next time.
+    }
+  }
   const words = search.toLowerCase().split(/\s+/).filter(Boolean)
-  const shown = groups
-    .filter((group) => filter === 'all' || filter === group.id)
-    .map((group) => ({
-      ...group,
-      cards: [...objectCards, ...drawingCards, ...libraryCards].filter((card) => card.group === group.id && words.every((word) => `${card.name} ${card.description} ${group.name}`.toLowerCase().includes(word))),
-    }))
-    .filter((group) => group.cards.length > 0)
+  const offered = (section: string) => section === 'all' || groups.some((group) => group.id === section)
+  // A search looks through every section, narrowed to one only when one is chosen while searching.
+  // Otherwise the section looked at last is shown, while there is something in it to show: not a
+  // library that is no longer offered, nor the drawing's own components in a drawing that has none.
+  const filter =
+    words.length > 0 ? (offered(searchSection) ? searchSection : 'all') : offered(chosenSection) && (chosenSection !== DRAWING || drawingCards.length > 0) ? chosenSection : 'all'
+  const choose = (section: string) => (words.length > 0 ? setSearchSection(section) : setFilter(section))
+
+  // Every section with what it holds that matches the search, which the list of sections counts.
+  const found = groups.map((group) => ({
+    ...group,
+    cards: [...objectCards, ...drawingCards, ...libraryCards].filter((card) => card.group === group.id && words.every((word) => `${card.name} ${card.description} ${group.name}`.toLowerCase().includes(word))),
+  }))
+  const counts: Record<string, number> = { all: 0 }
+  for (const group of found) {
+    counts[group.id] = group.cards.length
+    counts.all += group.cards.length
+  }
+  const shown = found.filter((group) => (filter === 'all' || filter === group.id) && group.cards.length > 0)
   const loading = libraries.some((l) => !loaded[l.id])
-  const chosen = loaded[filter]
+  // The components of a library shown in one section, to be added to the drawing at once: all of
+  // them when they are the whole library.
+  const inSection = filter === 'all' ? [] : shown.flatMap((group) => group.cards).flatMap((card) => (card.library ? [card.library] : []))
+  const source = inSection.length > 0 && inSection.every((one) => one.id === inSection[0].id) ? inSection[0].id : null
+  const chosen = source ? loaded[source] : undefined
+  const whole = chosen ? componentsOf(chosen).length === inSection.length : false
+
+  /** One entry of the list of sections, with how many things it holds, or matches the search. */
+  const section = (id: string, name: string) => (
+    <button
+      key={id}
+      className={`warehouse-section${id === filter ? ' active' : ''}${counts[id] ? '' : ' empty'}`}
+      aria-current={id === filter || undefined}
+      title={((l) => l && own(l, l.description))(libraries.find((l) => l.id === id))}
+      onClick={() => choose(id)}
+    >
+      <span className="warehouse-section-name">{name}</span>
+      <span className="warehouse-count">{counts[id] ?? 0}</span>
+    </button>
+  )
 
   return (
     <>
       <div className="warehouse-bar">
-        <input autoFocus placeholder={t('Search every object and component…')} value={search} onChange={(e) => setSearch(e.target.value)} />
+        <input
+          autoFocus
+          placeholder={t('Search every object and component…')}
+          value={search}
+          onChange={(e) => {
+            // A new search starts in every section.
+            if (!search.trim()) setSearchSection('all')
+            setSearch(e.target.value)
+          }}
+        />
+        {/* The sections as a list to pick from, where the window is too narrow to show them beside what they hold. */}
+        <select className="warehouse-section-picker" aria-label={t('Sections')} value={filter} onChange={(e) => choose(e.target.value)}>
+          <option value="all">{t('All')}</option>
+          <option value={DRAWING}>{nameOf(DRAWING)}</option>
+          {lists.map(({ heading, ids }) => (
+            <optgroup key={heading} label={t(heading)}>
+              {ids.map((id) => (
+                <option key={id} value={id}>
+                  {nameOf(id)}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
       </div>
-      <div className="warehouse-bar">
-        <button className={`pill${filter === 'all' ? ' active' : ''}`} onClick={() => setFilter('all')}>
-          {t('All')}
-        </button>
-        {groups.map((group) => (
-          <button key={group.id} className={`pill${group.id === filter ? ' active' : ''}`} title={((l) => l && own(l, l.description))(libraries.find((l) => l.id === group.id))} onClick={() => setFilter(group.id)}>
-            {group.name}
-          </button>
-        ))}
+      <div className="warehouse-body">
+        <nav className="warehouse-sections" aria-label={t('Sections')}>
+          {section('all', t('All'))}
+          {section(DRAWING, nameOf(DRAWING))}
+          {lists.map(({ heading, ids }) => (
+            <Fragment key={heading}>
+              <h5>{t(heading)}</h5>
+              {ids.map((id) => section(id, nameOf(id)))}
+            </Fragment>
+          ))}
+          {/* Where more comes from: a drawing on this computer, whose components join this one's, or a catalog on the web, whose libraries join these. */}
+          <div className="warehouse-more">
+            <h5>{t('More components')}</h5>
+            <button className="warehouse-section" title={t('Copies the components of a drawing on this computer into this one, under “In this drawing”')} onClick={fromFile}>
+              <HardDrive size={13} />
+              <span className="warehouse-section-name">{t('From a file…')}</span>
+            </button>
+            <details className="warehouse-web">
+              <summary className="warehouse-section">
+                <Globe size={13} />
+                <span className="warehouse-section-name">{t('From the web…')}</span>
+              </summary>
+              <CatalogAddress bare />
+            </details>
+          </div>
+        </nav>
+        <div className="warehouse-grid">
+          {shown.map((group) => (
+            <Fragment key={group.id}>
+              <h4 className="warehouse-heading">
+                <span className="warehouse-heading-name">{group.name}</span>
+                {chosen && group.id === filter && (
+                  <button className="text-button" onClick={() => add(chosen, inSection.map((one) => one.component), libraries.find((l) => l.id === source))}>
+                    {whole ? t('Add the whole library') : t('Add all of these')}
+                  </button>
+                )}
+              </h4>
+              {group.cards.map((card) => (
+                <div
+                  key={card.key}
+                  className="warehouse-card"
+                  role="button"
+                  tabIndex={0}
+                  // Its name and what its card has no room for, then how to place it.
+                  title={[card.name, card.about ?? card.description, t('Click, then click on the drawing to place it')].filter(Boolean).join('\n\n')}
+                  onClick={card.place}
+                  onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && card.place()}
+                >
+                  {card.picture ? <img src={card.picture} alt="" /> : <span className="warehouse-blank" />}
+                  {card.parametric && (
+                    <span className="warehouse-badge" title={t('Parametric: its sizes and options are set once it is placed, in its properties or by pulling its sides')}>
+                      <SlidersHorizontal size={11} />
+                    </span>
+                  )}
+                  {renaming === card.key && card.own ? (
+                    <input
+                      className="inline-input"
+                      autoFocus
+                      defaultValue={card.name}
+                      onClick={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.target.select()}
+                      onBlur={(e) => {
+                        setRenaming(null)
+                        const name = e.target.value.trim()
+                        if (name && name !== card.name) apply([{ op: 'update_node', id: card.own!, patch: { name } }])
+                      }}
+                      onKeyDown={(e) => {
+                        e.stopPropagation()
+                        if (e.key === 'Escape') e.currentTarget.value = card.name
+                        if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+                      }}
+                    />
+                  ) : (
+                    <strong>{card.name}</strong>
+                  )}
+                  <span className="faint">{card.description}</span>
+                  {card.own && (
+                    // What can be done to a component of the drawing, besides placing it.
+                    <span className="warehouse-actions" onClick={(e) => e.stopPropagation()}>
+                      <IconButton title={t('Rename')} onClick={() => setRenaming(card.key)}>
+                        <TextCursorInput size={13} />
+                      </IconButton>
+                      <IconButton title={t('Edit component')} onClick={() => (close(), editComponent(card.own!))}>
+                        <Pencil size={13} />
+                      </IconButton>
+                      <IconButton title={t('Delete component and its instances')} onClick={() => apply([{ op: 'remove_node', id: card.own! }])}>
+                        <Trash2 size={13} />
+                      </IconButton>
+                    </span>
+                  )}
+                </div>
+              ))}
+            </Fragment>
+          ))}
+          {shown.length === 0 && <p className="hint">{loading ? t('Loading…') : filter === DRAWING && words.length === 0 ? t('This drawing has no component yet. Select objects and choose Object › Create component.') : t('Nothing matches.')}</p>}
+        </div>
       </div>
-      <div className="warehouse-grid">
-        {shown.map((group) => (
-          <Fragment key={group.id}>
-            <h4 className="warehouse-heading">{group.name}</h4>
-            {group.cards.map((card) => (
-              <div
-                key={card.key}
-                className="warehouse-card"
-                role="button"
-                tabIndex={0}
-                title={t('Click, then click on the drawing to place it')}
-                onClick={card.place}
-                onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && card.place()}
-              >
-                {card.picture ? <img src={card.picture} alt="" /> : <span className="warehouse-blank" />}
-                {card.parametric && (
-                  <span className="warehouse-badge" title={t('Parametric: its sizes and options are set once it is placed, in its properties or by pulling its sides')}>
-                    <SlidersHorizontal size={11} />
-                  </span>
-                )}
-                {renaming === card.key && card.own ? (
-                  <input
-                    className="inline-input"
-                    autoFocus
-                    defaultValue={card.name}
-                    onClick={(e) => e.stopPropagation()}
-                    onFocus={(e) => e.target.select()}
-                    onBlur={(e) => {
-                      setRenaming(null)
-                      const name = e.target.value.trim()
-                      if (name && name !== card.name) apply([{ op: 'update_node', id: card.own!, patch: { name } }])
-                    }}
-                    onKeyDown={(e) => {
-                      e.stopPropagation()
-                      if (e.key === 'Escape') e.currentTarget.value = card.name
-                      if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
-                    }}
-                  />
-                ) : (
-                  <strong>{card.name}</strong>
-                )}
-                <span className="faint">{card.description}</span>
-                {card.own && (
-                  // What can be done to a component of the drawing, besides placing it.
-                  <span className="warehouse-actions" onClick={(e) => e.stopPropagation()}>
-                    <IconButton title={t('Rename')} onClick={() => setRenaming(card.key)}>
-                      <TextCursorInput size={13} />
-                    </IconButton>
-                    <IconButton title={t('Edit component')} onClick={() => (close(), editComponent(card.own!))}>
-                      <Pencil size={13} />
-                    </IconButton>
-                    <IconButton title={t('Delete component and its instances')} onClick={() => apply([{ op: 'remove_node', id: card.own! }])}>
-                      <Trash2 size={13} />
-                    </IconButton>
-                  </span>
-                )}
-              </div>
-            ))}
-          </Fragment>
-        ))}
-        {shown.length === 0 && <p className="hint">{loading ? t('Loading…') : filter === DRAWING && words.length === 0 ? t('This drawing has no component yet. Select objects and choose Object › Create component.') : t('Nothing matches.')}</p>}
-      </div>
-      <footer className="warehouse-footer">
-        <span className="hint">{t('Click an object to place it. Components taken from a library are copied into your drawing and listed under “In this drawing”.')}</span>
-        <button className="text-button" disabled={!hasSelection} onClick={() => (close(), makeComponent())}>
-          {t('Create component from selection')}
-        </button>
-        <button className="text-button" onClick={importLibrary}>
-          {t('Import library…')}
-        </button>
-        {chosen && (
-          <button className="text-button" onClick={() => add(chosen, componentsOf(chosen).map((c) => c.id), libraries.find((l) => l.id === filter))}>
-            {t('Add the whole library')}
-          </button>
-        )}
-      </footer>
     </>
   )
 }
@@ -290,7 +438,7 @@ function Extensions({ catalog }: { catalog: DeclarativeExtension[] }) {
         <div className="warehouse-row">
           <div>
             <strong>{t('Architecture')}</strong> <span className="faint">{t('built in')}</span>
-            <p className="hint">{t('Doors, windows, stairs and washbasins.')}</p>
+            <p className="hint">{t('Doors, windows, stairs, washbasins, a bathtub, a hob, a sink, fridges and a corner sofa.')}</p>
           </div>
           <button className="pill" onClick={() => change({ disabled: builtInOn ? [...disabled, BUILT_IN_EXTENSION] : disabled.filter((id) => id !== BUILT_IN_EXTENSION) })}>
             {builtInOn ? t('Turn off') : t('Turn on')}
@@ -346,8 +494,8 @@ function useCatalog(active: boolean) {
   return { libraries, extensions }
 }
 
-/** The address of a catalog on the web that offers more libraries and extensions. */
-function CatalogAddress() {
+/** The address of a catalog on the web that offers more libraries and extensions; `bare` where something else already says what it is for. */
+function CatalogAddress({ bare = false }: { bare?: boolean }) {
   const catalogUrl = usePrefs((p) => p.catalogUrl)
   const [url, setUrl] = useState(catalogUrl)
   return (
@@ -358,7 +506,7 @@ function CatalogAddress() {
         setPrefs({ catalogUrl: url.trim() })
       }}
     >
-      <span className="faint">{t('More from a web catalog')}</span>
+      {!bare && <span className="faint">{t('More from a web catalog')}</span>}
       <input placeholder="https://…/catalog.json" value={url} onChange={(e) => setUrl(e.target.value)} />
       <button className="pill" type="submit">
         {t('Load')}
@@ -389,12 +537,12 @@ export function Warehouse() {
       <div className="dialog warehouse" role="dialog" aria-label={t('Component library')} onMouseDown={(e) => e.stopPropagation()}>
         <header>
           <h2>{t('Component library')}</h2>
-          <button className="text-button" onClick={close}>
-            {t('Done')}
-          </button>
+          {/* Nothing is to be confirmed here: the window is only closed, as Escape or a click beside it does. */}
+          <IconButton title={t('Close')} onClick={close}>
+            <X size={16} />
+          </IconButton>
         </header>
         <Components libraries={libraries} />
-        <CatalogAddress />
       </div>
     </div>
   )

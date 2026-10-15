@@ -1,5 +1,5 @@
 import * as z from 'zod'
-import { arcPoints } from './geometry'
+import { arcPoints, roundCorners } from './geometry'
 import type { Primitive } from './primitives'
 import type { Extension, ParametricKind } from './registry'
 
@@ -148,7 +148,14 @@ const Look = {
 }
 
 const ShapeSchema = z.union([
-  z.object({ ...Look, path: z.array(z.tuple([Expr, Expr])).min(2), closed: z.boolean().optional() }).describe('Straight segments through the points.'),
+  z
+    .object({
+      ...Look,
+      path: z.array(z.tuple([Expr, Expr])).min(2),
+      closed: z.boolean().optional(),
+      radius: Expr.optional().describe('Rounds its corners: each becomes an arc of this radius, made smaller where the sides are too short to hold it. The ends of an open path stay as they are.'),
+    })
+    .describe('Straight segments through the points.'),
   z.object({ ...Look, ellipse: z.object({ cx: Expr, cy: Expr, rx: Expr, ry: Expr }) }),
   z.object({ ...Look, arc: z.object({ cx: Expr, cy: Expr, r: Expr, from: Expr, to: Expr }) }).describe('Part of a circle; angles in degrees, 0 pointing right and 90 down.'),
   z.object({ ...Look, text: z.object({ x: Expr, y: Expr, value: z.string(), size: Expr, align: z.enum(['left', 'center']).optional() }) }),
@@ -184,7 +191,7 @@ export const DeclarativeExtensionSchema = z
           category: z
             .string()
             .optional()
-            .describe('Where the component library lists it: "furniture", "bathroom", "kitchen", "electrical", "architecture", "annotation", or a group of its own.'),
+            .describe('Where the component library lists it: a room ("living", "dining", "bedroom", "office"), "bathroom", "kitchen", "electrical", "architecture", "annotation", or a section of its own.'),
           size: z
             .object({ x: z.string() })
             .optional()
@@ -233,7 +240,11 @@ export function declarativeExtension(json: unknown): Extension {
       let one: Draw
       if ('path' in shape) {
         const points = shape.path.map(([x, y]) => [n(compileExpression(x)), n(compileExpression(y))] as const)
-        one = (scope, out) => out.push({ kind: 'path', points: points.map(([x, y]) => ({ x: x(scope), y: y(scope) })), closed: shape.closed, ...look })
+        const radius = shape.radius === undefined ? null : n(compileExpression(shape.radius))
+        one = (scope, out) => {
+          const corners = points.map(([x, y]) => ({ x: x(scope), y: y(scope) }))
+          out.push({ kind: 'path', points: radius ? roundCorners(corners, radius(scope), shape.closed) : corners, closed: shape.closed, ...look })
+        }
       } else if ('ellipse' in shape) {
         const [cx, cy, rx, ry] = [shape.ellipse.cx, shape.ellipse.cy, shape.ellipse.rx, shape.ellipse.ry].map((e) => n(compileExpression(e)))
         one = (scope, out) => out.push({ kind: 'ellipse', cx: cx(scope), cy: cy(scope), rx: Math.abs(rx(scope)), ry: Math.abs(ry(scope)), ...look })

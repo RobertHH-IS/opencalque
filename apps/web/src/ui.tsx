@@ -158,6 +158,34 @@ export function scrub(read: () => number | null, write: (value: number) => void,
 }
 
 /**
+ * An opacity from 0 to 1, as a slider and the percentage it is at (or "Mixed" when the objects
+ * selected do not agree). Each position is written as the slider moves, so the drawing follows it;
+ * however far it moves in one press, it is one step to undo.
+ */
+export function OpacitySlider({ value, onChange }: { value: number | undefined; onChange: (value: number) => void }) {
+  const percent = Math.round((value ?? 1) * 100)
+  return (
+    <div className="opacity-slider">
+      <input
+        className="color-alpha"
+        type="range"
+        min={0}
+        max={100}
+        value={percent}
+        aria-label={t('Opacity')}
+        onPointerDown={() => {
+          const mark = useStore.getState().past.length
+          // Let go wherever the pointer is: over the slider or not.
+          window.addEventListener('pointerup', () => collapseHistory(mark), { once: true })
+        }}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+      />
+      <span>{value === undefined ? t('Mixed') : `${percent} %`}</span>
+    </div>
+  )
+}
+
+/**
  * While Alt is held, number fields show a sideways arrow to say they can be dragged. Returns a
  * function that stops it.
  */

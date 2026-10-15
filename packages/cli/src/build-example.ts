@@ -86,11 +86,13 @@ doc = applyOps(doc, [
   furniture('Armchair', 2700, 1550, 90),
   furniture('Dining table, six chairs', 3500, 600),
   furniture('Double bed', 7800, 250),
-  furniture('Wardrobe', 8050, 3100),
-  kitchen('Fridge', 250, 6200),
-  kitchen('Sink unit', 950, 6250),
-  kitchen('Hob', 2250, 6250),
-  kitchen('Base unit', 2950, 6250),
+  // A symbol's back is its top edge: these stand against the wall below them, so they are turned
+  // round, placed by the corner that was their top left.
+  furniture('Wardrobe', 9850, 3700, 180),
+  add({ type: 'parametric', layer: 'furniture', kind: 'arch.fridge', x: 850, y: 6850, rotation: 180, props: { width: 600, depth: 650, doors: 1 } }),
+  add({ type: 'parametric', layer: 'furniture', kind: 'arch.sink', x: 2150, y: 6850, rotation: 180, props: { width: 1200, depth: 600, bowls: 1, drainer: 'Right' } }),
+  add({ type: 'parametric', layer: 'furniture', kind: 'arch.hob', x: 2850, y: 6850, rotation: 180, props: { width: 600, depth: 600 } }),
+  kitchen('Base unit', 3550, 6850, 180),
   add({ type: 'parametric', layer: 'furniture', kind: 'arch.washbasin', x: 7850, y: 3900, rotation: 0, props: { width: 600, depth: 450, bowls: 1 } }),
   bathroom('Toilet', 8950, 3950),
   bathroom('Shower tray', 8950, 5950),

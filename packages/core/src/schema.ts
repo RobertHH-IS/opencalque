@@ -206,7 +206,16 @@ export const NodeSchema = z
       })
       .describe('A reusable definition. Its children are drawn wherever an instance references it.'),
     z
-      .object({ ...base, type: z.literal('group') })
+      .object({
+        ...base,
+        type: z.literal('group'),
+        opacity: z
+          .number()
+          .min(0)
+          .max(1)
+          .optional()
+          .describe('How opaque everything in the group is drawn, from 0 (not at all) to 1, on top of the opacity of each thing and of the groups around it. Defaults to 1.'),
+      })
       .describe(
         'Several nodes treated as one object: selected, moved and stacked together. It has no geometry; the nodes whose parent is this group keep their own coordinates. Groups can be nested.',
       ),

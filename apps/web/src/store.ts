@@ -4,6 +4,7 @@ import { architecture } from '@opencalque/ext-architecture'
 import type { StoredFile } from './platform'
 import { bundledExtensions } from './catalog'
 import { setPrefs, usePrefs } from './prefs'
+import { ahead, scopePath, type ScopePath, type ScopeStep } from './scopePath'
 
 /** The one extension that is compiled into the app. It can be switched off but not removed. */
 export const BUILT_IN_EXTENSION = architecture.id
@@ -51,6 +52,11 @@ interface State {
    * page, so the view can keep it where it was drawn; null when it was opened some other way.
    */
   through: string[] | null
+  /**
+   * The deepest place left, with the placements it was reached through, while the way to the scope
+   * still leads into it: the breadcrumb shows what is past the scope, to go back in at once.
+   */
+  trail: { scope: string; through: string[] | null } | null
   selection: string[]
   /**
    * The wall corner that is selected, as the point where the wall ends are: a corner is not an
@@ -110,8 +116,12 @@ interface State {
   welcomeOpen: boolean
   /** The line of a wall the pointer is over in the properties panel, to show on the drawing. */
   edgeHover: { wall: string; edge: 'left' | 'right' | 'a' | 'b' } | null
-  /** Set while the pointer is on a face of the selected wall, or drags one to change its thickness, for the hints to say so. */
-  wallFace: 'hover' | 'drag' | null
+  /**
+   * Set while the pointer is on a face of the selected wall, or drags one to change its thickness,
+   * or is on the line across one of its free ends, or drags it to change its length: for the hints
+   * to say so.
+   */
+  wallFace: 'hover' | 'drag' | 'end hover' | 'end drag' | null
   exportOpen: boolean
   aboutOpen: boolean
   /**
@@ -149,6 +159,7 @@ function initial(doc: Document, file: StoredFile | null): State {
     page,
     scope: page,
     through: [],
+    trail: null,
     selection: [],
     corner: null,
     tool: 'select',
@@ -206,6 +217,7 @@ function settle(s: State, doc: Document): Partial<State> {
     page,
     scope,
     through: scope === s.scope ? s.through : [],
+    trail: scope === s.scope ? s.trail : null,
     selection: s.selection.filter((id) => doc.nodes[id]?.parent === scope),
     // A corner is a place, not an object: after an undo no wall may end there any more.
     corner: s.corner && wallEndsAt(doc, scope, s.corner).length > 0 ? s.corner : null,
@@ -338,30 +350,94 @@ export function selectCorner(at: Vec2 | null): void {
   set({ selection: [], corner: at })
 }
 
+/** Shows a page; showing the page already shown, from inside something, is leaving it for the page. */
 export function showPage(id: string): void {
-  set({ page: id, scope: id, through: [], selection: [] })
+  const { doc, scope, page, through, trail } = get()
+  const left = id === page && scope !== page ? (trailFrom(doc, page, scope, through, trail) ?? { scope, through }) : null
+  set({ page: id, scope: id, through: [], trail: left, selection: [] })
+}
+
+/** The way to the scope, and the places ahead of it on the trail (`ahead`): none when that way does not lead into it. */
+export function trailAhead(s: Pick<State, 'doc' | 'page' | 'scope' | 'through' | 'trail'> = get()): { path: ScopePath; trail: ScopePath | null; steps: ScopeStep[] } {
+  const path = scopePath(s.doc, s.page, s.scope, s.through)
+  if (!s.trail) return { path, trail: null, steps: [] }
+  const trail = scopePath(s.doc, s.page, s.trail.scope, s.trail.through)
+  return { path, trail, steps: ahead(path, trail) }
+}
+
+/** `trail`, while the way to `scope` leads into it. */
+function trailFrom(doc: Document, page: string, scope: string, through: string[] | null, trail: State['trail']): State['trail'] {
+  return trail && trailAhead({ doc, page, scope, through, trail }).steps.length > 0 ? trail : null
 }
 
 /**
- * Goes inside a component or group to edit what it contains, or with null comes back out: from a
- * group to whatever holds it (leaving the group selected), from a component to the page. Given the
- * instance it was reached by, a component stays where and as large as that instance drew it, and
- * comes back out the same way: only the rest of the drawing goes away.
+ * Goes inside a component or group to edit what it contains, or with null comes back out one step
+ * (`scopePath`): from a group to whatever holds it, from a component to where its placement is,
+ * leaving what was gone into selected; a component opened from the library goes back to the page.
+ * Given the instance it was reached by, a component stays where and as large as that instance drew
+ * it, and comes back out the same way: only the rest of the drawing goes away. Going into anything
+ * that is not on the trail forgets it.
  */
 export function editComponent(id: string | null, instance?: NodeOf<'instance'>): void {
-  const { doc, scope, page, view, through } = get()
+  const { doc, scope, page, view, through, trail } = get()
   if (id !== null) {
-    if (doc.nodes[id]?.type !== 'component') return set({ scope: id, selection: [] })
+    const enter = (to: Pick<State, 'scope' | 'through'> & Partial<State>) => set({ ...to, selection: [], trail: trailFrom(doc, page, to.scope, to.through, trail) })
+    if (doc.nodes[id]?.type !== 'component') return enter({ scope: id, through })
     const chain = rootOf(doc, scope)?.type === 'page' ? [] : through
-    if (!instance || !chain) return set({ scope: id, through: null, selection: [] })
-    return set({ scope: id, through: [...chain, instance.id], selection: [], view: carried(view, doc, id, [instance], 1) })
+    if (!instance || !chain) return enter({ scope: id, through: null })
+    return enter({ scope: id, through: [...chain, instance.id], view: carried(view, doc, id, [instance], 1) })
   }
-  const inside = doc.nodes[scope]
-  if (inside?.type === 'group' && inside.parent) return set({ scope: inside.parent, selection: [inside.id] })
-  const root = rootOf(doc, scope)
-  const instances = (through ?? []).map((ref) => doc.nodes[ref]).filter((node) => node?.type === 'instance')
-  const back = root?.type === 'component' && through && through.length > 0 && instances.length === through.length
-  set({ scope: page, through: [], selection: [], ...(back ? { view: carried(view, doc, root.id, instances, -1) } : {}) })
+  const { steps } = scopePath(doc, page, scope, through)
+  if (steps.length > 1) return leaveTo(steps[steps.length - 2].id)
+  set({ scope: page, through: [], trail: null, selection: [] })
+}
+
+/**
+ * Comes back out to a place on the way to what is being edited (`scopePath`), with what leads on
+ * from there selected: the group gone into, or the placement of the component. Coming out of
+ * components goes back through their placements, so the drawing stays where it was on screen.
+ * Where it came out of becomes the trail, unless it was already on the way into a deeper one.
+ */
+export function leaveTo(id: string): void {
+  const { doc, scope, page, view, through, trail } = get()
+  const path = scopePath(doc, page, scope, through)
+  const at = path.steps.findIndex((step) => step.id === id)
+  if (at < 0 || at === path.steps.length - 1) return
+  const { depth } = path.steps[at]
+  const next = path.steps[at + 1]
+  const left = (path.through ?? []).slice(depth).map((ref) => doc.nodes[ref] as NodeOf<'instance'>)
+  set({
+    scope: id,
+    through: path.through && path.through.slice(0, depth),
+    trail: trailFrom(doc, page, scope, through, trail) ?? { scope, through },
+    selection: [next.depth === depth ? next.id : left[0].id],
+    ...(left.length > 0 ? { view: carried(view, doc, rootOf(doc, scope)!.id, left, -1) } : {}),
+  })
+}
+
+/**
+ * Goes back into a place on the trail, ahead of the scope, by the placements it was left through,
+ * so the drawing is where it was on screen; what leads on from there is selected, as when leaving.
+ */
+export function returnTo(id: string): void {
+  const { doc, view } = get()
+  const { path, trail, steps } = trailAhead()
+  const at = steps.findIndex((step) => step.id === id)
+  if (!trail || at < 0) return
+  const { depth } = steps[at]
+  const next = steps[at + 1]
+  const into = (trail.through ?? []).slice(path.steps[path.steps.length - 1].depth, depth).map((ref) => doc.nodes[ref] as NodeOf<'instance'>)
+  set({
+    scope: id,
+    through: trail.through && trail.through.slice(0, depth),
+    selection: next ? [next.depth === depth ? next.id : trail.through![depth]] : [],
+    ...(into.length > 0 ? { view: carried(view, doc, rootOf(doc, id)!.id, into, 1) } : {}),
+  })
+}
+
+/** Lets go of the places left: the breadcrumb no longer offers to go back into them. */
+export function forgetTrail(): void {
+  set({ trail: null })
 }
 
 /**

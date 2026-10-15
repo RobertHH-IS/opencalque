@@ -40,6 +40,34 @@ export function resolveColor<T extends string | undefined>(doc: Document, value:
   return id === null ? value : ((doc.colors?.[id]?.value ?? MISSING) as T)
 }
 
+/**
+ * A colour made more see-through, its opacity multiplied by `by` (0 to 1), written as eight hex
+ * digits. Hex colours (of 3, 4, 6 or 8 digits) and rgb() or rgba() ones are understood; any other
+ * value ('none', a colour name) is given back as it is.
+ */
+export function fadeColor<T extends string | undefined>(color: T, by: number): T {
+  if (color === undefined || by >= 1) return color
+  const rgba = rgbaOf(color)
+  if (!rgba) return color
+  const hex = (value: number) => Math.round(Math.min(255, Math.max(0, value))).toString(16).padStart(2, '0')
+  return `#${hex(rgba.r)}${hex(rgba.g)}${hex(rgba.b)}${hex(rgba.a * Math.max(0, by) * 255)}` as T
+}
+
+/** Red, green and blue (0 to 255) and opacity (0 to 1) of a hex or rgb() colour, or null for anything else. */
+function rgbaOf(color: string): { r: number; g: number; b: number; a: number } | null {
+  const hex = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(color.trim())?.[1]
+  if (hex) {
+    const full = hex.length <= 4 ? [...hex].map((c) => c + c).join('') : hex
+    const part = (i: number) => parseInt(full.slice(i, i + 2), 16)
+    return { r: part(0), g: part(2), b: part(4), a: full.length === 8 ? part(6) / 255 : 1 }
+  }
+  const parts = /^rgba?\(([^)]+)\)$/i.exec(color.trim())?.[1].split(/[\s,/]+/).filter(Boolean)
+  if (!parts || parts.length < 3) return null
+  const [r, g, b] = parts.slice(0, 3).map(Number)
+  const a = parts[3] === undefined ? 1 : parts[3].endsWith('%') ? parseFloat(parts[3]) / 100 : parseFloat(parts[3])
+  return [r, g, b, a].every(Number.isFinite) ? { r, g, b, a } : null
+}
+
 /** The shared colours of a drawing, in the order they were made. */
 export const colorsOf = (doc: Document): SharedColor[] => Object.values(doc.colors ?? {})
 

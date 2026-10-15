@@ -36,6 +36,8 @@ async function recordSaves(page: Page) {
 
 const canvas = (page: Page) => page.locator('.stage canvas')
 const objectRows = (page: Page) => page.locator('[data-panel="objects"] .row')
+/** A section of the component library, in the list on its left, by its name. */
+const librarySection = (page: Page, name: string) => page.locator('.warehouse-section', { has: page.locator('.warehouse-section-name', { hasText: new RegExp(`^${name}$`) }) })
 
 /** Draws a wall from one point of the canvas to another, in CSS pixels from its top-left corner. */
 async function drawWall(page: Page, from: [number, number], to: [number, number]) {
@@ -52,6 +54,24 @@ async function choose(page: Page, open: () => Promise<void>, name: string, conte
   const chooser = page.waitForEvent('filechooser')
   await open()
   await (await chooser).setFiles({ name, mimeType: 'application/octet-stream', buffer: Buffer.from(content) })
+}
+
+/**
+ * Where a point of the drawing is on the page, for a drawing brought into view as it opened: read
+ * from the status bar, which says where the pointer is in millimetres, at two places.
+ */
+async function drawingOnScreen(page: Page): Promise<(x: number, y: number) => [number, number]> {
+  const box = (await canvas(page).boundingBox())!
+  const reading = async (x: number, y: number) => {
+    await page.mouse.move(box.x + x, box.y + y)
+    const text = (await page.locator('.status span').nth(1).textContent())!.replaceAll(String.fromCharCode(0x2212), '-').replace(/[^\d.,-]/g, '')
+    const [wx, wy] = text.split(',').map(Number)
+    return { x: wx, y: wy }
+  }
+  const p = await reading(100, 100)
+  const q = await reading(700, 500)
+  const zoom = 600 / (q.x - p.x)
+  return (x, y) => [box.x + 100 + (x - p.x) * zoom, box.y + 100 + (y - p.y) * zoom]
 }
 
 const drawing = (nodes: Record<string, unknown>, extra: Record<string, unknown> = {}) =>
@@ -317,6 +337,70 @@ test('draws a wall by its face and keeps it: thicker, it grows away; given anoth
   await expect(field('Thickness')).toHaveValue('400')
 })
 
+test('with Shift, a wall being drawn keeps level and still stops on what it meets: a wall it crosses, a point it comes level with', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  // An upright wall whose middle line is at x = 1830 mm, off the grid; and a short line ending at (3270, 2300).
+  const plan = drawing({
+    upright: { id: 'upright', type: 'wall', parent: 'page_1', order: 'a1', a: { x: 1830, y: 0 }, b: { x: 1830, y: 2000 }, thickness: 200 },
+    mark: { id: 'mark', type: 'line', parent: 'page_1', order: 'a2', a: { x: 3270, y: 2100 }, b: { x: 3270, y: 2300 } },
+    // So that the view the drawing opens on takes in where the walls start.
+    edge: { id: 'edge', type: 'line', parent: 'page_1', order: 'a3', a: { x: 0, y: 0 }, b: { x: 0, y: 2600 } },
+  })
+  await choose(page, () => page.keyboard.press('Control+o'), 'plan.opencalque', plan)
+  const onScreen = await drawingOnScreen(page)
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  const drawHeld = async (from: [number, number], to: [number, number]) => {
+    await page.keyboard.press('w')
+    await page.mouse.click(...onScreen(...from))
+    await page.keyboard.down('Shift')
+    await page.mouse.move(...onScreen(...to), { steps: 4 })
+    await page.mouse.click(...onScreen(...to))
+    await page.keyboard.up('Shift')
+    await page.keyboard.press('Escape')
+    await page.keyboard.press('v')
+    await objectRows(page).first().click()
+  }
+  // From the left, level, the pointer a little past the upright wall's middle line and a little low: it stops on that line.
+  await drawHeld([1100, 1000], [1850, 1040])
+  await expect(field('X2')).toHaveValue('1830')
+  await expect(field('Y2')).toHaveValue('1000')
+  // Level again, the pointer on the end of the line a little lower down: the wall ends level with it, at x = 3270.
+  await drawHeld([1100, 1800], [3270, 2300])
+  await expect(field('X2')).toHaveValue('3270')
+  await expect(field('Y2')).toHaveValue('1800')
+})
+
+test('makes a wall longer by the line across its free end, in its own direction; its end point still moves it anywhere', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  // At 0.1 px/mm, the origin at (320, 220): a wall 200 thick from (-200, 800) to (1800, 800) mm, 20 px thick on screen.
+  await drawWall(page, [300, 300], [500, 300])
+  await page.mouse.click(box.x + 400, box.y + 300)
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  await expect(field('X2')).toHaveValue('1800')
+  // On its end line, 8 px off the point at its end: the pointer says sideways, and the hints what a drag does.
+  await page.mouse.move(box.x + 500, box.y + 308)
+  await expect(canvas(page)).toHaveCSS('cursor', 'ew-resize')
+  await expect(page.locator('.hint-bar')).toContainText('Drag the end to make the wall longer or shorter')
+  // Dragged out and down: it only gets longer, level as it was.
+  await page.mouse.down()
+  await page.mouse.move(box.x + 560, box.y + 340, { steps: 5 })
+  await page.mouse.up()
+  await expect(field('X2')).toHaveValue('2400')
+  await expect(field('Y2')).toHaveValue('800')
+  await expect(field('X1')).toHaveValue('-200')
+  // The point at its end, dragged down, turns it (a press there picks that corner, so the wall is picked again to read it).
+  await page.mouse.move(box.x + 560, box.y + 300)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 560, box.y + 340, { steps: 5 })
+  await page.mouse.up()
+  await page.mouse.click(box.x + 430, box.y + 320)
+  await expect(field('X2')).toHaveValue('2400')
+  await expect(field('Y2')).toHaveValue('1200')
+})
+
 test('stretches a window placed on a wall by either of its ends, the other staying put', async ({ page }) => {
   await startWith(page)
   await page.goto('/')
@@ -393,19 +477,7 @@ test('brings a washbasin against a wall of a plan whose walls are grouped', asyn
   })
   await choose(page, () => page.keyboard.press('Control+o'), 'plan.opencalque', plan)
   await expect(objectRows(page)).toHaveCount(2)
-  const box = (await canvas(page).boundingBox())!
-  // The drawing was brought into view as it opened: where it is on the canvas is read from the
-  // status bar, which says where the pointer is in millimetres.
-  const reading = async (x: number, y: number) => {
-    await page.mouse.move(box.x + x, box.y + y)
-    const text = (await page.locator('.status span').nth(1).textContent())!.replaceAll(String.fromCharCode(0x2212), '-').replace(/[^\d.,-]/g, '')
-    const [wx, wy] = text.split(',').map(Number)
-    return { x: wx, y: wy }
-  }
-  const p = await reading(100, 100)
-  const q = await reading(700, 500)
-  const zoom = 600 / (q.x - p.x)
-  const onScreen = (x: number, y: number): [number, number] => [box.x + 100 + (x - p.x) * zoom, box.y + 100 + (y - p.y) * zoom]
+  const onScreen = await drawingOnScreen(page)
   // The washbasin fills x 1530 to 1980, y 1900 to 2500. Taken by a point on it away from its grips
   // and dragged 1410 mm to the left, its back comes 20 mm short of the wall's face: it goes against it.
   await page.mouse.move(...onScreen(1930, 2050))
@@ -414,6 +486,141 @@ test('brings a washbasin against a wall of a plan whose walls are grouped', asyn
   await page.mouse.up()
   const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
   await expect(field('X')).toHaveValue('100')
+})
+
+test('lists the furniture by room in the component library, the adjustable pieces with the rest', async ({ page }) => {
+  // The adjustable furniture installed as 1.0.0-rc.3 shipped it, all of it listed as furniture: the copy that ships now replaces it.
+  const furniture = JSON.parse(readFileSync('apps/web/src/warehouse/extensions/furniture.json', 'utf8'))
+  const old = { ...furniture, version: '1.1.0', objects: furniture.objects.map((object: Record<string, unknown>) => ({ ...object, category: 'furniture' })) }
+  await startWith(page, { extensions: { installed: { [old.id]: old }, disabled: [] } })
+  await page.goto('/')
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  const sections = await page.locator('.warehouse-sections .warehouse-section-name').allTextContents()
+  expect(sections.filter((name) => ['Living room', 'Dining room', 'Bedroom', 'Office', 'Furniture'].includes(name))).toEqual(['Living room', 'Dining room', 'Bedroom', 'Office'])
+  await librarySection(page, 'Bedroom').click()
+  await expect(page.locator('.warehouse-card strong')).toHaveText(['Bed', 'Double bed', 'Single bed', 'Wardrobe'])
+  await librarySection(page, 'Dining room').click()
+  await expect(page.locator('.warehouse-card strong')).toHaveText(['Table with chairs', 'Chair', 'Dining table, six chairs'])
+  // What is shown can be copied into the drawing at once.
+  await page.getByRole('button', { name: 'Add all of these' }).click()
+  await expect(page.locator('.toast')).toContainText('2 components added')
+})
+
+test('opens the component library on the section looked at last', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const library = page.getByTitle('Component library: stairs, furniture and every other object')
+  const section = (name: string) => librarySection(page, name)
+  const heading = (name: string) => page.locator('.warehouse-heading-name', { hasText: new RegExp(`^${name}$`) })
+  await library.click()
+  await expect(section('All')).toHaveClass(/active/)
+  await section('Bathroom').click()
+  await expect(heading('Bedroom')).toHaveCount(0)
+  await page.keyboard.press('Escape')
+  await expect(heading('Bathroom')).toHaveCount(0)
+  // Opened again, and after a restart, it shows the bathroom only.
+  for (const again of [() => library.click(), async () => (await page.reload(), await library.click())]) {
+    await again()
+    await expect(section('Bathroom')).toHaveClass(/active/)
+    await expect(heading('Bathroom')).toBeVisible()
+    await expect(heading('Bedroom')).toHaveCount(0)
+    await page.keyboard.press('Escape')
+  }
+  // In this drawing, which has no component of its own, is not opened on: All is.
+  await library.click()
+  await section('In this drawing').click()
+  await page.keyboard.press('Escape')
+  await library.click()
+  await expect(section('All')).toHaveClass(/active/)
+})
+
+test('searches every section of the component library, and counts what each section holds', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  const dialog = page.getByRole('dialog', { name: 'Component library' })
+  const search = page.getByPlaceholder('Search every object and component…')
+  const count = (name: string) => librarySection(page, name).locator('.warehouse-count')
+  await librarySection(page, 'Bathroom').click()
+  await expect(page.locator('.warehouse-heading-name')).toHaveText(['Bathroom'])
+  // A search looks through every section, wherever the library was, and each section says how much it found.
+  await search.fill('fridge')
+  await expect(page.locator('.warehouse-card strong')).toHaveText(['Fridge', 'American fridge'])
+  await expect(librarySection(page, 'All')).toHaveClass(/active/)
+  await expect(count('Kitchen')).toHaveText('2')
+  await expect(count('Bathroom')).toHaveText('0')
+  // Cleared, it is back where it was.
+  await search.fill('')
+  await expect(librarySection(page, 'Bathroom')).toHaveClass(/active/)
+  await expect(page.locator('.warehouse-heading-name')).toHaveText(['Bathroom'])
+  // Nothing is confirmed in this window: its corner closes it.
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog).toHaveCount(0)
+})
+
+test('takes the components of a drawing on this computer from the foot of the component library', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  const other = drawing({
+    stool: { id: 'stool', type: 'component', parent: null, order: 'a0', name: 'Stool' },
+    seat: { id: 'seat', type: 'ellipse', parent: 'stool', order: 'a0', cx: 0, cy: 0, rx: 200, ry: 200 },
+  })
+  await choose(page, () => page.getByRole('button', { name: 'From a file…' }).click(), 'stools.opencalque', other)
+  await expect(page.locator('.toast')).toContainText('Imported 1 component from stools.opencalque')
+  // The library shows them where they now are.
+  await expect(librarySection(page, 'In this drawing')).toHaveClass(/active/)
+  await expect(page.locator('.warehouse-card strong')).toHaveText(['Stool'])
+})
+
+test('places the wall-hung toilet from the library in a drawing that took a double washbasin from where it was being made', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  // While the double washbasin was being made it was the bathroom library's fifth component, and
+  // drawings of that time hold it under that place.
+  const plan = drawing({
+    basin: { id: 'basin', type: 'component', parent: null, order: 'a0', name: 'Double washbasin', description: '1200 × 500', meta: { source: 'warehouse.bathroom#bathroom_5' } },
+    counter: { id: 'counter', type: 'rect', parent: 'basin', order: 'a0', x: 0, y: 0, width: 1200, height: 500 },
+  })
+  await choose(page, () => page.keyboard.press('Control+o'), 'plan.opencalque', plan)
+  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Toilet, wall-hung$/ }) }).click()
+  const box = (await canvas(page).boundingBox())!
+  await page.mouse.click(box.x + 400, box.y + 300)
+  await page.keyboard.press('Escape')
+  await expect(objectRows(page)).toHaveCount(1)
+  await expect(objectRows(page).first()).toContainText('Toilet, wall-hung')
+})
+
+test('makes a group see-through from its properties, one drag of the slider being one step to undo', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  for (const [x, y] of [[300, 300], [450, 300]]) {
+    await page.keyboard.press('r')
+    await page.mouse.click(box.x + x, box.y + y)
+    await page.mouse.click(box.x + x + 100, box.y + y + 80)
+  }
+  await page.keyboard.press('v')
+  await page.keyboard.press('Control+a')
+  await page.keyboard.press('Control+g')
+  await expect(objectRows(page).first()).toContainText('Group')
+  const slider = page.locator('.opacity-slider input')
+  const reading = page.locator('.opacity-slider > span')
+  await expect(reading).toHaveText('100 %')
+  await slider.fill('50')
+  await expect(reading).toHaveText('50 %')
+  // Dragged from its middle to near its start: many positions written, one step to undo.
+  const track = (await slider.boundingBox())!
+  await page.mouse.move(track.x + track.width / 2, track.y + track.height / 2)
+  await page.mouse.down()
+  for (const share of [0.4, 0.3, 0.2]) await page.mouse.move(track.x + track.width * share, track.y + track.height / 2)
+  await page.mouse.up()
+  await expect(reading).not.toHaveText('50 %')
+  await page.keyboard.press('Control+z')
+  await expect(reading).toHaveText('50 %')
+  await page.keyboard.press('Control+z')
+  await expect(reading).toHaveText('100 %')
 })
 
 test('resizes a table by its side, the furniture installed before it could be', async ({ page }) => {
@@ -636,6 +843,53 @@ test('takes a thing out of a component: cut inside it, pasted on the page where 
   await objectRows(page).first().click()
   await expect(field('X')).toHaveValue(/^3\s?000$/)
   await expect(field('Y')).toHaveValue(/^1\s?000$/)
+})
+
+test('shows the way into a group and a component in it, and goes back out to any place on it', async ({ page }) => {
+  await startWith(page)
+  await page.goto('/')
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  // The rectangle made into a component, its placement then put in a group.
+  await page.keyboard.press('Control+Alt+k')
+  await page.keyboard.press('Control+g')
+  const crumbs = page.locator('.breadcrumb .crumb:not(.ahead)')
+  const left = page.locator('.breadcrumb .crumb.ahead')
+  const selected = page.locator('[data-panel="objects"] .row.selected')
+  await page.mouse.dblclick(box.x + 400, box.y + 350)
+  await expect(crumbs).toHaveText(['Page 1', /Group/])
+  await page.mouse.dblclick(box.x + 400, box.y + 350)
+  await expect(crumbs).toHaveText(['Page 1', /Group/, 'Component 1'])
+  await expect(page.locator('.hint-bar')).toContainText('insertion point')
+  // Back to the group in one click, the placement gone into selected there and the component left
+  // shown after it.
+  await page.locator('.breadcrumb button.crumb', { hasText: 'Group' }).click()
+  await expect(crumbs).toHaveText(['Page 1', /Group/])
+  await expect(left).toHaveText(['Component 1'])
+  await expect(selected).toHaveText(/Component 1/)
+  // Out to the page, the group selected. The places left stay.
+  await page.locator('.breadcrumb button.crumb', { hasText: 'Page 1' }).click()
+  await expect(crumbs).toHaveText(['Page 1'])
+  await expect(left).toHaveText([/Group/, 'Component 1'])
+  await expect(selected).toHaveText(/Group/)
+  // Straight back into the component, and out again a step at a time with Esc.
+  await left.filter({ hasText: 'Component 1' }).click()
+  await expect(crumbs).toHaveText(['Page 1', /Group/, 'Component 1'])
+  await expect(left).toHaveCount(0)
+  for (let i = 0; i < 4; i++) await page.keyboard.press('Escape')
+  await expect(crumbs).toHaveText(['Page 1'])
+  await expect(left).toHaveText([/Group/, 'Component 1'])
+  // On the page with nothing selected, Esc lets go of them.
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.breadcrumb')).toHaveCount(0)
+  // After that, leaving offers back only what was just left.
+  await page.mouse.dblclick(box.x + 400, box.y + 350)
+  await page.keyboard.press('Escape')
+  await expect(left).toHaveText([/Group/])
 })
 
 test('puts what is cut and pasted on top of what it was under', async ({ page, context }) => {

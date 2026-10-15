@@ -26,9 +26,10 @@ export interface ParametricKind {
   label: string
   description?: string
   /**
-   * Where the component library lists it, among the components of the same kind: one of the
-   * libraries' ids ('furniture', 'bathroom', 'kitchen', 'electrical'), 'architecture' or
-   * 'annotation'; any other is a group of its own. Left out, it is listed with the other objects.
+   * Where the component library lists it, among the components of the same kind: a room
+   * ('living', 'dining', 'bedroom', 'office'), one of the libraries' ids ('bathroom', 'kitchen',
+   * 'electrical'), 'architecture' or 'annotation'; any other is a section of its own. Left out, it
+   * is listed with the other objects.
    */
   category?: string
   params: ParamDef[]

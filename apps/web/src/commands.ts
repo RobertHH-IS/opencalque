@@ -419,13 +419,28 @@ export const executeById = (id: string) => {
   if (command) execute(command)
 }
 
+/** Keys a slider moves by, which it keeps rather than letting them nudge the selection. */
+const SLIDER_KEYS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown']
+
+/**
+ * Whether a key pressed in a field is for the field rather than a command: every key in a text
+ * field or a list, the keys that move a slider, none on a checkbox. So Ctrl+Z still undoes right
+ * after a slider was dragged or a box ticked.
+ */
+function forTheField(e: KeyboardEvent): boolean {
+  const field = (e.target as HTMLElement).closest('input, textarea, select')
+  if (!(field instanceof HTMLInputElement)) return field !== null
+  if (field.type === 'checkbox' || field.type === 'radio' || field.type === 'button') return false
+  return field.type !== 'range' || SLIDER_KEYS.includes(e.key)
+}
+
 /** Runs the command bound to a key press, if any. Installed once on the window. */
 export function handleKeyDown(e: KeyboardEvent): void {
   const { overrides, paletteOpen } = useCommands.getState()
   if (paletteOpen) return
   const key = eventKey(e)
   if (!key) return
-  const typing = (e.target as HTMLElement).closest('input, textarea, select') !== null
+  const typing = forTheField(e)
   const command = allCommands().find((c) => keysOf(c, overrides).includes(key) && (!typing || c.global) && (c.when?.() ?? true))
   if (!command) return
   e.preventDefault()

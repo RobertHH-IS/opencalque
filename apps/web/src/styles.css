@@ -83,6 +83,10 @@ select {
 .dock {
   flex: 1;
   min-height: 0;
+  /* What the panels stack inside them stays inside: the handles between panels (z-index 99 in
+     dockview) would otherwise come over the windows, menus and messages laid over the app, and
+     a click on a dialog where it covers one would grab the panel's edge instead. */
+  isolation: isolate;
   --dv-group-view-background-color: var(--bg);
   --dv-tabs-and-actions-container-background-color: var(--bg);
   --dv-activegroup-visiblepanel-tab-background-color: var(--bg);
@@ -789,7 +793,6 @@ body.scrubbing .quick-field input[title] {
   pointer-events: none;
 }
 
-.banner,
 .toast {
   position: absolute;
   left: 50%;
@@ -803,9 +806,102 @@ body.scrubbing .quick-field input[title] {
   transform: translateX(-50%);
 }
 
-.banner {
-  top: 12px;
-  background: var(--special);
+/*
+ * Where the editing is, inside groups and components. It starts in the corner and grows to the
+ * right, so going one step further in leaves every place already shown where it was.
+ */
+.breadcrumb {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  /* Above the hints under it, which the list of a folded way opens over. */
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  max-width: calc(100% - 20px);
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: 0 1px 6px rgb(0 0 0 / 8%), 0 0 0 1px var(--ring);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.crumb,
+.crumb-lead {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 2.5em;
+  max-width: 200px;
+  padding: 3px 6px;
+  border-radius: 5px;
+}
+
+.crumb span,
+.crumb-lead span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+button.crumb {
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.crumb:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* Where the editing is now: the one place that does not shrink before the others. */
+.crumb.here {
+  flex-shrink: 0;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.crumb-sep {
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+/* The places just left, past where the editing is: faint until pointed at. */
+.crumb.ahead,
+.crumb-sep.ahead {
+  opacity: 0.5;
+}
+
+button.crumb.ahead:hover {
+  opacity: 1;
+}
+
+.crumb-fold {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.crumb-menu {
+  width: max-content;
+  min-width: 150px;
+  max-width: 320px;
+  font-weight: normal;
+}
+
+.crumb-menu button {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+}
+
+.crumb-menu span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Keys worth knowing for the tool in use */
@@ -829,8 +925,9 @@ body.scrubbing .quick-field input[title] {
   pointer-events: none;
 }
 
-.banner ~ .hint-bar {
-  top: 56px;
+/* Under the breadcrumb, which a wide row of hints would run into. */
+.breadcrumb ~ .hint-bar {
+  top: 46px;
 }
 
 .hint-bar span {
@@ -857,16 +954,6 @@ body.scrubbing .quick-field input[title] {
   color: var(--text, inherit);
   font: inherit;
   font-weight: 600;
-}
-
-.banner button {
-  padding: 3px 10px;
-  border: 0;
-  border-radius: 5px;
-  background: #fff;
-  color: var(--special);
-  font-weight: 600;
-  cursor: pointer;
 }
 
 .toast {
@@ -1460,10 +1547,130 @@ body.scrubbing .quick-field input[title] {
 .dialog.warehouse {
   display: flex;
   flex-direction: column;
-  width: min(860px, calc(100vw - 32px));
-  height: min(640px, 82vh);
+  width: min(1100px, calc(100vw - 32px));
+  height: min(760px, 88vh);
   overflow: hidden;
   user-select: none;
+}
+
+/* The list of sections on the left, what the one chosen holds on the right */
+.warehouse-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+
+.warehouse-sections {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 1px;
+  width: 200px;
+  padding: 8px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+}
+
+.warehouse-sections h5 {
+  margin: 12px 8px 4px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.warehouse-section {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.warehouse-section:hover {
+  background: var(--hover);
+}
+
+.warehouse-section.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.warehouse-section-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warehouse-count {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A section with nothing in it, or nothing that matches the search */
+.warehouse-section.empty:not(.active) {
+  color: var(--muted);
+}
+
+/* At the foot of the list: where more components come from */
+.warehouse-more {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.warehouse-more svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.warehouse-web summary {
+  list-style: none;
+}
+
+.warehouse-web summary::-webkit-details-marker {
+  display: none;
+}
+
+.warehouse-web .warehouse-catalog {
+  flex-direction: column;
+  align-items: stretch;
+  padding: 4px 8px 0;
+  border: 0;
+}
+
+.warehouse-web .warehouse-catalog input {
+  flex: none;
+}
+
+/* Shown instead of the list of sections where there is no room for it */
+.warehouse-section-picker {
+  display: none;
+  height: 26px;
+}
+
+@media (max-width: 720px) {
+  .warehouse-sections {
+    display: none;
+  }
+
+  .warehouse-section-picker {
+    display: block;
+  }
 }
 
 .dialog.warehouse > header {
@@ -1482,6 +1689,10 @@ body.scrubbing .quick-field input[title] {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
+}
+
+.warehouse-bar {
+  flex-wrap: wrap;
 }
 
 .warehouse-bar input,
@@ -1578,7 +1789,11 @@ body.scrubbing .quick-field input[title] {
 }
 
 .warehouse-heading {
+  display: flex;
   grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 22px;
   margin: 10px 0 0;
   color: var(--muted);
   font-size: 11px;
@@ -1601,6 +1816,14 @@ body.scrubbing .quick-field input[title] {
   width: 100%;
   height: 110px;
   object-fit: contain;
+}
+
+/* One line each, so that every card is the same height; its tooltip says the rest. */
+.warehouse-card > strong,
+.warehouse-card > .faint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .warehouse-list {
@@ -2947,10 +3170,31 @@ select.faint-choice,
 }
 
 /* How opaque a colour is, under its hue in the colour window: a band over a checkerboard */
-.color-opacity {
+.color-opacity,
+.opacity-slider {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* In the properties panel: the slider takes the room the field has, its percentage after it. */
+.opacity-slider {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Drawn as the colour window's opacity slider is: from see-through to the colour of the ink. */
+.opacity-slider input {
+  border: 0;
+  background: linear-gradient(to right, transparent, var(--text)), repeating-conic-gradient(#d4d4d4 0% 25%, #ffffff 0% 50%) 50% / 8px 8px;
+}
+
+.opacity-slider > span {
+  flex: none;
+  width: 40px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
 .color-opacity > span {

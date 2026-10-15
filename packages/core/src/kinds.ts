@@ -1,6 +1,6 @@
 import { childrenOf, isVisible, rootOf } from './document'
 import { add, applyTransform, dist, inverseTransform, len, mid, norm, perp, rotate, scale, sub, type Bounds, type Vec2, ellipseArc, smoothPoints, unionBounds } from './geometry'
-import { resolveColor } from './colors'
+import { fadeColor, resolveColor } from './colors'
 import { DIMENSION_MARKER_SIZE, DIMENSION_TEXT_SIZE, styledDimension } from './dimensions'
 import { fillFields } from './fields'
 import { formatFeetInches } from './imperial'
@@ -443,14 +443,25 @@ function placeholder(label: string): Primitive[] {
   ]
 }
 
+/** A primitive drawn see-through by `by` (0 to 1): its stroke and fill, or a picture as a whole. */
+function fadedPrimitive(prim: Primitive, by: number): Primitive {
+  if (prim.kind === 'image') return { ...prim, opacity: (prim.opacity ?? 1) * by }
+  return { ...prim, ...(prim.stroke === undefined ? {} : { stroke: fadeColor(prim.stroke, by) }), ...(prim.fill === undefined ? {} : { fill: fadeColor(prim.fill, by) }) }
+}
+
 const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
   page: { primitives: () => [], move: () => ({}) },
   component: { primitives: () => [], move: () => ({}) },
   group: {
-    primitives: (node, ctx) =>
-      childrenOf(ctx.doc, node.id)
+    primitives: (node, ctx) => {
+      const prims = childrenOf(ctx.doc, node.id)
         .filter((child) => isVisible(ctx.doc, child))
-        .flatMap((child) => nodePrimitives(child, ctx)),
+        .flatMap((child) => nodePrimitives(child, ctx))
+      // A group made see-through is so by the colours of all it draws, and its pictures by their
+      // own opacity, which every export knows already; groups inside it are faded again.
+      const by = node.opacity ?? 1
+      return by >= 1 ? prims : prims.map((prim) => fadedPrimitive(prim, by))
+    },
     // A group has nothing of its own to move; see moveOps.
     move: () => ({}),
   },

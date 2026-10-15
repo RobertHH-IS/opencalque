@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, createDocument, parseColor, Registry, toSVG, type Op } from '../src'
+import { applyOps, buildScene, createDocument, fadeColor, parseColor, Registry, toSVG, type Op } from '../src'
 
 describe('see-through colours', () => {
   const doc = applyOps(createDocument(), [
@@ -15,5 +15,39 @@ describe('see-through colours', () => {
     const svg = toSVG(doc, 'page_1', new Registry())
     expect(svg).toContain('fill="#ff0000" fill-opacity="0.502"')
     expect(svg).toContain('stroke="#3366ff" stroke-opacity="0.251"')
+  })
+})
+
+describe('a see-through group', () => {
+  // A group at half opacity holding a red rectangle with a half-transparent fill, a picture, and
+  // a group of its own at half opacity again holding a blue line.
+  const add = (node: Record<string, unknown>): Op => ({ op: 'add_node', node: { parent: 'page_1', ...node } }) as Op
+  const doc = applyOps(createDocument(), [
+    add({ type: 'group', id: 'outer', opacity: 0.5 }),
+    add({ type: 'rect', id: 'box', parent: 'outer', x: 0, y: 0, width: 100, height: 100, style: { stroke: '#ff0000', fill: '#00ff0080' } }),
+    { op: 'add_asset', asset: { id: 'pic', mime: 'image/png', data: 'iVBORw0KGgo=' } },
+    add({ type: 'image', id: 'photo', parent: 'outer', asset: 'pic', x: 0, y: 200, width: 100, height: 100, opacity: 0.8 }),
+    add({ type: 'group', id: 'inner', parent: 'outer', opacity: 0.5 }),
+    add({ type: 'line', id: 'blue', parent: 'inner', a: { x: 0, y: 0 }, b: { x: 100, y: 0 }, style: { stroke: 'rgb(0, 0, 255)' } }),
+  ] as Op[])
+  const prims = buildScene(doc, 'page_1', new Registry())[0].prims
+
+  it('fades the colours of all it holds, and the pictures as a whole', () => {
+    expect(prims.find((p) => p.kind === 'path' && p.closed)).toMatchObject({ stroke: '#ff000080', fill: '#00ff0040' })
+    expect(prims.find((p) => p.kind === 'image')).toMatchObject({ opacity: 0.4 })
+  })
+
+  it('fades a group inside it again', () => {
+    expect(prims.find((p) => p.kind === 'path' && !p.closed)).toMatchObject({ stroke: '#0000ff40' })
+  })
+
+  it('leaves alone what has no colour, and draws as before at full opacity', () => {
+    expect(fadeColor('none', 0.5)).toBe('none')
+    expect(fadeColor('#abc', 1)).toBe('#abc')
+    expect(fadeColor('#abc', 0)).toBe('#aabbcc00')
+  })
+
+  it('is written to SVG through its colours', () => {
+    expect(toSVG(doc, 'page_1', new Registry())).toContain('stroke="#ff0000" stroke-opacity="0.502"')
   })
 })

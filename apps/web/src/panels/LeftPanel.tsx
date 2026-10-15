@@ -225,7 +225,8 @@ function ObjectRow({ node, depth, open, toggle, show }: { node: Node; depth: num
     // Something inside a group is reached by going into that group.
     if (!top) {
       anchor = node.id
-      return useStore.setState({ scope: node.parent!, selection: [node.id] })
+      editComponent(node.parent!)
+      return select([node.id])
     }
     const toggling = keys.ctrlKey || keys.metaKey
     // The rows in the order they are listed, topmost first.
