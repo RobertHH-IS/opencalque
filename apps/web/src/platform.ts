@@ -1,3 +1,7 @@
+import type { UpdateState } from './updateState'
+
+export type { UpdateState }
+
 /**
  * Everything the editor needs from its host. The browser and the desktop shell each provide one;
  * a hosted version would add a third backed by a server.
@@ -53,6 +57,12 @@ export interface Platform {
   onOpenFile?(listener: (file: OpenedFile) => void): void
   /** Desktop only: shows the folder where drawings are copied before the app first writes over them. */
   showBackups?(): void
+  /** Desktop only: looks for a newer version of the app; what is found comes to `onUpdate`. */
+  checkForUpdate?(): void
+  /** Desktop only: hears what is known of a newer version, at once and then on every change. */
+  onUpdate?(listener: (state: UpdateState) => void): void
+  /** Desktop only: closes the app, asking first about unsaved changes, installs the downloaded version and starts it. */
+  installUpdate?(): void
   setDirty(dirty: boolean): void
 }
 

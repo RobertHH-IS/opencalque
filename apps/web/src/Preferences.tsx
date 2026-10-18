@@ -145,6 +145,12 @@ function GeneralSettings() {
         </>
       )}
       <Toggle label={t('Show the welcome window when the app starts')} checked={prefs.showWelcome} onChange={(showWelcome) => setPrefs({ showWelcome })} />
+      {platform.checkForUpdate && (
+        <>
+          <Toggle label={t('Check for a new version when the app starts')} checked={prefs.checkUpdates} onChange={(checkUpdates) => setPrefs({ checkUpdates })} />
+          <p className="hint">{t('OpenCalque asks GitHub, where it is published, whether a newer version is out. Where it can, it downloads it and installs it when the app closes.')}</p>
+        </>
+      )}
       <label className="pref-field">
         <span>{t('Unit')}</span>
         <select value={prefs.unit} onChange={(e) => setPrefs({ unit: e.target.value as typeof prefs.unit })}>

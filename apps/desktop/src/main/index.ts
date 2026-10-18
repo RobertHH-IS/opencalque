@@ -3,6 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { cpSync, existsSync, readFileSync } from 'node:fs'
 import { copyFile, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
+import { checkForUpdate, installOnClose, installUpdate, keptOpen, listen } from './updates'
 
 // Settings made while the project was called OpenCAD (preferences, shortcuts, conversations) are
 // carried over the first time the renamed app starts.
@@ -201,15 +202,18 @@ function createWindow(): void {
   // On Windows and macOS the window has no title bar of its own: the app's menu bar is the top of
   // the window, with the system's buttons drawn over its end. Linux keeps its usual frame.
   const merged = process.platform === 'win32' || process.platform === 'darwin'
+  // The system's light or dark until the page says which theme it shows ('app:theme'); the
+  // loading screen in index.html takes the same colours.
+  const dark = nativeTheme.shouldUseDarkColors
   const win = new BrowserWindow({
     titleBarStyle: merged ? 'hidden' : 'default',
-    titleBarOverlay: merged ? titleBarButtons(false) : false,
+    titleBarOverlay: merged ? titleBarButtons(dark) : false,
     width: 1440,
     height: 900,
     minWidth: 900,
     minHeight: 600,
     title: 'OpenCalque',
-    backgroundColor: '#ffffff',
+    backgroundColor: dark ? '#1e1e1e' : '#ffffff',
     webPreferences: { preload: join(__dirname, '../preload/index.js'), contextIsolation: true, sandbox: true },
   })
   // A link never opens a window of the app: a web address goes to the user's browser.
@@ -233,7 +237,11 @@ function createWindow(): void {
       defaultId: 1,
       cancelId: 1,
     })
-    if (choice === 1) event.preventDefault()
+    if (choice === 1) {
+      event.preventDefault()
+      // Closing to install an update stops here too: it is installed when the app closes later.
+      keptOpen()
+    }
   })
 
   // `electron-vite dev` serves the web app with hot reload; a build loads it from disk.
@@ -342,7 +350,13 @@ app.whenReady().then(() => {
   ipcMain.handle('claude:run', (_, input: { prompt: string; session?: string; model?: string }) => runClaude(input))
   ipcMain.on('claude:cancel', () => claude?.kill())
 
+  // A newer version of the app: looked for when the window asks (updates.ts).
+  ipcMain.on('update:listen', (event) => listen(event.sender))
+  ipcMain.on('update:check', () => checkForUpdate())
+  ipcMain.on('update:install', () => installUpdate())
+
   createWindow()
 })
 
-app.on('window-all-closed', () => app.quit())
+// Unless the windows closed to install an update, which then quits the app itself.
+app.on('window-all-closed', () => installOnClose() || app.quit())

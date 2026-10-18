@@ -16,6 +16,15 @@ export async function startWith(page: Page, prefs: Record<string, unknown> = {})
 }
 
 /**
+ * Opens the editor, and waits for its loading screen to let clicks through: until then, a click
+ * made by position lands on it rather than on the canvas.
+ */
+export async function openEditor(page: Page) {
+  await page.goto('/')
+  await expect(page.locator('#splash:not(.leaving)')).toHaveCount(0)
+}
+
+/**
  * Stands in for the browser's save dialog (File System Access API), which a test cannot answer:
  * every save is recorded in `window.saves` instead of written to disk.
  */

@@ -121,7 +121,7 @@ function Selection({ nodes }: { nodes: Node[] }) {
           <p className="hint">{t('A field is filled in by the drawing: written {page} in the text, it shows the name of the page it is on.')}</p>
         </Section>
       )}
-      <Sections node={node} nodes={nodes} fields={single ? fieldsOf(node) : commonFields(nodes)} update={update} pick />
+      <Sections node={node} nodes={nodes} fields={single ? fieldsOf(node, doc) : commonFields(nodes, doc)} update={update} pick />
       {single && <ModifierStack node={node} />}
     </>
   )

@@ -143,5 +143,8 @@ describe('modifiers', () => {
     for (const kind of ['Cross', 'Planks', 'Tiles', 'Dots', 'Zigzag']) expect(prims(square({ pattern: { kind } })).length).toBeGreaterThan(5)
     // Its strokes take the colour given, or a soft grey.
     expect(prims(square({ pattern: { kind: 'Lines', stroke: '#b91c1c' } }))[1]).toMatchObject({ stroke: '#b91c1c' })
+    // A weight of their own, and an opacity laid over their colour; without, the usual fine line.
+    expect(lined[1]).toMatchObject({ strokeWidth: 0.6 })
+    expect(prims(square({ pattern: { kind: 'Lines', stroke: '#b91c1c', strokeWidth: 1.4, opacity: 0.5 } }))[1]).toMatchObject({ stroke: '#b91c1c80', strokeWidth: 1.4 })
   })
 })

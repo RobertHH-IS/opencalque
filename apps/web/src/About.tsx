@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { executeById } from './commands'
 import { msg, t } from './i18n'
+import { platform } from './platform'
 import { RELEASES, REPOSITORY, VERSION } from './release'
 import { useStore } from './store'
 import { Logo } from './Welcome'
@@ -56,6 +58,11 @@ export function About() {
               <button className="link-button" onClick={() => setLicences(!licences)}>
                 {licences ? t('What is new') : t('Licences')}
               </button>
+              {platform.checkForUpdate && (
+                <button className="link-button" onClick={() => executeById('app.checkUpdate')}>
+                  {t('Check for a new version…')}
+                </button>
+              )}
             </p>
           </div>
           <button className="text-button" autoFocus onClick={close}>

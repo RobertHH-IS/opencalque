@@ -18,6 +18,8 @@ export const PatternSchema = z
     spacing: z.number().positive().optional().describe('Distance between its strokes, in mm. Each pattern has its own when not given.'),
     angle: z.number().optional().describe('Degrees its strokes are turned by. Each pattern has its own when not given.'),
     stroke: z.string().optional().describe('The colour of its strokes. A CSS colour or a shared colour reference.'),
+    strokeWidth: z.number().positive().optional().describe('The weight of its strokes, in screen pixels as in a style. 0.6 when not given.'),
+    opacity: z.number().min(0).max(1).optional().describe('How opaque its strokes are, from 0 (not at all) to 1 (the default), on top of the opacity of their colour.'),
   })
   .describe('A pattern of strokes drawn over a fill, inside each closed shape: the hatching that tells a material, or a floor.')
 

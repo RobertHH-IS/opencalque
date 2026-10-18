@@ -4,7 +4,8 @@ import { showPanel } from './dock'
 import { t } from './i18n'
 import { platform } from './platform'
 import { registry } from './extensions'
-import { apply, setTool, useStore } from './store'
+import { apply, select, setTool, useStore } from './store'
+import { visibleArea } from './view'
 import { toast } from './windows'
 
 /** Largest side, in pixels, of the picture kept in the drawing. Bigger scans are scaled down. */
@@ -16,14 +17,16 @@ interface Picture {
   width: number
 }
 
-function blankCanvas(width: number, height: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+function blankCanvas(width: number, height: number, see = false): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(width)
   canvas.height = Math.round(height)
   const ctx = canvas.getContext('2d')!
   // Plans are stored as JPEG, which has no transparency: anything see-through becomes white paper.
-  ctx.fillStyle = '#ffffff'
-  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  if (!see) {
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+  }
   return [canvas, ctx]
 }
 
@@ -52,12 +55,47 @@ async function fromPdf(bytes: Uint8Array): Promise<Picture | null> {
   return { canvas, width: ((paper.width * 25.4) / 72) * 100 }
 }
 
-async function fromImage(bytes: Uint8Array): Promise<Picture> {
+async function fromImage(bytes: Uint8Array, see = false): Promise<Picture> {
   const bitmap = await createImageBitmap(new Blob([bytes as BlobPart]))
   const scale = Math.min(1, MAX_PIXELS / Math.max(bitmap.width, bitmap.height))
-  const [canvas, ctx] = blankCanvas(bitmap.width * scale, bitmap.height * scale)
+  const [canvas, ctx] = blankCanvas(bitmap.width * scale, bitmap.height * scale, see)
   ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
   return { canvas, width: 10000 }
+}
+
+/** Whether any of a picture is see-through. */
+function seeThrough(canvas: HTMLCanvasElement): boolean {
+  const { data } = canvas.getContext('2d')!.getImageData(0, 0, canvas.width, canvas.height)
+  for (let i = 3; i < data.length; i += 4) if (data[i] < 255) return true
+  return false
+}
+
+/**
+ * Puts a picture pasted from another program (a screenshot, an image copied in a browser) where
+ * the person is looking, as any pasted thing goes: centred on `at` or on the view, on top of the
+ * drawing, on the layer in use, selected. It is as big as it is on the screen it came from, made
+ * smaller to fit most of the view. Unlike a plan to trace, it leaves the view and the tool alone.
+ * Kept as JPEG, or as PNG when some of it is see-through (a logo), so that it stays so.
+ */
+export async function placePicture(bytes: Uint8Array, at?: Vec2): Promise<void> {
+  const { canvas } = await fromImage(bytes, true)
+  const see = seeThrough(canvas)
+  const { scope, activeLayer, view, viewport } = useStore.getState()
+  const area = visibleArea(view, viewport) ?? { minX: 0, minY: 0, maxX: 10000, maxY: 10000 }
+  // A pixel of the picture on a pixel of the screen, as it was where it was copied.
+  const natural = 1 / ((window.devicePixelRatio || 1) * view.zoom)
+  const each = natural * Math.min(1, (0.8 * (area.maxX - area.minX)) / (canvas.width * natural), (0.8 * (area.maxY - area.minY)) / (canvas.height * natural))
+  const tidy = (mm: number) => Math.round(mm * 10) / 10
+  const [width, height] = [tidy(canvas.width * each), tidy(canvas.height * each)]
+  const centre = at ?? { x: (area.minX + area.maxX) / 2, y: (area.minY + area.maxY) / 2 }
+  const asset = newId('asset')
+  const node = newId()
+  const mime = see ? 'image/png' : 'image/jpeg'
+  const ops: Op[] = [
+    { op: 'add_asset', asset: { id: asset, mime, data: canvas.toDataURL(mime, 0.85).split(',')[1], width: canvas.width, height: canvas.height } },
+    { op: 'add_node', node: { type: 'image', id: node, name: t('Pasted picture'), parent: scope, layer: activeLayer, asset, x: tidy(centre.x - width / 2), y: tidy(centre.y - height / 2), width, height } },
+  ]
+  if (apply(ops)) select([node])
 }
 
 /** The kinds of file that can be brought in as a plan to trace, by extension. */

@@ -4,6 +4,24 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 1.1.0 — 2026-10-18
+
+The desktop app now updates itself. Anyone on 1.0.0 downloads this version by hand once; from here on, new versions come by themselves.
+
+### New
+- The Windows setup and the Linux AppImage update themselves: a new version is downloaded in the background and installed when the app closes, and the menu bar offers to restart into it. On macOS and with the portable Windows app, the menu bar says when a new version is out and opens its page. Preferences › General turns the check at start off, and Preferences › Check for a new version… asks at any time.
+- Every fill is chosen in one window, with a tab for no fill, a solid colour and a hatch; a hatch's colour, opacity, weight, spacing and angle are set there, with a preview. The same window serves shapes, walls, wall types, the floors of rooms and the bar above the tools.
+- A picture copied in another program (a screenshot, an image copied in a browser) is pasted with Ctrl+V as a picture: on top of the drawing where you are looking, at the size it had on screen, its transparency kept.
+
+### Improved
+- The bar above the tools gives the next shapes the colour of their lines, shown as the layer's until another is chosen, and gives closed shapes a fill; line weights and kinds of line are set afterwards, in the properties. The eyedropper, with nothing selected, takes both from an object.
+- Pictures are drawn where they are in the stacking order: a plan to trace stays under the floors and walls drawn over it, and a picture brought forward goes over them.
+- A loading screen shows the logo while the app starts, instead of a blank window.
+
+### Fixed
+- A shape inside a component looks the same while the component is edited as where it is placed: left unfilled it is white in both, as its Fill field now says, and given no fill it stays see-through. A see-through group inside a component stays see-through where it is placed.
+- In the bar above the tools, the line and fill windows open at the first click when going from one to the other, and the tabs of the fill window keep their names on one line.
+
 ## 1.0.0 — 2026-10-15
 
 The first stable version of OpenCalque. From this version on, a drawing stays readable by every later version: what a newer version adds is kept when an older one opens and saves it, and a drawing an older version cannot read is refused with a message rather than half-read and saved back. This is what changed since 0.8.5; the notes of the release candidates, 1.0.0-rc.1 to rc.4, give the details.

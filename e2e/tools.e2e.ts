@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { canvas, drawWall, failOnErrors, recordSaves, startWith } from './support'
+import { canvas, drawWall, failOnErrors, openEditor, recordSaves, startWith } from './support'
 
 /**
  * Each tool of the canvas, and each drag of the select tool, used as a person would, with what it
@@ -16,7 +16,7 @@ type Saved = { type: string; [key: string]: any }
 async function blank(page: Page): Promise<(x: number, y: number) => { x: number; y: number }> {
   await startWith(page)
   await recordSaves(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   return (x, y) => ({ x: box.x + 320 + x / 10, y: box.y + 220 + y / 10 })
 }

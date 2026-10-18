@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check } from 'lucide-react'
-import { allCommands, execute, formatKey, keysOf, useCommands, type Command } from './commands'
+import { Check, Download, RotateCw } from 'lucide-react'
+import { allCommands, execute, executeById, formatKey, keysOf, useCommands, type Command } from './commands'
 import { msg, t } from './i18n'
 import { autosaves } from './autosave'
 import { usePrefs } from './prefs'
 import { apply, isDirty, useStore } from './store'
 import { EditableText } from './ui'
+import { useUpdate } from './updates'
 import { Logo } from './Welcome'
 import { useWindows } from './windows'
 
@@ -24,8 +25,30 @@ const MENUS: [string, (string | null)[]][] = [
   [msg('View'), ['view.zoomToFit', 'view.zoomIn', 'view.zoomOut', null, 'view.toggleGrid', 'view.toggleSnapGrid', 'view.toggleSnapObjects', null, '@Panels', null, 'view.toggleTheme', 'view.resetLayout']],
   // There is no Insert or Tools menu: the toolbar holds the tools and the component library, and pages
   // and layers are added from their panels. Every command stays in the command list (Ctrl+K).
-  [msg('Preferences'), ['prefs.open', null, 'palette.open', null, 'help.welcome']],
+  [msg('Preferences'), ['prefs.open', null, 'palette.open', null, 'help.welcome', 'app.checkUpdate']],
 ]
+
+/** A newer version of the desktop app, once there is something to do about it: restart into it, or fetch it from its page. */
+function UpdateNote() {
+  const update = useUpdate()
+  if (update.status === 'ready') {
+    return (
+      <button className="menubar-item menubar-update" title={t('Version {version} is ready. It will be installed when OpenCalque closes.', { version: update.version })} onClick={() => executeById('app.installUpdate')}>
+        <RotateCw size={13} />
+        {t('Restart to update')}
+      </button>
+    )
+  }
+  if (update.status === 'available') {
+    return (
+      <button className="menubar-item menubar-update" title={t('Download the new version')} onClick={() => executeById('app.downloadUpdate')}>
+        <Download size={13} />
+        {t('Version {version} is out', { version: update.version })}
+      </button>
+    )
+  }
+  return null
+}
 
 function items(entries: (string | null)[], commands: Command[]): (Command | null)[] {
   const out: (Command | null)[] = []
@@ -120,6 +143,7 @@ export function MenuBar() {
         {dirty && <span className="faint" title={autosaves(file) ? t('Saving…') : t('Unsaved changes')}>●</span>}
         {!dirty && autosaves(file) && <span className="faint menubar-saved">{t('Saved')}</span>}
       </div>
+      <UpdateNote />
     </header>
   )
 }

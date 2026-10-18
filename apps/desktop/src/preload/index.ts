@@ -22,6 +22,12 @@ const desktop: Platform = {
     ipcRenderer.send('file:listen')
   },
   showBackups: () => ipcRenderer.send('file:showBackups'),
+  checkForUpdate: () => ipcRenderer.send('update:check'),
+  onUpdate: (listener) => {
+    ipcRenderer.on('update:state', (_, state) => listener(state))
+    ipcRenderer.send('update:listen')
+  },
+  installUpdate: () => ipcRenderer.send('update:install'),
   setDirty: (dirty) => ipcRenderer.send('doc:dirty', dirty),
 }
 

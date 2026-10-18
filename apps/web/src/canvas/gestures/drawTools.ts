@@ -85,7 +85,7 @@ export function finishPoly(c: Canvas, g: GestureOf<'poly'>, closed: boolean): vo
 export const textDown: Press = (c, e, _at, world) => {
   const s = get()
   const { p } = snap(c, world, e, [])
-  const create: NodeInput & { id: string } = { id: newId(), type: 'text', parent: s.scope, layer: s.activeLayer, x: p.x, y: p.y, text: '', size: 200, ...currentStyle(true) }
+  const create: NodeInput & { id: string } = { id: newId(), type: 'text', parent: s.scope, layer: s.activeLayer, x: p.x, y: p.y, text: '', size: 200, ...currentStyle() }
   if (preview([{ op: 'add_node', node: create }])) useStore.setState({ editingText: { id: create.id, create } })
 }
 

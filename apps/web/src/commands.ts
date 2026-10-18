@@ -54,6 +54,7 @@ import { msg, t } from './i18n'
 import { setPrefs, usePrefs } from './prefs'
 import { toggleTheme, useTheme } from './theme'
 import { labelOf } from './ui'
+import { checkForUpdate, useUpdate } from './updates'
 
 /**
  * Everything the user can trigger, in one list. The command palette, the keyboard handler, the
@@ -294,6 +295,25 @@ const STATIC: Command[] = [
   { id: 'layer.add', title: msg('Add layer'), category: 'Layers', run: () => apply([{ op: 'add_layer', layer: { name: t('Layer {n}', { n: Object.keys(get().doc.layers).length + 1 }) } }]) },
 ]
 
+const update = useUpdate.getState
+
+const UPDATES: Command[] = [
+  { id: 'app.checkUpdate', title: msg('Check for a new version…'), category: 'General', keywords: 'update upgrade', run: checkForUpdate },
+  { id: 'app.installUpdate', title: msg('Restart to install the new version'), category: 'General', keywords: 'update upgrade', when: () => update().status === 'ready', run: () => platform.installUpdate?.() },
+  {
+    id: 'app.downloadUpdate',
+    title: msg('Download the new version'),
+    category: 'General',
+    keywords: 'update upgrade',
+    when: () => update().status === 'available',
+    // The desktop app opens the page in the browser.
+    run: () => {
+      const state = update()
+      if (state.status === 'available') window.open(state.url, '_blank')
+    },
+  },
+]
+
 /** Every command available right now, including those that depend on the drawing and on extensions. */
 export function allCommands(): Command[] {
   const { doc } = get()
@@ -301,6 +321,8 @@ export function allCommands(): Command[] {
     ...STATIC,
     // The desktop app copies a drawing before it first writes over it; the web app has no such folder.
     ...(platform.showBackups ? [{ id: 'file.backups', title: msg('Show backups of drawings'), category: 'File', run: () => platform.showBackups?.() }] : []),
+    // The desktop app looks for newer versions of itself; the web app is always the newest.
+    ...(platform.checkForUpdate ? UPDATES : []),
     ...[...registry.parametric.values()].map((kind): Command => ({
       id: `place.${kind.kind}`,
       title: t('Place: {name}', { name: t(kind.label) }),

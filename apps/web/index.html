@@ -5,9 +5,110 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="./icon.svg" />
     <title>OpenCalque</title>
+    <style>
+      /* The loading screen, shown from the first paint while the app's code loads, and taken away
+         by src/splash.ts once the app knows what to show first. Plain HTML and CSS: the
+         Content-Security-Policy lets no script run from the page itself. The bar moves by
+         `transform`, which goes on while the code is being read and nothing else can run. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 28px;
+        background: #ffffff;
+        transition: opacity 0.2s ease-out;
+        user-select: none;
+        /* The window is moved by it, as by the menu bar it covers. */
+        -webkit-app-region: drag;
+      }
+      #splash.leaving {
+        opacity: 0;
+        pointer-events: none;
+        -webkit-app-region: no-drag;
+      }
+      /* Shown only when loading takes a moment, so that a quick start does not flash it. */
+      .splash-bar {
+        position: relative;
+        width: 160px;
+        height: 3px;
+        border-radius: 2px;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.08);
+        opacity: 0;
+        animation: splash-appear 0.3s 0.4s ease-out forwards;
+      }
+      .splash-bar::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        width: 40%;
+        border-radius: inherit;
+        background: #0d99ff;
+        animation: splash-slide 1.2s ease-in-out infinite;
+      }
+      @keyframes splash-appear {
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes splash-slide {
+        from {
+          transform: translateX(-100%);
+        }
+        to {
+          transform: translateX(250%);
+        }
+      }
+      @keyframes splash-pulse {
+        from {
+          opacity: 0.25;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .splash-bar::after {
+          width: 100%;
+          animation: splash-pulse 1.6s ease-in-out infinite alternate;
+        }
+      }
+      /* The colours of the window behind it (apps/desktop/src/main/index.ts), so that nothing
+         flashes: the system's light or dark until the app's code has run, then the theme chosen
+         in Preferences, which src/theme.ts writes on <html> before the editor is drawn. */
+      @media (prefers-color-scheme: dark) {
+        #splash {
+          background: #1e1e1e;
+        }
+        .splash-bar {
+          background: rgba(255, 255, 255, 0.12);
+        }
+      }
+      html[data-theme='light'] #splash {
+        background: #ffffff;
+      }
+      html[data-theme='light'] .splash-bar {
+        background: rgba(0, 0, 0, 0.08);
+      }
+      html[data-theme='dark'] #splash {
+        background: #1e1e1e;
+      }
+      html[data-theme='dark'] .splash-bar {
+        background: rgba(255, 255, 255, 0.12);
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="splash" role="progressbar" aria-label="OpenCalque">
+      <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="14" fill="#0d99ff" />
+        <path d="M32 14 52 25 32 36 12 25Z" fill="#fff" />
+        <path d="M12 33 32 44 52 33M12 41 32 52 52 41" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity=".8" />
+      </svg>
+      <div class="splash-bar"></div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

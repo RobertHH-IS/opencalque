@@ -418,7 +418,7 @@ describe('images', () => {
       { op: 'add_node', node: { type: 'wall', id: 'w', parent: 'page_1', a: { x: 0, y: 0 }, b: { x: 1000, y: 0 }, thickness: 200 } },
     ])
 
-  it('draws a picture from its asset, beneath everything else', () => {
+  it('draws a picture from its asset, beneath what is stacked over it', () => {
     const scene = buildScene(withImage(), 'page_1', registry)
     expect(scene[0].prims[0]).toMatchObject({ kind: 'image', href: 'data:image/png;base64,AAAA', width: 2000 })
     expect(hitTest(scene, { x: 1500, y: 800 }, 1)?.id).toBe('i')

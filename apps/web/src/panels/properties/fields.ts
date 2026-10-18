@@ -1,4 +1,4 @@
-import { type Node, TEXT_FIELDS, type Pattern } from '@opencalque/core'
+import { type Document, drawnSolid, type Node, OBJECT_FILL, TEXT_FIELDS, type Pattern } from '@opencalque/core'
 import { msg, t } from '../../i18n'
 import { registry } from '../../extensions'
 
@@ -13,8 +13,11 @@ export interface FieldSpec {
   /** Property path, one or two levels deep: "x", "a.x", "props.width", "style.stroke". */
   path: string
   label: string
-  /** 'dash' is a checkbox standing for a dash pattern; 'opacity' a slider from 0 to 1, shown as a percentage. */
-  type: 'number' | 'string' | 'boolean' | 'color' | 'dash' | 'weight' | 'pattern' | 'opacity'
+  /**
+   * 'dash' is a checkbox standing for a dash pattern; 'opacity' a slider from 0 to 1, shown as a
+   * percentage; 'fill' what covers the inside of a shape, `style.fill` and `style.pattern` together.
+   */
+  type: 'number' | 'string' | 'boolean' | 'color' | 'dash' | 'weight' | 'fill' | 'opacity'
   /** Heading the field appears under. Defaults to "Geometry". */
   section?: string
   /** Shown when the property is unset. */
@@ -31,8 +34,10 @@ export interface FieldSpec {
   unset?: string
   /** Shown only for objects this is true of: a polygon has no ends, a line no fill. */
   when?: (node: Node) => boolean
-  /** For a fill: the pattern it takes from elsewhere (its wall type) when it has none of its own. */
-  pattern?: Pattern
+  /** For a fill: the colour and pattern it takes from elsewhere (its wall type) when it has none of its own. */
+  inherited?: { fill?: string; pattern?: Pattern }
+  /** For a fill: no fill at all may not be chosen. */
+  filled?: boolean
   /** The options are the symbols of a line's end, shown as pictures to pick from: of its first end or of its last. */
   ends?: 'start' | 'end'
   /** Set for one object at a time only, as a name: several are not given the same one at once. */
@@ -70,13 +75,17 @@ export const STROKE = msg('Stroke')
 
 const FILL = msg('Fill')
 
-/** What covers the inside of a shape: a colour, and a pattern over it. */
-const fill = (when?: FieldSpec['when']): FieldSpec[] => [
-  { path: 'style.fill', label: msg('Color'), type: 'color', section: FILL, fallback: '#ffffff', unset: msg('default'), when },
-  { path: 'style.pattern', label: msg('Pattern'), type: 'pattern', section: FILL, when },
-]
+/**
+ * What covers the inside of a shape: none, a colour, or a pattern over one, in one window. `fallback`
+ * is what is drawn when the shape says nothing: a colour, or 'none'.
+ */
+const fill = (fallback: string, unset: string, more: Partial<FieldSpec> = {}): FieldSpec => ({ path: 'style.fill', label: msg('Fill'), type: 'fill', section: FILL, fallback, unset, ...more })
 
-const STYLE: FieldSpec[] = [...stroke(STROKE), ...fill()]
+/** A plain shape is filled with nothing until it is given a fill. */
+const SHAPE_STYLE: FieldSpec[] = [...stroke(STROKE), fill('none', msg('none'))]
+
+/** An object or a component draws its own fills; a wall is always filled, white unless its type or its style says. */
+const STYLE: FieldSpec[] = [...stroke(STROKE), fill('#ffffff', msg('default'))]
 
 /** A room in two parts: the name written in it (with its area), and its floor. */
 const ROOM_NAME = msg('Name')
@@ -142,10 +151,10 @@ const LINE_ENDS: FieldSpec[] = [
 
 const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
   line: [...AB, ...LINE_ENDS, ...stroke(STROKE)],
-  wall: [...AB, len('bulge', msg('Curve'), 0), len('thickness', msg('Thickness')), { ...len('height', msg('Height')), optional: true }, ...STYLE],
+  wall: [...AB, len('bulge', msg('Curve'), 0), len('thickness', msg('Thickness')), { ...len('height', msg('Height')), optional: true }, ...stroke(STROKE), fill('#ffffff', msg('default'), { filled: true })],
   dimension: DIMENSION,
   annotation: ANNOTATION,
-  rect: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), ...STYLE],
+  rect: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), ...SHAPE_STYLE],
   // A paper's size is its format and scale, and where it lies is typed at the top of its panel: it has no geometry section.
   paper: [],
   // Its name is drawn, so it is set here rather than only in the Structure panel. Where the name is
@@ -158,8 +167,7 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
     len('size', msg('Text size'), 250, ROOM_NAME),
     { path: 'style.stroke', label: msg('Text colour'), type: 'color', section: ROOM_NAME, fallback: '#1f1f1f', unset: msg('from layer') },
     { path: 'showArea', label: msg('Show area'), type: 'boolean', section: ROOM_NAME, fallback: true },
-    { path: 'style.fill', label: msg('Color'), type: 'color', section: FLOOR, fallback: '#dfe6f0', unset: msg('default') },
-    { path: 'style.pattern', label: msg('Pattern'), type: 'pattern', section: FLOOR },
+    fill('#dfe6f0', msg('default'), { section: FLOOR }),
   ],
   divider: AB,
   ellipse: [
@@ -171,7 +179,7 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
     // Given a start or an end, the ellipse is drawn as an arc between them; emptied, it is whole again.
     { ...num('from', msg('Arc from (°)')), optional: true },
     { ...num('to', msg('Arc to (°)')), optional: true },
-    ...STYLE,
+    ...SHAPE_STYLE,
   ],
   text: [
     { path: 'text', label: msg('Text'), type: 'string', multiline: true },
@@ -189,7 +197,7 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
   polyline: [
     ...LINE_ENDS.map((field) => ({ ...field, when: (node: Node) => !(node.type === 'polyline' && node.closed) })),
     ...stroke(STROKE),
-    ...fill((node) => node.type === 'polyline' && !!node.closed),
+    fill('none', msg('none'), { when: (node) => node.type === 'polyline' && !!node.closed }),
   ],
   image: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), { path: 'opacity', label: msg('Opacity'), type: 'opacity', fallback: 1 }],
   // Of everything in it, on top of the opacity of each thing. Not under Style, whose eyedropper takes a stroke and a fill.
@@ -220,16 +228,22 @@ export const FIELD_NAMES: Record<(typeof TEXT_FIELDS)[number], string> = {
 }
 
 /** The properties several objects all have, to be set on all of them at once. */
-export function commonFields(nodes: Node[]): FieldSpec[] {
-  const [first, ...rest] = nodes.map(fieldsOf)
+export function commonFields(nodes: Node[], doc: Document): FieldSpec[] {
+  const [first, ...rest] = nodes.map((node) => fieldsOf(node, doc))
   return first.filter((field) => rest.every((fields) => fields.some((other) => other.path === field.path && other.type === field.type && other.label === field.label)))
 }
 
-export function fieldsOf(node: Node): FieldSpec[] {
+/**
+ * A shape left unfilled in a component is backed with white wherever the component is placed
+ * (`objectBacking`): its fill says so, and choosing None then writes 'none', which is see-through.
+ */
+const placedFill = (field: FieldSpec): FieldSpec => (field.type === 'fill' && field.fallback === 'none' ? { ...field, fallback: OBJECT_FILL, unset: msg('default') } : field)
+
+export function fieldsOf(node: Node, doc: Document): FieldSpec[] {
   const fields = FIELDS[node.type] ?? []
   // One that was given a look of its own by an earlier version keeps it, shown so that it can be changed or taken off.
   if (node.type === 'instance') return node.style ? [...fields, ...STYLE] : fields
-  if (node.type !== 'parametric') return fields
+  if (node.type !== 'parametric') return drawnSolid(doc, node.parent) ? fields.map(placedFill) : fields
   const params = registry.parametric.get(node.kind)?.params ?? []
   const own = params.map((p): FieldSpec => ({
     path: `props.${p.key}`,

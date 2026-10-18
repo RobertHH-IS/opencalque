@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, buildScene, createDocument, fadeColor, parseColor, Registry, toSVG, type Op } from '../src'
+import { applyOps, buildScene, createDocument, drawnSolid, fadeColor, parseColor, placedScene, primitiveBounds, Registry, toSVG, type Op, type Primitive } from '../src'
 
 describe('see-through colours', () => {
   const doc = applyOps(createDocument(), [
@@ -49,5 +49,44 @@ describe('a see-through group', () => {
 
   it('is written to SVG through its colours', () => {
     expect(toSVG(doc, 'page_1', new Registry())).toContain('stroke="#ff0000" stroke-opacity="0.502"')
+  })
+})
+
+describe('what a component leaves unfilled', () => {
+  // A component holding a shape with no fill, one filled with 'none', and one with no fill in a group at half opacity.
+  const add = (node: Record<string, unknown>): Op => ({ op: 'add_node', node: { parent: 'glass', ...node } }) as Op
+  const doc = applyOps(createDocument(), [
+    { op: 'add_node', node: { id: 'glass', type: 'component' } },
+    add({ type: 'rect', id: 'solid', x: 0, y: 0, width: 100, height: 100 }),
+    add({ type: 'rect', id: 'clear', x: 200, y: 0, width: 100, height: 100, style: { fill: 'none' } }),
+    add({ type: 'group', id: 'faint', opacity: 0.5 }),
+    add({ type: 'rect', id: 'faded', parent: 'faint', x: 400, y: 0, width: 100, height: 100 }),
+    { op: 'add_node', node: { id: 'placed', type: 'instance', parent: 'page_1', component: 'glass', x: 0, y: 0 } },
+  ] as Op[])
+  const backings = (prims: Primitive[]) => prims.filter((p) => p.stroke === 'none').map((p) => [primitiveBounds(p)!.minX, p.fill])
+
+  it('is backed with white where it is placed, faded with the group it is in; a fill of none stays see-through', () => {
+    expect(backings(buildScene(doc, 'page_1', new Registry())[0].prims)).toEqual([
+      [0, '#ffffff'],
+      [400, '#ffffff80'],
+    ])
+  })
+
+  it('is backed the same while the component is edited, by something that cannot be picked up', () => {
+    const scene = buildScene(doc, 'glass', new Registry())
+    const shown = placedScene(doc, 'glass', scene)
+    expect(shown.slice(1)).toEqual(scene)
+    expect(shown[0].locked).toBe(true)
+    expect(backings(shown[0].prims)).toEqual([
+      [0, '#ffffff'],
+      [400, '#ffffff80'],
+    ])
+  })
+
+  it('is shown as it is on a page, and in what is drawn on every sheet', () => {
+    const scene = buildScene(doc, 'page_1', new Registry())
+    expect(placedScene(doc, 'page_1', scene)).toBe(scene)
+    const sheet = applyOps(doc, [{ op: 'update_node', id: 'glass', patch: { sheet: { width: 297, height: 210 } } }])
+    expect(drawnSolid(sheet, 'glass')).toBe(false)
   })
 })

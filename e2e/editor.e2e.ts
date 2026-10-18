@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { expect, test } from '@playwright/test'
-import { canvas, choose, drawing, drawingOnScreen, drawWall, failOnErrors, librarySection, objectRows, recordSaves, startWith } from './support'
+import { canvas, choose, drawing, drawingOnScreen, drawWall, failOnErrors, librarySection, objectRows, openEditor, recordSaves, startWith } from './support'
 
 /**
  * The editor in a browser, as people use it. Each test starts from a fresh profile: no drawing, no
@@ -11,7 +11,7 @@ failOnErrors()
 
 test('draws a wall, undoes and redoes it', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await expect(objectRows(page)).toHaveCount(0)
   await drawWall(page, [300, 300], [700, 300])
   await expect(objectRows(page)).toHaveCount(1)
@@ -25,7 +25,7 @@ test('draws a wall, undoes and redoes it', async ({ page }) => {
 test('saves a drawing, then saves each change by itself', async ({ page }) => {
   await startWith(page)
   await recordSaves(page)
-  await page.goto('/')
+  await openEditor(page)
   await drawWall(page, [300, 300], [700, 300])
   await page.keyboard.press('Control+s')
   await expect.poll(() => page.evaluate(() => (window as any).saves.length)).toBe(1)
@@ -41,7 +41,7 @@ test('opens a drawing that needs repairs, and says so; refuses one from a newer 
   await startWith(page)
   // "Discard unsaved changes?" before opening the second file.
   page.on('dialog', (dialog) => dialog.accept())
-  await page.goto('/')
+  await openEditor(page)
   const broken = drawing({ w: { id: 'w', type: 'wall', parent: 'page_1', order: 'a1', a: { x: 0, y: 0 }, b: { x: 3000, y: 0 }, thickness: 200, wallType: 'missing' } })
   await choose(page, () => page.keyboard.press('Control+o'), 'broken.opencalque', broken)
   await expect(page.locator('.toast')).toContainText('One problem in broken.opencalque was put right')
@@ -58,7 +58,7 @@ test('opens a drawing that needs repairs, and says so; refuses one from a newer 
 test('pastes where one is looking: a cut thing back in place, a copy beside it, else in the middle of the view', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   await drawWall(page, [300, 300], [700, 300])
   const x1 = page.locator('label.field', { has: page.locator('span:text-is("X1")') }).locator('input')
@@ -91,44 +91,147 @@ test('pastes where one is looking: a cut thing back in place, a copy beside it, 
   expect(pasted).toBeLessThan(-4000)
 })
 
-test('fills a shape with the colour of its layer, chosen in the colour window, which also has an eyedropper', async ({ page }) => {
+test('pastes a picture copied in another program as it is, rather than what was copied here before', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await startWith(page)
-  await page.goto('/')
+  await recordSaves(page)
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   await page.keyboard.press('r')
   await page.mouse.click(box.x + 300, box.y + 300)
   await page.mouse.click(box.x + 500, box.y + 400)
   await page.keyboard.press('v')
   await objectRows(page).first().click()
-  const fill = page.locator('[data-panel="properties"] .field', { has: page.locator('.color-now') }).nth(1)
-  await fill.locator('.color-now').click()
-  await expect(page.locator('.color-menu .color-eyedropper')).toBeVisible()
+  await page.keyboard.press('Control+c')
+  // What "Copy image" in a browser leaves on the clipboard: a PNG and some HTML, no plain text.
+  await page.evaluate(async () => {
+    const picture = document.createElement('canvas')
+    Object.assign(picture, { width: 40, height: 30 })
+    picture.getContext('2d')!.fillRect(10, 10, 20, 10)
+    const png = await new Promise<Blob>((done) => picture.toBlob((blob) => done(blob!), 'image/png'))
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': png, 'text/html': new Blob(['<img src="plan.png">'], { type: 'text/html' }) })])
+  })
+  const zoom = page.getByTitle('Screen pixels per metre')
+  const seen = await zoom.innerText()
+  await page.keyboard.press('Control+v')
+  // On top, selected, whole: not a plan to trace, which goes under everything on a layer of its own, faded, and changes the view and the tool.
+  await expect(objectRows(page)).toHaveCount(2)
+  await expect(objectRows(page).first()).toContainText('Pasted picture')
+  await expect(page.locator('.opacity-slider > span')).toHaveText('100 %')
+  await expect(page.locator('[data-panel="layers"]')).toContainText('Layer 1')
+  await expect(page.locator('[data-panel="layers"]')).not.toContainText('Reference')
+  await expect(page.locator('.toast')).toHaveCount(0)
+  await expect(zoom).toHaveText(seen)
+  // As big as it was on screen, and see-through where it was: kept as PNG.
+  await page.keyboard.press('Control+s')
+  await expect.poll(() => page.evaluate(() => (window as any).saves.length)).toBe(1)
+  const saved = JSON.parse(await page.evaluate(() => (window as any).saves[0]))
+  const picture = Object.values<any>(saved.nodes).find((node) => node.type === 'image')
+  expect(saved.assets[picture.asset].mime).toBe('image/png')
+  expect(picture.opacity).toBeUndefined()
+  expect(picture.width / picture.height).toBeCloseTo(4 / 3, 2)
+  expect((picture.width * parseInt(seen)) / 1000).toBeCloseTo(40, 0)
+})
+
+test('fills a shape with the colour of its layer, chosen in the colour window, which also has an eyedropper', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  const fill = page.locator('[data-panel="properties"] .fill-field .fill-now')
+  // A rectangle starts with no fill; a solid one is chosen on its tab of the fill window.
+  await expect(fill).toContainText('None')
+  await fill.click()
+  await page.locator('.fill-tabs button', { hasText: 'Solid colour' }).click()
+  await expect(page.locator('.fill-menu .color-eyedropper')).toBeVisible()
+  // Back to no fill is the None tab: the page offers no Reset of its own.
+  await expect(page.locator('.fill-menu .color-reset')).toHaveCount(0)
   // Not the layer's name: the Layer field above says which it is.
-  await expect(page.locator('.color-menu')).not.toContainText('Layer 1')
-  await page.locator('.color-menu .color-option', { hasText: 'Colour of the layer' }).click()
+  await expect(page.locator('.fill-menu')).not.toContainText('Layer 1')
+  await page.locator('.fill-menu .color-option', { hasText: 'Colour of the layer' }).click()
   // The field says what it follows, the whole of it: colour fields were cut to 72 pixels.
-  await expect(fill.locator('.color-now')).toContainText('Layer')
-  expect((await fill.locator('.color-now').boundingBox())!.width).toBeGreaterThan(120)
+  await expect(fill).toContainText('Layer')
+  expect((await fill.boundingBox())!.width).toBeGreaterThan(120)
+})
+
+test('opens the window of the next field of the bar above the tools at once, closing the one that was open', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  await page.keyboard.press('r')
+  const line = page.locator('.quickbar .color-choice:not(.fill-choice) .color-now')
+  const fill = page.locator('.quickbar .fill-now')
+  const colourWindow = page.locator('.color-menu:not(.fill-menu)')
+  const fillWindow = page.locator('.fill-menu')
+  // Each press elsewhere closes the window open; the click it ends with opens the other one, back and forth.
+  for (const [field, opened, closed] of [[fill, fillWindow, colourWindow], [line, colourWindow, fillWindow], [fill, fillWindow, colourWindow], [line, colourWindow, fillWindow]] as const) {
+    await field.click()
+    await expect(opened).toHaveCount(1)
+    await expect(closed).toHaveCount(0)
+  }
+  // A click on the field of the window open closes it.
+  await line.click()
+  await expect(colourWindow).toHaveCount(0)
+})
+
+test('gives the next shapes a line colour and a hatch from the bar above the tools, and edits the hatch in the fill window', async ({ page }) => {
+  await startWith(page)
+  await recordSaves(page)
+  await openEditor(page)
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('r')
+  // No dots of colour, weight or kind of line: a colour for the lines, which is the layer's until another is chosen, and a fill.
+  await expect(page.locator('.quickbar .weight-choice')).toHaveCount(0)
+  const line = page.locator('.quickbar .color-choice:not(.fill-choice) .color-now')
+  await expect(line).toHaveAttribute('title', /Follows the colour of its layer/)
+  await page.locator('.quickbar .fill-now').click()
+  await page.locator('.fill-tabs button', { hasText: 'Hatch' }).click()
+  await page.keyboard.press('Escape')
+  // Escape closed the window and left the tool as it was.
+  await expect(page.locator('.fill-menu')).toHaveCount(0)
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 400)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  const fill = page.locator('[data-panel="properties"] .fill-field .fill-now')
+  await expect(fill).toContainText('Lines')
+  await fill.click()
+  // A weight chosen from a list opened in the fill window leaves the fill window open.
+  await page.locator('.fill-menu .field', { hasText: 'Weight' }).locator('.weight-now').click()
+  await page.locator('.weight-option', { hasText: '0.35 mm' }).click()
+  await expect(page.locator('.fill-menu')).toHaveCount(1)
+  await page.locator('.fill-menu .field', { hasText: 'Spacing' }).locator('input').fill('250')
+  await page.locator('.fill-menu .field', { hasText: 'Spacing' }).locator('input').press('Enter')
+  await page.keyboard.press('Control+s')
+  await expect.poll(() => page.evaluate(() => (window as any).saves.length)).toBe(1)
+  const saved = JSON.parse(await page.evaluate(() => (window as any).saves[0]))
+  const rect = Object.values<any>(saved.nodes).find((node) => node.type === 'rect')
+  expect(rect.style.pattern).toEqual({ kind: 'Lines', strokeWidth: 1.4, spacing: 250 })
+  expect(rect.style.fill).toBeUndefined()
 })
 
 test('gives a colour an opacity, on a shape and on a shared colour', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   await page.keyboard.press('r')
   await page.mouse.click(box.x + 300, box.y + 300)
   await page.mouse.click(box.x + 500, box.y + 400)
   await page.keyboard.press('v')
   await objectRows(page).first().click()
-  const fill = page.locator('[data-panel="properties"] .field', { has: page.locator('.color-now') }).nth(1)
-  await fill.locator('.color-now').click()
+  const fill = page.locator('[data-panel="properties"] .fill-field .fill-now')
+  await fill.click()
+  await page.locator('.fill-tabs button', { hasText: 'Solid colour' }).click()
   await page.locator('.color-code input').fill('#e5484d')
   await page.locator('.color-code input').press('Enter')
   // Pressed straight after typing the code: the press counts, the code is not saved again over it.
   const slider = page.locator('.color-menu .color-alpha')
   const track = (await slider.boundingBox())!
   await page.mouse.click(track.x + track.width / 2, track.y + track.height / 2)
-  await expect(fill.locator('.color-now')).toContainText('#e5484d80')
+  await expect(fill).toContainText('#e5484d80')
   await expect(page.locator('.color-menu .color-opacity')).toContainText('50 %')
 
   // A shared colour is set in the same window, opacity included, and not linked to anything else.
@@ -142,7 +245,7 @@ test('gives a colour an opacity, on a shape and on a shared colour', async ({ pa
 
 test('resizes a rectangle by the middles of its sides and its corners', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   const drag = async (from: [number, number], to: [number, number], shift = false) => {
     await page.mouse.move(box.x + from[0], box.y + from[1])
@@ -176,7 +279,7 @@ test('resizes a rectangle by the middles of its sides and its corners', async ({
 
 test('makes a wall thicker from one face, the other face staying where it was', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   // At the first zoom (0.1 px/mm) a wall of 200 mm is 20 pixels thick: its middle line at y = 300, its faces at 290 and 310.
   await drawWall(page, [300, 300], [700, 300])
   await objectRows(page).first().click()
@@ -221,7 +324,7 @@ test('makes a wall thicker from one face, the other face staying where it was', 
 
 test('draws a wall by its face and keeps it: thicker, it grows away; given another line, its corners stay', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   await page.keyboard.press('w')
   await page.getByTitle('Points along the right face of the wall').click()
@@ -250,7 +353,7 @@ test('draws a wall by its face and keeps it: thicker, it grows away; given anoth
 
 test('with Shift, a wall being drawn keeps level and still stops on what it meets: a wall it crosses, a point it comes level with', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   // An upright wall whose middle line is at x = 1830 mm, off the grid; and a short line ending at (3270, 2300).
   const plan = drawing({
     upright: { id: 'upright', type: 'wall', parent: 'page_1', order: 'a1', a: { x: 1830, y: 0 }, b: { x: 1830, y: 2000 }, thickness: 200 },
@@ -284,7 +387,7 @@ test('with Shift, a wall being drawn keeps level and still stops on what it meet
 
 test('makes a wall longer by the line across its free end, in its own direction; its end point still moves it anywhere', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   // At 0.1 px/mm, the origin at (320, 220): a wall 200 thick from (-200, 800) to (1800, 800) mm, 20 px thick on screen.
   await drawWall(page, [300, 300], [500, 300])
@@ -314,7 +417,7 @@ test('makes a wall longer by the line across its free end, in its own direction;
 
 test('stretches a window placed on a wall by either of its ends, the other staying put', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   // At the first zoom (0.1 px/mm, the origin at 320, 220), a wall along y = 800 mm from x = -200 to 3800 mm.
   await drawWall(page, [300, 300], [700, 300])
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
@@ -345,7 +448,7 @@ test('stretches a window placed on a wall by either of its ends, the other stayi
 
 test('makes a stair longer by its top in whole steps, and wider by its side', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Stair, straight$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
@@ -374,7 +477,7 @@ test('makes a stair longer by its top in whole steps, and wider by its side', as
 
 test('brings a washbasin against a wall of a plan whose walls are grouped', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   // A room of 5000 × 4000 mm whose walls, 200 thick, are grouped, the inside of its left wall at
   // x = 100; and a washbasin outside the group, turned with its back to that wall, at x = 1530.
   const wall = (id: string, order: string, a: [number, number], b: [number, number]) => ({ id, type: 'wall', parent: 'plan', order, a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] }, thickness: 200 })
@@ -404,7 +507,7 @@ test('lists the furniture by room in the component library, the adjustable piece
   const furniture = JSON.parse(readFileSync('packages/warehouse/extensions/furniture.json', 'utf8'))
   const old = { ...furniture, version: '1.1.0', objects: furniture.objects.map((object: Record<string, unknown>) => ({ ...object, category: 'furniture' })) }
   await startWith(page, { extensions: { installed: { [old.id]: old }, disabled: [] } })
-  await page.goto('/')
+  await openEditor(page)
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
   const sections = await page.locator('.warehouse-sections .warehouse-section-name').allTextContents()
   expect(sections.filter((name) => ['Living room', 'Dining room', 'Bedroom', 'Office', 'Furniture'].includes(name))).toEqual(['Living room', 'Dining room', 'Bedroom', 'Office'])
@@ -419,7 +522,7 @@ test('lists the furniture by room in the component library, the adjustable piece
 
 test('drags a component from the library onto the drawing, where it is let go', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
   await librarySection(page, 'Dining room').click()
   const card = (await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Chair$/ }) }).boundingBox())!
@@ -454,7 +557,7 @@ test('drags a component from the library onto the drawing, where it is let go', 
 
 test('opens the component library on the section looked at last', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const library = page.getByTitle('Component library: stairs, furniture and every other object')
   const section = (name: string) => librarySection(page, name)
   const heading = (name: string) => page.locator('.warehouse-heading-name', { hasText: new RegExp(`^${name}$`) })
@@ -482,7 +585,7 @@ test('opens the component library on the section looked at last', async ({ page 
 
 test('searches every section of the component library, and counts what each section holds', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
   const dialog = page.getByRole('dialog', { name: 'Component library' })
   const search = page.getByPlaceholder('Search every object and component…')
@@ -506,7 +609,7 @@ test('searches every section of the component library, and counts what each sect
 
 test('takes the components of a drawing on this computer from the foot of the component library', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
   const other = drawing({
     stool: { id: 'stool', type: 'component', parent: null, order: 'a0', name: 'Stool' },
@@ -521,7 +624,7 @@ test('takes the components of a drawing on this computer from the foot of the co
 
 test('places the wall-hung toilet from the library in a drawing that took a double washbasin from where it was being made', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   // While the double washbasin was being made it was the bathroom library's fifth component, and
   // drawings of that time hold it under that place.
   const plan = drawing({
@@ -540,7 +643,7 @@ test('places the wall-hung toilet from the library in a drawing that took a doub
 
 test('makes a group see-through from its properties, one drag of the slider being one step to undo', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   for (const [x, y] of [[300, 300], [450, 300]]) {
     await page.keyboard.press('r')
@@ -569,12 +672,47 @@ test('makes a group see-through from its properties, one drag of the slider bein
   await expect(reading).toHaveText('100 %')
 })
 
+test('shows a shape left unfilled in a component white, as it is placed, and see-through everywhere once given no fill', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  // A black band on the page, and a component of one unfilled rectangle placed across it.
+  const plan = drawing({
+    band: { id: 'band', type: 'rect', parent: 'page_1', order: 'a0', x: 0, y: 0, width: 3000, height: 1000, style: { fill: '#000000' } },
+    glass: { id: 'glass', type: 'component', name: 'Glass', parent: null, order: 'a1' },
+    pane: { id: 'pane', type: 'rect', parent: 'glass', order: 'a0', x: 0, y: 0, width: 1000, height: 2000 },
+    placed: { id: 'placed', type: 'instance', parent: 'page_1', order: 'a1', component: 'glass', x: 1000, y: -500 },
+  })
+  await choose(page, () => page.keyboard.press('Control+o'), 'glass.opencalque', plan)
+  const at = await drawingOnScreen(page)
+  const pixel = (x: number, y: number) =>
+    page.evaluate(([x, y]) => {
+      const stage = document.querySelector<HTMLCanvasElement>('.stage canvas')!
+      const rect = stage.getBoundingClientRect()
+      const scale = stage.width / rect.width
+      return [...stage.getContext('2d')!.getImageData((x - rect.left) * scale, (y - rect.top) * scale, 1, 1).data.slice(0, 3)]
+    }, at(x, y))
+  expect(await pixel(1500, 500)).toEqual([255, 255, 255])
+  // Inside the component its fill says what it is where it is placed; None makes it see-through.
+  await page.mouse.dblclick(...at(1500, -300))
+  await objectRows(page).first().click()
+  const fill = page.locator('.fill-now')
+  await expect(fill).toHaveText('default')
+  await fill.click()
+  await page.locator('.fill-tabs button', { hasText: 'None' }).click()
+  await page.keyboard.press('Escape')
+  await expect(fill).toHaveText('None')
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect(objectRows(page)).toHaveCount(2)
+  await expect.poll(() => pixel(1500, 500)).toEqual([0, 0, 0])
+})
+
 test('resizes a table by its side, the furniture installed before it could be', async ({ page }) => {
   // Installed as it was before it said how it is resized: the copy that ships now replaces it.
   const furniture = JSON.parse(readFileSync('packages/warehouse/extensions/furniture.json', 'utf8'))
   const old = { ...furniture, version: '1.0.0', objects: furniture.objects.map(({ box: _, ...object }: Record<string, unknown>) => object) }
   await startWith(page, { extensions: { installed: { [old.id]: old }, disabled: [] } })
-  await page.goto('/')
+  await openEditor(page)
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Table with chairs$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
@@ -596,7 +734,7 @@ test('resizes a table by its side, the furniture installed before it could be', 
 
 test('stretches a placed component by a side of its frame, and gives it its proportions back', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   // A 2000 × 1000 rectangle from (-200, 800) mm, on screen from (300, 300) to (500, 400), made into a component placed there.
   await page.keyboard.press('r')
@@ -623,7 +761,7 @@ test('stretches a placed component by a side of its frame, and gives it its prop
 
 test('vectorizes a stair into a component of its shapes from the right-click menu', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Stair, straight$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
@@ -642,7 +780,7 @@ test('vectorizes a stair into a component of its shapes from the right-click men
 
 test('turns a rectangle about its middle from the angle typed, and arranges it from the toolbar', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   await page.keyboard.press('r')
   await page.mouse.click(box.x + 300, box.y + 300)
@@ -668,7 +806,7 @@ test('turns a rectangle about its middle from the angle typed, and arranges it f
 
 test('turns a compass by its knob, its box turning with it, and turns it again from where the knob went', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await page.getByTitle('Component library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Compass \(north\)$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
@@ -719,7 +857,7 @@ test('turns a compass by its knob, its box turning with it, and turns it again f
 
 test('shows in the Structure list what is picked on the drawing, however far down', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   // A floor at the bottom of the stacking order, so the last row, under 400 small squares.
   const digits = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
   const key = (i: number) => `b${digits[Math.floor(i / 62)]}${digits[i % 62]}`
@@ -739,7 +877,7 @@ test('shows in the Structure list what is picked on the drawing, however far dow
 
 test('changes the stacking order by dragging a row of the Structure list, and lists what an opened group holds', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const nodes = {
     under: { id: 'under', type: 'rect', name: 'Under', parent: 'page_1', order: 'a1', x: 0, y: 0, width: 1000, height: 1000 },
     over: { id: 'over', type: 'rect', name: 'Over', parent: 'page_1', order: 'a2', x: 2000, y: 0, width: 1000, height: 1000 },
@@ -759,7 +897,7 @@ test('changes the stacking order by dragging a row of the Structure list, and li
 
 test('puts an object in a group by dropping its row on the group, and takes one out the same way', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const nodes = {
     under: { id: 'under', type: 'rect', name: 'Under', parent: 'page_1', order: 'a1', x: 0, y: 0, width: 1000, height: 1000 },
     over: { id: 'over', type: 'rect', name: 'Over', parent: 'page_1', order: 'a2', x: 2000, y: 0, width: 1000, height: 1000 },
@@ -783,7 +921,7 @@ test('puts an object in a group by dropping its row on the group, and takes one 
 
 test('with Shift, a dimension keeps level and stops on the line it crosses', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   // A rectangle whose right side is at x = 1800 mm (x = 500 on screen, 10 mm a pixel).
   await page.keyboard.press('r')
@@ -815,7 +953,7 @@ test('with Shift, a dimension keeps level and stops on the line it crosses', asy
 test('takes a thing out of a component: cut inside it, pasted on the page where the component drew it', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   const field = (name: string) => page.locator('label.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
   await page.keyboard.press('r')
@@ -844,7 +982,7 @@ test('takes a thing out of a component: cut inside it, pasted on the page where 
 
 test('shows the way into a group and a component in it, and goes back out to any place on it', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   await page.keyboard.press('r')
   await page.mouse.click(box.x + 300, box.y + 300)
@@ -892,7 +1030,7 @@ test('shows the way into a group and a component in it, and goes back out to any
 test('puts what is cut and pasted on top of what it was under', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   const rect = async (from: [number, number], to: [number, number]) => {
     await page.keyboard.press('r')
@@ -915,7 +1053,7 @@ test('puts what is cut and pasted on top of what it was under', async ({ page, c
 
 test('measures and dimensions between the points clicked, not the grid points near them', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const box = (await canvas(page).boundingBox())!
   // At the first zoom the grid is 100 mm: these points, 4370 mm apart, are between its lines.
   await page.keyboard.press('m')
@@ -937,7 +1075,7 @@ test('measures and dimensions between the points clicked, not the grid points ne
 
 test('shows every value of a dimension style whole, in the narrow side panel', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await page.keyboard.press('Control+k')
   await page.keyboard.type('Dimension styles')
   await page.keyboard.press('Enter')
@@ -958,7 +1096,7 @@ test('shows every value of a dimension style whole, in the narrow side panel', a
 
 test('leaves out whole the tabs a narrow column has no room for, lists them behind a "···", and brings one chosen there into the row', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const all = ['Structure', 'Colours', 'Wall types', 'Dimension styles']
   const header = page.locator('.dv-tabs-and-actions-container', { has: page.locator('.dv-tab', { hasText: 'Structure' }) })
   const row = header.locator('.dv-tabs-container')
@@ -1008,7 +1146,7 @@ test('leaves out whole the tabs a narrow column has no room for, lists them behi
 
 test('imports a DXF of twenty thousand lines in a few seconds', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   const lines = Array.from({ length: 20000 }, (_, i) => `0\nLINE\n8\n0\n10\n${i * 10}\n20\n0\n11\n${i * 10}\n21\n1000`).join('\n')
   const dxf = `0\nSECTION\n2\nENTITIES\n${lines}\n0\nENDSEC\n0\nEOF\n`
   const start = Date.now()
@@ -1028,7 +1166,7 @@ test('imports a DXF of twenty thousand lines in a few seconds', async ({ page })
 
 test('offers back unsaved work after the window crashed', async ({ page, context, browser }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await drawWall(page, [300, 300], [700, 300])
   // The copy is made a moment after the last change.
   await page.waitForTimeout(2500)
@@ -1096,7 +1234,7 @@ test('tells the assistant what is selected, and applies what it answers', async 
     const stream = [start, ...events, { type: 'message_stop' }].map((event) => `event: ${(event as { type: string }).type}\ndata: ${JSON.stringify(event)}\n\n`).join('')
     await route.fulfill({ status: 200, headers: { ...cors, 'content-type': 'text/event-stream' }, body: stream })
   })
-  await page.goto('/')
+  await openEditor(page)
   await drawWall(page, [300, 300], [700, 300])
   await objectRows(page).first().click()
   await page.locator('.dv-tab', { hasText: 'Assistant' }).click()
@@ -1123,7 +1261,7 @@ test('tells the assistant what is selected, and applies what it answers', async 
 
 test('shows the version and its notes under About, and the licences of what the app includes', async ({ page }) => {
   await startWith(page)
-  await page.goto('/')
+  await openEditor(page)
   await page.keyboard.press('Control+k')
   await page.keyboard.type('About OpenCalque')
   await page.keyboard.press('Enter')

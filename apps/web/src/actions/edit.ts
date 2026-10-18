@@ -189,8 +189,8 @@ export function distributeSelection(along: 'x' | 'y'): void {
 }
 
 /**
- * Takes the look of an object (colours, weight, dashes). With objects selected they are given it;
- * with none, it becomes the look of what is drawn next.
+ * Takes the look of an object (colours, weight, dashes, fill). With objects selected they are given
+ * it; with none, its line colour and fill become those of what is drawn next.
  */
 export function pickStyle(source: Node): void {
   const { selection, doc } = get()
@@ -201,7 +201,8 @@ export function pickStyle(source: Node): void {
   } else if (targets.length > 0) {
     if (apply(targets.map((id): Op => ({ op: 'update_node', id, patch: { style: source.style ?? null } })))) toast(tn(targets.length, 'Style given to {n} object', 'Style given to {n} objects'))
   } else {
-    useStore.setState({ drawColor: source.style?.stroke ?? null, drawWeight: source.style?.strokeWidth ?? null, drawDash: source.style?.dash ?? null })
+    // What the bar above the tools shows, which is what the next shapes take: the colour of their lines and their fill.
+    useStore.setState({ drawColor: source.style?.stroke ?? null, drawFill: source.style?.fill ?? null, drawPattern: source.style?.pattern ?? null })
     toast(t('Style picked up: the next shapes you draw will have it'))
   }
   setTool('select')

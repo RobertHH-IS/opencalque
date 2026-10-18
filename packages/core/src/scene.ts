@@ -1,6 +1,6 @@
 import { childrenOf, isLocked, isVisible } from './document'
 import { boundsContain, boundsContainPoint, unionBounds, type Bounds, type Vec2 } from './geometry'
-import { kindOf, nodePrimitives, PAPER_EDGE, PAPER_FILL } from './kinds'
+import { drawnSolid, kindOf, nodePrimitives, objectBacking, PAPER_EDGE, PAPER_FILL } from './kinds'
 import { distToPrimitive, insidePrimitive, primitiveBounds, type Primitive } from './primitives'
 import type { Registry } from './registry'
 import type { Document, Node } from './schema'
@@ -25,6 +25,19 @@ export function buildScene(doc: Document, containerId: string, registry: Registr
     })
   const sheet = templateSheet(doc, containerId)
   return sheet ? [sheet, ...items] : items
+}
+
+/**
+ * The scene of a component as its placements draw it, to show while it is being edited: what it
+ * leaves unfilled is backed with white under all its lines (`objectBacking`), as one item that
+ * cannot be picked up, so that what is see-through there is see-through where it is placed. The
+ * scene of anything else is shown as it is.
+ */
+export function placedScene(doc: Document, containerId: string, scene: SceneItem[]): SceneItem[] {
+  const container = doc.nodes[containerId]
+  if (!container || !drawnSolid(doc, containerId)) return scene
+  const prims = objectBacking(scene.flatMap((item) => item.prims))
+  return prims.length === 0 ? scene : [{ id: `${containerId}:backing`, node: container, prims, bounds: boundsOf(prims), locked: true }, ...scene]
 }
 
 /**
@@ -115,22 +128,25 @@ const SEAM = 0.8
  * together: all their outlines at double width, then all their fills, which hides the outline
  * segments that fall inside another. The fills are grown by a seam, and the outlines widened by as
  * much so they keep their weight. They go where the first of them is in the stacking order: what
- * is stacked under every wall is painted under them, the rest over them.
+ * is stacked under every wall is painted under them, the rest over them. Pictures keep their place
+ * in the stacking order like anything else; one stacked under every floor, as a plan to trace is,
+ * stays under the floors too.
  */
 export function paintOrder(prims: Primitive[]): PaintStep[] {
   const isMerged = (p: Primitive) => p.kind === 'path' && !!p.union && !p.backdrop
   const backdrops = prims.filter((p) => p.backdrop === true)
   const floors = prims.filter((p) => p.backdrop === 'floor')
-  const images = prims.filter((p) => p.kind === 'image' && !p.backdrop)
   const merged = prims.filter(isMerged)
   const first = prims.findIndex(isMerged)
-  const rest = prims.flatMap((p, i) => (p.kind !== 'image' && !(p.kind === 'path' && p.union) && !p.backdrop ? [{ p, under: i < first }] : []))
-  const plain = (prim: Primitive): PaintStep => ({ prim, stroke: true, fill: true, widthScale: 1, widthExtra: 0, seam: 0 })
+  const firstFloor = prims.findIndex((p) => p.backdrop === 'floor')
+  const traced = (p: Primitive, i: number) => p.kind === 'image' && i < firstFloor
+  const images = prims.filter((p, i) => !p.backdrop && traced(p, i))
+  const rest = prims.flatMap((p, i) => (!(p.kind === 'path' && p.union) && !p.backdrop && !traced(p, i) ? [{ p, under: i < first }] : []))
+  const plain = (prim: Primitive): PaintStep => ({ prim, stroke: prim.kind !== 'image', fill: prim.kind !== 'image', widthScale: 1, widthExtra: 0, seam: 0 })
   return [
     // Sheets of paper lie under everything that is drawn on them.
     ...backdrops.map(plain),
-    // Pictures are backgrounds to trace over, so they go beneath even the walls.
-    ...images.map((prim) => ({ prim, stroke: false, fill: false, widthScale: 1, widthExtra: 0, seam: 0 })),
+    ...images.map(plain),
     ...floors.map(plain),
     ...rest.filter((one) => one.under).map((one) => plain(one.p)),
     ...merged.map((prim) => ({ prim, stroke: true, fill: false, widthScale: 2, widthExtra: SEAM, seam: 0 })),

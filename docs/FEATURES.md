@@ -2,7 +2,7 @@
 
 What the app does today, the ten big features chosen to do next and where each stands, and the longer backlog. For how things are built, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Last updated: 2026-10-15 (1.0.0).
+Last updated: 2026-10-18 (1.1.0).
 
 ## 1. What exists today
 
@@ -19,7 +19,7 @@ Last updated: 2026-10-15 (1.0.0).
 - Dimensions with configurable line, end markers, extension lines, text, font, unit and decimals, and vertical text that reads from bottom to top or from top to bottom; and a separate measure tool that only reads a distance.
 - **Dimension styles**: whichever of those settings a style defines, shared by the dimensions drawn in it, each of which may still differ from it.
 - Text typed directly on the drawing, on several lines; double-click a text to change it. **Fields** (`{date}`, `{page}`, `{page-number}`, `{pages}`, `{document}`) are filled in when drawn and exported.
-- **Line style**: weight chosen as printed millimetres, kinds of line (dashes, dots), and arrows or other ends on lines and polylines; a bar above the tools sets the style of the next shapes.
+- **Line style**: weight chosen as printed millimetres, kinds of line (dashes, dots), and arrows or other ends on lines and polylines; a bar above the tools sets the colour of the lines of the next shapes (the layer's until another is chosen) and the fill of the next closed shapes.
 - **Eyedropper**: copy the look of an object to the selection or to the next shapes.
 - **Arrange** from the toolbar: stacking order, align and space evenly. The common properties of several selected objects are edited together.
 - A guide line across the view while a segment is exactly horizontal or vertical, and a hint bar with the keys that matter for the tool in use.
@@ -31,7 +31,7 @@ Last updated: 2026-10-15 (1.0.0).
 - **Annotations**: a note with a curved, straight or elbowed leader to what it is about, typed in place, with a choice of symbol at each end.
 - **Corners**: a wall end is a selectable corner shared by the walls that meet there; drag it and they all follow. A corner of two walls can be mitred, rounded, cut off, or have one wall run through. Each line of a wall (its faces, its ends) can have its own look. A wall is cut in two with the Split tool; the two halves show the line between them.
 - **Rooms**: click inside closed walls to name a space; its floor, outline and area follow the walls. **Dividers** split an open space into rooms without a wall.
-- **Floor patterns**: a room's Floor section takes a colour and a pattern (lines, planks, tiles), as any closed shape's fill does; the Hatch modifier does the same as a modifier.
+- **Fills**: no fill, a solid colour, or a hatch (lines, cross-hatch, planks, tiles, concrete, insulation) over a background colour, chosen in one fill window with a tab for each and a preview of the hatch, whose colour, opacity, weight, spacing and angle are set there. The same window serves shapes, walls, wall types, the floors of rooms and the bar above the tools; the Hatch modifier does the same as a modifier.
 - **Shared colours**: named colours that objects and layers link to; change one and everything linked follows. Any colour may be see-through (an opacity in the colour window), and may follow the colour of the object's layer.
 - **Wall types**: a thickness, a fill and layers, shared by the walls built as them and drawn as lines inside the wall.
 - **Dimension chains** along a wall through its doors and windows, made on demand.
@@ -48,7 +48,7 @@ Last updated: 2026-10-15 (1.0.0).
 - Pages, which can be duplicated with their contents and reordered by dragging, and layers with colour, visibility and lock. **On every sheet**: a title, a logo or a north arrow drawn once, in millimetres of paper, shows on every paper at its own scale, in the corner it was drawn nearest to, with fields (`{sheet}`, `{scale}`, `{page}`, `{project}`…) filled in for each sheet.
 - **Groups**: several objects treated as one (`Ctrl+G`, `Ctrl+Shift+G`), nestable; double-click to edit inside. While inside groups and components, a breadcrumb in the top-left corner shows the way there from the page, and any place on it is one click back out; the places just left stay after it, faint, to go back in with one click. A group can be made see-through as a whole, with the Opacity slider in its properties.
 - **Components**: a reusable definition with instances that all update together; double-click an instance to edit the component, or ungroup it (`Ctrl+Shift+G`) to turn it back into objects of the drawing. A placed component is stretched wider or taller by the sides of its frame on the plan (Shift on a corner keeps its proportions), and a parametric object can be vectorized into a component of its shapes.
-- **Stacking order**: bring forward or send backward one step or all the way, from the properties panel, the right-click menu, shortcuts, or by dragging rows in the object list (several at once when they are selected).
+- **Stacking order**: what is drawn over what, pictures included (a plan to trace stays under the floors and walls drawn over it); bring forward or send backward one step or all the way, from the properties panel, the right-click menu, shortcuts, or by dragging rows in the object list (several at once when they are selected).
 - A Structure panel listing the objects, with an icon per kind of object, expandable groups, lock and hide per object. Rows are dragged to change the stacking order, onto a group to put objects in it, and out of a group the same way.
 - Cut, copy and paste, including between drawings and windows.
 
@@ -59,7 +59,7 @@ Last updated: 2026-10-15 (1.0.0).
 - Any drawing can be imported as a component library.
 
 ### Working from an existing plan
-- Drop a picture, a PDF, a drawing or an extension onto the window and it goes to the right place.
+- Drop a picture, a PDF, a drawing or an extension onto the window and it goes to the right place. A picture copied in another program (a browser, a screenshot) is pasted as a picture, on top of the drawing where you are looking, its transparency kept.
 - Import a PDF (any one of its pages) or a picture as a background, set its scale from one known distance, and trace over it.
 - Import a DXF: lines, polylines, circles, arcs, ellipses, curves and text on their layers, with their colours and weights; blocks as groups, hatches as fills, dimensions and leaders as dimensions and annotations. A DXF laid out as a sheet (from AutoCAD's paper space or SketchUp LayOut) comes in as a paper at its scale, with what each of its windows shows.
 
@@ -121,12 +121,13 @@ Agreed with the owner in October 2026. The first was built straight away.
 - ~~Align, distribute, a repeat ("array") modifier~~ (done); a live mirror modifier
 - ~~Snapping to midpoints, perpendiculars and intersections~~ (done, with the nearest point on a line); tangents and the quarter points of circles
 - ~~Eyedropper~~ (done)
+- Fills made of a picture, or of a texture (wood, concrete, grass), as more tabs of the fill window
 - Trim, extend and fillet for lines
 
 **Import and sharing**
 - ~~DXF import~~ (done, with blocks as groups); blocks as components
 - PNG export
-- A live demo on GitHub Pages; ~~downloadable installers~~ (done, unsigned by choice); automatic updates
+- A live demo on GitHub Pages; ~~downloadable installers~~ (done, unsigned by choice); ~~automatic updates~~ (done on Windows and Linux; macOS is told of a new version)
 
 **Assistant**
 - A preview of its changes to accept or refuse before they are applied
@@ -171,7 +172,7 @@ Not ranked within an area.
 **Application**
 - ~~Dark theme~~ (done); touch and pen input; high-contrast mode.
 - ~~Crash recovery~~ (done); version history.
-- Automatic updates (installers stay unsigned); ~~file association for `.opencalque`~~ (done, macOS included).
+- ~~Automatic updates~~ (done on Windows and Linux; macOS, unsigned, is told of a new version and offered its page); ~~file association for `.opencalque`~~ (done, macOS included).
 - Performance on drawings with tens of thousands of objects (caching per object, then GPU rendering).
 - ~~Automated interface tests~~ (done for the main paths, `pnpm e2e`); more of the panels.
 - More languages, right-to-left support.

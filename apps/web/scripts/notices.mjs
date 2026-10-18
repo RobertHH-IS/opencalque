@@ -1,10 +1,12 @@
 // Writes THIRD-PARTY-NOTICES.txt at the root of the repository: the licence of every package of
-// others that the editor's build holds, found by building it, and of the fonts that ship with it.
-// The web app shows the file under About, and the installers carry it beside the app.
+// others that the editor's build and the desktop app's main process hold, found by building them,
+// and of the fonts that ship with it. The web app shows the file under About, and the installers
+// carry it beside the app.
 //
 //   pnpm notices           writes the file
 //   pnpm notices --check   fails when the file is not what the build holds now (CI runs this)
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { builtinModules } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { build } from 'vite'
@@ -16,25 +18,33 @@ const out = join(root, 'THIRD-PARTY-NOTICES.txt')
 // The folder of the package a module of the build comes from, when it comes from node_modules.
 const PACKAGE = /^(.*[\\/]node_modules[\\/](?:@[^\\/]+[\\/])?[^\\/]+)[\\/]/
 
-/** The folders of the packages whose code the build holds. */
+/** A plugin that adds to `folders` the package of every module a build holds. */
+const collect = (folders) => ({
+  name: 'opencalque-notices',
+  generateBundle() {
+    for (const id of this.getModuleIds()) {
+      const folder = PACKAGE.exec(id.replace(/^\0/, '').split('?')[0])?.[1]
+      if (folder) folders.add(folder)
+    }
+  },
+})
+
+/**
+ * The folders of the packages whose code the builds hold: the editor's, and the desktop app's main
+ * process (electron-updater and what it uses), which electron-vite bundles whole but for Electron
+ * and Node's own modules.
+ */
 async function bundled() {
   const folders = new Set()
+  await build({ root: web, configFile: join(web, 'vite.config.ts'), logLevel: 'error', build: { write: false }, plugins: [collect(folders)] })
+  const desktop = join(root, 'apps/desktop')
   await build({
-    root: web,
-    configFile: join(web, 'vite.config.ts'),
+    root: desktop,
+    configFile: false,
     logLevel: 'error',
-    build: { write: false },
-    plugins: [
-      {
-        name: 'opencalque-notices',
-        generateBundle() {
-          for (const id of this.getModuleIds()) {
-            const folder = PACKAGE.exec(id.replace(/^\0/, '').split('?')[0])?.[1]
-            if (folder) folders.add(folder)
-          }
-        },
-      },
-    ],
+    build: { write: false, ssr: join(desktop, 'src/main/index.ts'), rollupOptions: { external: ['electron', /^node:/, ...builtinModules] } },
+    ssr: { noExternal: true },
+    plugins: [collect(folders)],
   })
   return [...folders]
 }

@@ -4,7 +4,7 @@ import { fadeColor, resolveColor } from './colors'
 import { DIMENSION_MARKER_SIZE, DIMENSION_TEXT_SIZE, styledDimension } from './dimensions'
 import { fillFields } from './fields'
 import { formatFeetInches } from './imperial'
-import { applyModifiers, movedModifiers, segmentsInside, HATCH_INK, patternStrokes } from './modifiers'
+import { applyModifiers, movedModifiers, segmentsInside, HATCH_INK, HATCH_WEIGHT, patternStrokes } from './modifiers'
 import { primitiveBounds, transformPrimitive, type Primitive } from './primitives'
 import { tidy, turned, type Placing } from './similarity'
 import { sheetContentOf } from './templates'
@@ -466,7 +466,7 @@ function placeholder(label: string): Primitive[] {
 /** A primitive drawn see-through by `by` (0 to 1): its stroke and fill, or a picture as a whole. */
 function fadedPrimitive(prim: Primitive, by: number): Primitive {
   if (prim.kind === 'image') return { ...prim, opacity: (prim.opacity ?? 1) * by }
-  return { ...prim, ...(prim.stroke === undefined ? {} : { stroke: fadeColor(prim.stroke, by) }), ...(prim.fill === undefined ? {} : { fill: fadeColor(prim.fill, by) }) }
+  return { ...prim, ...(prim.stroke === undefined ? {} : { stroke: fadeColor(prim.stroke, by) }), ...(prim.fill === undefined ? { faded: (prim.faded ?? 1) * by } : { fill: fadeColor(prim.fill, by) }) }
 }
 
 const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
@@ -786,6 +786,30 @@ function wallLayerLines(wall: NodeOf<'wall'>, layers: { thickness: number }[], p
 export const OBJECT_FILL = '#ffffff'
 
 /**
+ * A component or an object is a solid thing: a chair hides the floor it stands on. Each of its
+ * closed shapes that has no fill of its own is backed with paper white, faded as much as the
+ * see-through groups the shape is in; these go under all its lines, so that one shape of the
+ * object never hides the lines of another. A shape given the fill 'none' is see-through.
+ */
+export function objectBacking(prims: Primitive[]): Primitive[] {
+  return prims.flatMap((p): Primitive[] =>
+    (p.kind === 'path' ? p.closed && p.points.length > 2 : p.kind === 'ellipse') && p.fill === undefined && !p.backdrop
+      ? [{ ...p, fill: fadeColor(OBJECT_FILL, p.faded ?? 1), stroke: 'none', dash: undefined }]
+      : [],
+  )
+}
+
+/**
+ * Whether what is inside a container is drawn as a solid object wherever it is placed, as
+ * `objectBacking` says: inside a component, unless it is what papers draw on every sheet, which
+ * they draw as it is.
+ */
+export function drawnSolid(doc: Document, containerId: string | null): boolean {
+  const root = rootOf(doc, containerId)
+  return root?.type === 'component' && !root.sheet
+}
+
+/**
  * The primitives of a node with styles resolved: the node's own style wins, then what the kind
  * specified, then the layer color, then the default ink. Primitives marked `own` skip the first step.
  */
@@ -821,24 +845,18 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
     })
   // The pattern of the fill: strokes inside each closed shape, cut to it, over its colour.
   const pattern = style?.pattern
+  const ink = pattern && fadeColor(paint(pattern.stroke) ?? HATCH_INK, pattern.opacity ?? 1)
   const hatching: Primitive[] = pattern
     ? styled.flatMap((p): Primitive[] => {
         if (p.own) return []
         const shape = p.kind === 'path' && p.closed ? p.points : p.kind === 'ellipse' ? ellipseArc({ ...p, from: 0, to: 360 }).slice(0, -1) : []
         return patternStrokes(shape, pattern).map(
-          (points): Primitive => ({ kind: 'path', points, stroke: paint(pattern.stroke) ?? HATCH_INK, strokeWidth: 0.6, own: true, texture: true, backdrop: p.backdrop, clip: [...(p.clip ?? []), shape] }),
+          (points): Primitive => ({ kind: 'path', points, stroke: ink, strokeWidth: pattern.strokeWidth ?? HATCH_WEIGHT, own: true, texture: true, backdrop: p.backdrop, clip: [...(p.clip ?? []), shape] }),
         )
       })
     : []
-  // A component or an object is a solid thing: a chair hides the floor it stands on. Each of its
-  // closed shapes that has no fill of its own is backed with paper white, all the backings under
-  // all the lines, so that one shape of the object never hides the lines of another.
   const solid = node.type === 'instance' || node.type === 'parametric'
-  const backing: Primitive[] = solid
-    ? styled.flatMap((p): Primitive[] =>
-        (p.kind === 'path' ? p.closed && p.points.length > 2 : p.kind === 'ellipse') && p.fill === undefined && !p.backdrop ? [{ ...p, fill: OBJECT_FILL, stroke: 'none', dash: undefined }] : [],
-      )
-    : []
+  const backing = solid ? objectBacking(styled) : []
   // Last of all, so modifiers work on the node as it would otherwise be drawn.
   return applyModifiers(node, [...backing, ...styled, ...hatching], ctx.registry)
 }

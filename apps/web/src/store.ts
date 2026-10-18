@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { applyOps, createDocument, holdsChildren, layersOf, pagesOf, type Document, type NodeInput, type Op, type Vec2, wallEndsAt } from '@opencalque/core'
+import { applyOps, createDocument, holdsChildren, layersOf, pagesOf, type Document, type NodeInput, type Op, type Pattern, type Vec2, wallEndsAt } from '@opencalque/core'
 import type { StoredFile } from './platform'
 import type { Tool } from './tools'
 import { MEASURE_TOOLS, ROOM_TOOLS, SHAPE_TOOLS, TEXT_TOOLS } from './tools'
@@ -120,9 +120,9 @@ interface ToolSettings {
   measureTool: Tool
   /** Stroke colour given to the shapes drawn next, or null for the layer's colour. */
   drawColor: string | null
-  /** Likewise their line weight, in pixels, and their pattern of dashes; null leaves each as it comes. */
-  drawWeight: number | null
-  drawDash: number[] | null
+  /** The fill of the closed shapes drawn next, its colour and its pattern; null for none. */
+  drawFill: string | null
+  drawPattern: Pattern | null
   /** Look of the dimensions the dimension tool draws next: any dimension property except its points. */
   dimensionTemplate: Record<string, unknown>
   /** Likewise for the annotations the annotation tool draws next: their ends, curve and text size. */
@@ -185,8 +185,8 @@ const SETTINGS: ToolSettings = {
   textTool: 'text',
   measureTool: 'measure',
   drawColor: null,
-  drawWeight: null,
-  drawDash: null,
+  drawFill: null,
+  drawPattern: null,
   dimensionTemplate: {},
   annotationTemplate: {},
 }

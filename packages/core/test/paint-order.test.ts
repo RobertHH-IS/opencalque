@@ -52,3 +52,39 @@ describe('the order things are painted in', () => {
     expect(paintOrder(prims).map((step) => step.prim)).toEqual(prims)
   })
 })
+
+describe('pictures in the order things are painted in', () => {
+  // A room in four walls, and three pictures: one stacked under everything, as a plan to trace is,
+  // one between the room and the walls, and one on top of it all.
+  const corners = [
+    { x: 0, y: 0 },
+    { x: 4000, y: 0 },
+    { x: 4000, y: 3000 },
+    { x: 0, y: 3000 },
+  ]
+  const picture = (id: string) => add({ type: 'image', id, parent: 'page_1', asset: 'pic', x: 500, y: 500, width: 1000, height: 1000 })
+  const plan = applyOps(createDocument(), [
+    { op: 'add_asset', asset: { id: 'pic', mime: 'image/png', data: 'AAAA', width: 10, height: 10 } },
+    picture('under'),
+    add({ type: 'room', id: 'room', parent: 'page_1', x: 2000, y: 1500 }),
+    picture('between'),
+    ...corners.map((a, i) => add({ type: 'wall', id: `w${i}`, parent: 'page_1', a, b: corners[(i + 1) % 4], thickness: 200 })),
+    picture('over'),
+  ])
+  const steps = paintOrder(buildScene(plan, 'page_1', registry).flatMap((item) => item.prims))
+  const pictures = steps.flatMap((step, i) => (step.prim.kind === 'image' ? [i] : []))
+  const floor = steps.findIndex((step) => step.prim.backdrop === 'floor')
+  const walls = steps.flatMap((step, i) => (step.prim.kind === 'path' && step.prim.union ? [i] : []))
+
+  it('paints each picture where it is stacked: over the walls when stacked over them', () => {
+    expect(pictures).toHaveLength(3)
+    expect(walls.length).toBeGreaterThan(0)
+    expect(pictures[1]).toBeLessThan(walls[0])
+    expect(pictures[2]).toBeGreaterThan(walls[walls.length - 1])
+  })
+
+  it('keeps a picture stacked under every floor under the floors, and one stacked over a floor over it', () => {
+    expect(floor).toBeGreaterThan(pictures[0])
+    expect(floor).toBeLessThan(pictures[1])
+  })
+})

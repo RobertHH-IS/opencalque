@@ -4,7 +4,8 @@ import { Pipette, Link2, Undo2, SquareSplitHorizontal } from 'lucide-react'
 import { msg, t } from '../../i18n'
 import { registry } from '../../extensions'
 import { apply, setTool, useStore } from '../../store'
-import { ColorChoice, PatternRows } from '../../ColorChoice'
+import { ColorChoice, type LayerOption } from '../../ColorChoice'
+import { FillChoice, type FillChange } from '../../FillChoice'
 import { WeightChoice } from '../../WeightChoice'
 import { DashPicker, Field, IconButton, OpacitySlider, Section } from '../../ui'
 import { formatLength } from '../../units'
@@ -27,6 +28,16 @@ export function patchFor(node: Node, path: string, value: unknown): Record<strin
   const next: Record<string, unknown> = { ...(node as any)[head], [key]: value }
   if (value === undefined) delete next[key]
   return { [head]: value === undefined && Object.keys(next).length === 0 ? null : next }
+}
+
+/** The patch that changes a node's fill: each key of `change` set in its style, or taken away when undefined. */
+export function fillPatch(node: Node, change: FillChange): Record<string, unknown> {
+  const style: Record<string, unknown> = { ...node.style }
+  for (const [key, value] of Object.entries(change)) {
+    if (value === undefined) delete style[key]
+    else style[key] = value
+  }
+  return { style: Object.keys(style).length === 0 ? null : style }
 }
 
 export type Update = (patch: (node: Node) => Record<string, unknown>) => void
@@ -75,17 +86,27 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
       </div>
     )
   }
-  if (field.type === 'pattern') {
-    // A pattern taken from elsewhere (a wall's type) is shown faint; "none" over it is said outright, as a pattern of kind None.
-    const inherited = field.pattern !== undefined
+  if (field.type === 'fill') {
+    // A fill is a colour and a pattern: set together, and mixed when either differs.
+    const both = (n: Node) => JSON.stringify([read(n, 'style.fill') ?? null, read(n, 'style.pattern') ?? null])
+    const several = nodes.some((n) => both(n) !== both(node))
+    // Its section says it is the fill: the row has no name of its own, and the field takes its width.
     return (
-      <PatternRows
-        label={t(field.label)}
-        value={mixed ? undefined : ((stored as Pattern | undefined) ?? field.pattern)}
-        mixed={mixed}
-        faint={inherited && stored === undefined}
-        onChange={(next) => commit(next ?? (inherited ? { kind: 'None' } : undefined))}
-      />
+      <div className="field fill-field">
+        <FillChoice
+          key={node.id}
+          fill={several ? undefined : (read(node, 'style.fill') as string | undefined)}
+          pattern={several ? undefined : (read(node, 'style.pattern') as Pattern | undefined)}
+          inherited={field.inherited}
+          fallback={String(field.fallback ?? 'none')}
+          unset={field.unset}
+          filled={field.filled}
+          mixed={several}
+          layer={layerChoice(doc, nodes, field)}
+          title={t(field.label)}
+          commit={(change) => update((n) => fillPatch(n, change))}
+        />
+      </div>
     )
   }
   if (field.ends) {
@@ -151,7 +172,7 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
  * layer: its colour, whether they are on different layers, and whether no colour already means it,
  * as for a stroke, whose "from layer" is having none.
  */
-function layerChoice(doc: Document, nodes: Node[], field: FieldSpec): { color: string; several: boolean; byDefault: boolean } | undefined {
+function layerChoice(doc: Document, nodes: Node[], field: FieldSpec): LayerOption | undefined {
   const layers = nodes.map((n) => (n.layer === undefined ? undefined : doc.layers[n.layer]))
   if (layers.length === 0 || layers.some((layer) => !layer)) return undefined
   return { color: resolveColor(doc, layers[0]!.color) ?? DEFAULT_INK, several: layers.some((layer) => layer !== layers[0]), byDefault: field.unset === 'from layer' }
@@ -166,8 +187,6 @@ function typeValue(type: WallType, path: string): unknown {
       return type.height
     case 'style.fill':
       return type.fill
-    case 'style.pattern':
-      return type.pattern
     case 'style.stroke':
       return type.stroke
     case 'style.strokeWidth':
@@ -190,6 +209,7 @@ function TypedRow(props: { node: Node; nodes: Node[]; field: FieldSpec; update: 
   const styles = useStore((s) => s.doc.dimensionStyles)
   const type = nodes.length === 1 && node.type === 'wall' && node.wallType ? types?.[node.wallType] : undefined
   const style = nodes.length === 1 && node.type === 'dimension' && node.dimensionStyle ? styles?.[node.dimensionStyle] : undefined
+  if (field.type === 'fill') return <TypedFill {...props} type={type} />
   const fromType = type ? typeValue(type, field.path) : style ? read(style, field.path) : undefined
   if (fromType === undefined) return <FieldRow {...props} />
   const thickness = node.type === 'wall' && field.path === 'thickness'
@@ -198,13 +218,39 @@ function TypedRow(props: { node: Node; nodes: Node[]; field: FieldSpec; update: 
   const giveBack = () => update((n) => (thickness ? { overrides: null } : patchFor(n, field.path, undefined)))
   return (
     <div className={`typed-row${own ? ' own' : ''}`}>
-      <FieldRow {...props} field={field.type === 'pattern' ? { ...field, pattern: fromType as Pattern } : own ? field : { ...field, fallback: fromType as FieldSpec['fallback'], unset: style ? msg('from its style') : msg('from its type') }} />
+      <FieldRow {...props} field={own ? field : { ...field, fallback: fromType as FieldSpec['fallback'], unset: style ? msg('from its style') : msg('from its type') }} />
       {own ? (
         <IconButton title={style ? t('Differs from its dimension style. Click to take the style’s value again') : t('Differs from its wall type. Click to take the type’s value again')} onClick={giveBack}>
           <Undo2 size={12} />
         </IconButton>
       ) : (
         <i className="typed-mark" title={style ? t('From its dimension style: change it there, or set a value here to make an exception') : t('From its wall type: change it there, or type a value here to make an exception')}>
+          <Link2 size={11} />
+        </i>
+      )}
+    </div>
+  )
+}
+
+/**
+ * The fill of a wall whose type defines its colour or its pattern, as `TypedRow` shows any other
+ * property: what comes from the type is shown as such, and a fill of its own is an exception, with
+ * a button that gives the fill back to the type.
+ */
+function TypedFill(props: { node: Node; nodes: Node[]; field: FieldSpec; update: Update; type: WallType | undefined }) {
+  const { node, field, update, type } = props
+  if (!type || (type.fill === undefined && type.pattern === undefined)) return <FieldRow {...props} />
+  const own = (type.fill !== undefined && node.style?.fill !== undefined) || (type.pattern !== undefined && node.style?.pattern !== undefined)
+  const giveBack = () => update((n) => fillPatch(n, { ...(type.fill === undefined ? {} : { fill: undefined }), ...(type.pattern === undefined ? {} : { pattern: undefined }) }))
+  return (
+    <div className={`typed-row${own ? ' own' : ''}`}>
+      <FieldRow {...props} field={{ ...field, inherited: { fill: type.fill, pattern: type.pattern }, unset: msg('from its type') }} />
+      {own ? (
+        <IconButton title={t('Differs from its wall type. Click to take the type’s value again')} onClick={giveBack}>
+          <Undo2 size={12} />
+        </IconButton>
+      ) : (
+        <i className="typed-mark" title={t('From its wall type: change it there, or type a value here to make an exception')}>
           <Link2 size={11} />
         </i>
       )}

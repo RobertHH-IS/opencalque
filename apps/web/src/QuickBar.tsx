@@ -1,13 +1,13 @@
 import { useState } from 'react'
+import { DEFAULT_INK, resolveColor } from '@opencalque/core'
 import { drawing } from './canvas/drawing'
 import { ColorChoice } from './ColorChoice'
+import { FillChoice } from './FillChoice'
 import { msg, t } from './i18n'
 import { useStore } from './store'
 import { type Tool } from './tools'
-import { dashIndex, DASHES } from './strokes'
-import { WeightChoice } from './WeightChoice'
-import { DashPicker, JustifyPicker, scrub } from './ui'
-import { formatNumber, parseLength, parseNumber, unit, unitSuffix } from './units'
+import { JustifyPicker, scrub } from './ui'
+import { formatNumber, parseLength, parseNumber, unitSuffix } from './units'
 
 /** Where the clicked points can lie on a wall, as it is drawn: they are its corners, and the line it keeps. */
 const JUSTIFY = {
@@ -36,11 +36,13 @@ const SIZES: Partial<Record<Tool, Size[]>> = {
   divider: run,
   rotate: [{ which: 'b', label: msg('Angle'), kind: 'angle' }],
 }
-/** The tools that make a shape: only those take the colour, weight and kind of line of the next shapes. */
-const INKED: Tool[] = ['rect', 'ellipse', 'line', 'wall', 'divider']
-
-/** Stroke colours offered for the next shapes; the first means "the layer's colour". */
-const COLORS = [null, '#e5484d', '#9ca3af', '#0d99ff']
+/**
+ * The tools whose shapes take the colour of lines chosen in the bar, and of those the ones that
+ * make closed shapes, which take its fill too (the line tool closes a polygon). Line weights and
+ * kinds of line are set afterwards, in the properties.
+ */
+const INKED: Tool[] = ['rect', 'ellipse', 'line', 'wall']
+const FILLED: Tool[] = ['rect', 'ellipse', 'line']
 
 /**
  * One size of the shape being drawn. It follows the pointer until a value is typed into it; a
@@ -104,13 +106,15 @@ function SizeField({ which, label, kind }: Size) {
 
 /**
  * Floats above the toolbar while a drawing tool is in use: the sizes of the shape being drawn,
- * which can be typed instead of dragged, and the colour the next shapes get.
+ * which can be typed instead of dragged, and the colour of the lines and the fill the next shapes get.
  */
 export function QuickBar() {
   const tool = useStore((s) => s.tool)
   const color = useStore((s) => s.drawColor)
-  const weight = useStore((s) => s.drawWeight)
-  const dash = useStore((s) => s.drawDash)
+  const fill = useStore((s) => s.drawFill)
+  const pattern = useStore((s) => s.drawPattern)
+  // The colour of the layer drawn on, which lines take unless given another: shown as it is, not as black.
+  const layerInk = useStore((s) => resolveColor(s.doc, s.doc.layers[s.activeLayer]?.color) ?? DEFAULT_INK)
   const wallThickness = useStore((s) => s.wallThickness)
   const wallJustify = useStore((s) => s.wallJustify)
   const wallType = useStore((s) => s.wallType)
@@ -190,21 +194,29 @@ export function QuickBar() {
         )}
       </div>
       <div className="quick-group" hidden={!INKED.includes(tool)}>
-        {COLORS.map((c) => (
-          <button
-            key={c ?? 'layer'}
-            className={`quick-color${c === color ? ' active' : ''}`}
-            title={c ? t('Colour of the next shapes') : t('Colour of the layer')}
-            aria-label={c ? t('Colour of the next shapes') : t('Colour of the layer')}
-            style={{ background: c ?? '#1f1f1f' }}
-            onClick={() => useStore.setState({ drawColor: c })}
+        {/* With no colour of their own, lines take the layer's: the swatch shows it, marked as the layer's. */}
+        <ColorChoice
+          compact
+          caption={t('Line')}
+          title={t('Colour of the lines of the next shapes')}
+          stored={color ?? undefined}
+          fallback={layerInk}
+          layer={{ color: layerInk, several: false, byDefault: true }}
+          commit={(next) => useStore.setState({ drawColor: (next as string | undefined) ?? null })}
+        />
+        {FILLED.includes(tool) && (
+          <FillChoice
+            compact
+            caption={t('Fill')}
+            title={t('Fill of the next closed shapes')}
+            fill={fill ?? undefined}
+            pattern={pattern ?? undefined}
+            fallback="none"
+            unset={msg('none')}
+            layer={{ color: layerInk, several: false, byDefault: false }}
+            commit={(change) => useStore.setState({ ...('fill' in change ? { drawFill: change.fill ?? null } : {}), ...('pattern' in change ? { drawPattern: change.pattern ?? null } : {}) })}
           />
-        ))}
-        {/* Beyond the ready-made ones: any colour, or one of the drawing's shared colours. */}
-        <ColorChoice compact title={t('Another colour, or a shared one')} stored={color !== null && !COLORS.includes(color) ? color : undefined} fallback="#ffffff" commit={(next) => useStore.setState({ drawColor: (next as string | undefined) ?? null })} />
-        {/* With none, the next shapes take the usual weight. */}
-        <WeightChoice compact value={weight ?? undefined} placeholder={t('Weight')} none={t('default')} label={t('Line weight of the next shapes, as printed')} onPick={(pixels) => useStore.setState({ drawWeight: pixels })} />
-        <DashPicker value={dash} label={t('Kind of line of the next shapes')} onPick={(pattern) => useStore.setState({ drawDash: pattern })} />
+        )}
       </div>
     </div>
   )

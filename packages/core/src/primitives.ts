@@ -49,6 +49,11 @@ export interface PrimStyle {
    * something. They are drawn like any other line, but nothing snaps to them.
    */
   texture?: boolean
+  /**
+   * How much the see-through groups it is in let through, multiplied; set only where there is no
+   * fill to fade. The white an object backs such a shape with (`objectBacking`) is faded as much.
+   */
+  faded?: number
 }
 
 export interface PathPrim extends PrimStyle {

@@ -389,7 +389,7 @@ Extensions in code are compiled in: add yours where the editor loads its extensi
 
 ## What is not there yet
 
-- **Installers** are not signed (see [Download](#download) for the one extra click) and do not update themselves: download the next version from the releases page.
+- **Installers** are not signed (see [Download](#download) for the one extra click). From 1.1.0, the Windows setup and the Linux AppImage update themselves (the new version is downloaded in the background and installed when the app closes; Preferences can turn this off). On macOS, and with the portable Windows app, the app says when a new version is out and opens its page: download it from there. Anyone on 1.0.0 downloads the next version by hand once.
 - **Release notes** and the example drawing are in English only. Recent drawings are listed in the desktop app only.
 - **Printing.** PDF export uses the standard fonts of PDF readers for Western European text, and fonts shipped with the app for other scripts, so text is close to the screen but not identical. Pictures other than JPEG and PNG are left out. A sheet cannot yet show a part of the plan at another scale.
 - **Drawing.** Arcs are made by typing angles, not yet drawn with a tool of their own. Several objects selected together are scaled in proportion only.

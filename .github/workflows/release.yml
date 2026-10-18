@@ -37,10 +37,14 @@ jobs:
         with:
           name: installers-${{ matrix.os }}
           if-no-files-found: error
+          # latest*.yml and the blockmaps are what an installed app reads to update itself
+          # (apps/desktop/src/main/updates.ts): the version, and the sha512 its download must have.
           path: |
             apps/desktop/dist/*.exe
             apps/desktop/dist/*.dmg
             apps/desktop/dist/*.AppImage
+            apps/desktop/dist/latest*.yml
+            apps/desktop/dist/*.blockmap
 
   publish:
     needs: build

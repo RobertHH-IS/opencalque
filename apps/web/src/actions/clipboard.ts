@@ -1,5 +1,6 @@
 import { buildScene, clipPlacement, copyNodes, isClipboard, paperContents, parseDocument, pasteNodes, pasteOffset, relocateClip, rootOf, withPlacement, type Document, type Node, type Op, type Transform } from '@opencalque/core'
 import { registry } from '../extensions'
+import { placePicture } from '../floorplan'
 import { t } from '../i18n'
 import { apply, select, useStore } from '../store'
 import { gridStep, visibleArea } from '../view'
@@ -64,23 +65,50 @@ export const cutSelection = () =>
   })
 
 /**
+ * What the system clipboard holds: its text, and the picture on it when there is one (copied from
+ * a web page, or a screenshot). Both empty when the browser does not let the page read it.
+ */
+async function readClipboard(): Promise<{ text: string; picture: Blob | null }> {
+  const clipboard = navigator.clipboard
+  if (!clipboard) return { text: '', picture: null }
+  // All of it at once, which asks once; a browser that will not is asked for the text alone.
+  const items = await clipboard.read?.().catch(() => null)
+  if (!items) return { text: await clipboard.readText().catch(() => ''), picture: null }
+  let text = ''
+  let picture: Blob | null = null
+  for (const item of items) {
+    const image = item.types.find((type) => type.startsWith('image/'))
+    if (image && !picture) picture = await item.getType(image).catch(() => null)
+    if (item.types.includes('text/plain') && !text) text = await item.getType('text/plain').then((blob) => blob.text(), () => '')
+  }
+  return { text, picture }
+}
+
+/** The clipboard document a text holds, or null when it is not one. */
+function clipOf(text: string): Document | null {
+  try {
+    const clip = parseDocument(JSON.parse(text))
+    return isClipboard(clip) ? clip : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Pastes what is on the clipboard where the person is looking (see `pasteOffset`): where it was
  * when that is in view, beside it when the original is still there, else in the middle of the
  * view; chosen from the right-click menu, where the menu was opened. `inPlace` puts it exactly
  * where it was copied from, in view or not, which carries a thing to the same place on another page.
+ * A picture copied in another program is pasted as it is (`placePicture`), at the same place.
  */
 export const paste = (inPlace = false) => {
   // Read now, before the clipboard is: the menu that set it is gone by the time that answers.
   const at = get().menuPoint ?? undefined
   return guarded(async () => {
-    const text = (await navigator.clipboard?.readText().catch(() => '')) || lastCopy
-    let clip: Document
-    try {
-      clip = parseDocument(JSON.parse(text))
-    } catch {
-      return toast(t('There is nothing from OpenCalque on the clipboard.'))
-    }
-    if (!isClipboard(clip)) return toast(t('There is nothing from OpenCalque on the clipboard.'))
+    const { text, picture } = await readClipboard()
+    if (!clipOf(text) && picture) return placePicture(new Uint8Array(await picture.arrayBuffer()), at)
+    let clip = clipOf(text || lastCopy)
+    if (!clip) return toast(t('There is nothing from OpenCalque on the clipboard.'))
     // Taken from where it was seen to the same place as seen from here: out of a component it was cut from, onto the page.
     const from = clipPlacement(clip)
     const to = scopePlacement()

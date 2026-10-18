@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, Layers, Link2, Pipette, Plus, Unlink } from 'lucide-react'
 import { create } from 'zustand'
-import { colorRef, colorRefOf, colorsOf, LAYER_COLOR, newId, parseColor, PATTERN_DEFAULTS, resolveColor, type Pattern } from '@opencalque/core'
-import { msg, t } from './i18n'
+import { colorRef, colorRefOf, colorsOf, LAYER_COLOR, newId, parseColor, resolveColor, type Document } from '@opencalque/core'
+import { FLOATING, useFloating } from './floating'
+import { t } from './i18n'
 import { apply, collapseHistory, useStore } from './store'
-import { Field } from './ui'
 
 /** Hue in degrees, then how vivid and how bright, each from 0 to 1, and how opaque, from 0 (not at all) to 1. */
 interface Hsv {
@@ -193,78 +193,119 @@ function Picker({ value, onChange, onSettle, actions }: { value: string; onChang
   )
 }
 
-/** The patterns a fill can have, each with its name and a small picture of its strokes. */
-const PATTERNS: [kind: string, name: string, picture: string][] = [
-  ['Lines', msg('Lines'), 'M-2 16 12 2M6 20 22 4M16 22 30 8'],
-  ['Cross', msg('Cross-hatch'), 'M-2 16 12 2M6 20 22 4M16 22 30 8M-2 4 12 18M6 0 22 16M16 -2 30 12'],
-  ['Planks', msg('Planks'), 'M2 5h24M2 10h24M2 15h24M10 5v5M20 10v5M6 10v5M16 15v3M14 2v3'],
-  ['Tiles', msg('Tiles'), 'M2 3h24M2 9h24M2 15h24M8 1v16M14 1v16M20 1v16'],
-  ['Dots', msg('Dots (concrete)'), 'M4 5h1.4M11 5h1.4M18 5h1.4M25 5h1.4M7.5 9h1.4M14.5 9h1.4M21.5 9h1.4M4 13h1.4M11 13h1.4M18 13h1.4M25 13h1.4'],
-  ['Zigzag', msg('Zigzag (insulation)'), 'M1 14 5 4 9 14 13 4 17 14 21 4 25 14 27 9'],
-]
+/** The layer a colour can follow (`LAYER_COLOR`), as a colour field is told it. */
+export interface LayerOption {
+  /** Its colour. Not its name: the Layer field above already says which it is. */
+  color: string
+  /** Whether the objects being set are on different layers. */
+  several: boolean
+  /** Whether no colour at all already means it, as a stroke's does. */
+  byDefault: boolean
+}
+
+/** What a colour property comes to: the shared colour it links to, whether it follows the layer, and the colour painted. */
+export function colorState(doc: Document, stored: string | undefined, fallback: string, layer?: LayerOption) {
+  const linked = colorRefOf(stored)
+  const shared = linked === null ? undefined : doc.colors?.[linked]
+  // Following the layer: said so, or meant by having no colour where that is what no colour means.
+  const followsLayer = layer !== undefined && (stored === LAYER_COLOR || (stored === undefined && layer.byDefault))
+  const layerTitle = layer && (layer.several ? t('Follows the colour of each one’s layer') : t('Follows the colour of its layer'))
+  // What is painted: the layer's, the shared colour's value, the property's own colour, or what it falls back on.
+  const shown = followsLayer ? layer!.color : (resolveColor(doc, stored) ?? fallback)
+  return { linked, shared, followsLayer, layerTitle, shown }
+}
+
+/** The colour picked last, offered first where a colour must be chosen for something that had none. */
+export const lastColor = (): string | undefined => useRecent.getState().colors[0]
 
 /**
- * What a fill is patterned with, as rows of the Fill section: the kind of pattern from a row of
- * pictures, "none" first, then, once there is one, how far apart its strokes are, how they are
- * turned and their colour. `none` false leaves out the "none" picture, where something else says
- * whether there is a pattern (a wall type's tick box). `faint` shows a pattern taken from elsewhere.
+ * What a colour window holds: a picker for any colour, then the layer's colour, the colours
+ * picked lately and the drawing's shared colours, and a way back to no colour of its own. It is
+ * the window of a colour field, and the Solid page of a fill's (`FillChoice`). `noReset` leaves
+ * out the way back, where something beside the panel already gives it (the None tab of a fill).
  */
-export function PatternRows({ label, value, onChange, none = true, mixed = false, faint = false }: { label?: string; value: Pattern | undefined; onChange: (next: Pattern | undefined) => void; none?: boolean; mixed?: boolean; faint?: boolean }) {
-  const patterned = value && value.kind !== 'None' ? value : undefined
-  const usual = (patterned && PATTERN_DEFAULTS[patterned.kind]) ?? { spacing: 100, angle: 0 }
-  const keep = (stroke: string | undefined) => (stroke === undefined ? {} : { stroke })
+export function ColorPanel(props: { stored: string | undefined; fallback: string; unset?: string; commit: (value: unknown) => void; close: () => void; layer?: LayerOption; plain?: boolean; noReset?: boolean }) {
+  const { stored, fallback, unset, commit, close, layer, plain, noReset } = props
+  const doc = useStore((s) => s.doc)
+  const recent = useRecent((s) => s.colors)
+  const { linked, shared, followsLayer, layerTitle, shown } = colorState(doc, stored, fallback, layer)
+  const colors = colorsOf(doc)
+  /** Makes a shared colour out of the one shown and links this property to it. */
+  const share = () => {
+    const id = newId('color')
+    if (apply([{ op: 'add_color', color: { id, name: t('Colour {n}', { n: colors.length + 1 }), value: shown } }])) commit(colorRef(id))
+  }
   return (
-    <div className="pattern-rows">
-      {/* Not a label: a label would hand every click to the first button in it. */}
-      <div className="field">
-        {label !== undefined && <span>{label}</span>}
-        <div className={`end-picker pattern-picker${faint ? ' faint-choice' : ''}`} role="radiogroup" aria-label={t('Pattern')}>
-          {none && (
-            <button type="button" role="radio" aria-checked={!patterned && !mixed} className={!patterned && !mixed ? 'active' : ''} title={t('No pattern')} aria-label={t('No pattern')} onClick={() => onChange(undefined)}>
-              <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round">
-                <path d="M9 14 19 4" opacity="0.6" />
-              </svg>
+    <>
+      <Picker
+        value={shown}
+        onChange={commit}
+        onSettle={remember}
+        actions={
+          // Linked, as the ticked shared colour below shows: one button, beside the eyedropper, lets it go.
+          linked && (
+            <button
+              type="button"
+              className="color-eyedropper"
+              title={`${t('Unlink from “{name}”', { name: shared?.name ?? t('Missing colour') })}. ${t('It keeps this colour, as its own, and no longer follows the shared one.')}`}
+              aria-label={t('Unlink from “{name}”', { name: shared?.name ?? t('Missing colour') })}
+              onClick={() => commit(shown)}
+            >
+              <Unlink size={14} />
             </button>
-          )}
-          {PATTERNS.map(([kind, name, picture]) => (
-            // Its own spacing and angle suit each pattern; choosing another starts from those again.
-            <button key={kind} type="button" role="radio" aria-checked={kind === patterned?.kind} className={kind === patterned?.kind ? 'active' : ''} title={t(name)} aria-label={t(name)} onClick={() => onChange({ kind, ...keep(patterned?.stroke) })}>
-              <svg width="28" height="18" viewBox="0 0 28 18" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round">
-                <path d={picture} />
-              </svg>
-            </button>
-          ))}
-        </div>
-      </div>
-      {patterned && (
+          )
+        }
+      />
+      {layer && (
+        <button type="button" className={`color-option${followsLayer ? ' active' : ''}`} title={layerTitle} onClick={() => (commit(layer.byDefault ? undefined : LAYER_COLOR), close())}>
+          <i style={swatch(layer.color)} />
+          <span>{t('Colour of the layer')}</span>
+          {followsLayer && <Check size={12} />}
+        </button>
+      )}
+      {recent.length > 0 && (
         <>
-          <Field label={t('Spacing')} numeric length min={1} value={patterned.spacing ?? usual.spacing} onCommit={(spacing: number) => spacing > 0 && onChange({ ...patterned, spacing })} />
-          <Field label={t('Angle')} numeric value={patterned.angle ?? usual.angle} onCommit={(angle: number) => onChange({ ...patterned, angle })} />
-          <div className="field">
-            <span>{t('Strokes')}</span>
-            <ColorChoice
-              stored={patterned.stroke}
-              fallback="#9aa3b2"
-              unset={msg('default')}
-              commit={(stroke) => {
-                const { stroke: _, ...rest } = patterned
-                onChange({ ...rest, ...keep(stroke as string | undefined) })
-              }}
-            />
+          <h4>{t('Recent')}</h4>
+          <div className="color-swatches">
+            {recent.map((color) => (
+              <button key={color} type="button" title={color} aria-label={color} className={!linked && color === shown ? 'active' : ''} style={swatch(color)} onClick={() => (commit(color), remember(color))} />
+            ))}
           </div>
         </>
       )}
-    </div>
+      {!plain && <h4>{t('Shared colours')}</h4>}
+      {!plain &&
+        colors.map((color) => (
+          <button key={color.id} type="button" className={`color-option${color.id === linked ? ' active' : ''}`} title={t('Link to this shared colour')} onClick={() => commit(colorRef(color.id))}>
+            <i style={swatch(color.value)} />
+            <span>{color.name}</span>
+            {color.id === linked && <Check size={12} />}
+          </button>
+        ))}
+      {!linked && !plain && (
+        <button type="button" className="color-option" onClick={share}>
+          <Plus size={12} />
+          <span>{t('New shared colour')}</span>
+        </button>
+      )}
+      {stored !== undefined && !plain && !noReset && (
+        <button type="button" className="color-option color-reset" onClick={() => (commit(undefined), close())}>
+          <span>
+            {t('Reset')}
+            {unset ? ` (${t(unset)})` : ''}
+          </span>
+        </button>
+      )}
+    </>
   )
 }
 
 /**
- * A colour property: what it is now, and a window to change it from. The window always opens on
- * a picker for any colour, then the colours picked lately, then the drawing's shared colours. A
- * property linked to a shared colour shows that colour's name with a link and follows it whenever
- * it changes; picking another colour gives it one of its own again. `compact` shows only the
- * swatch, for a row of a list or a bar, where there is no room for the name. A fill's pattern is
- * not chosen here but on rows of its own, under the fill's colour (`PatternRows`).
+ * A colour property: what it is now, and a window to change it from (`ColorPanel`). A property
+ * linked to a shared colour shows that colour's name with a link and follows it whenever it
+ * changes; picking another colour gives it one of its own again. `compact` shows only the swatch,
+ * for a row of a list or a bar, where there is no room for the name. A fill is not chosen here but
+ * in a window of its own, which has this one's as its Solid page (`FillChoice`).
  */
 export function ColorChoice({
   stored,
@@ -275,94 +316,32 @@ export function ColorChoice({
   title,
   layer,
   plain,
+  caption,
 }: {
   stored: string | undefined
   fallback: string
   unset?: string
   commit: (value: unknown) => void
   compact?: boolean
+  /** For the swatch alone: a word said beside it, part of the button, as in the bar above the tools. */
+  caption?: string
   title?: string
-  /**
-   * The layer of what the colour is for, offered as a colour to follow (`LAYER_COLOR`): its colour,
-   * whether the objects being set are on different layers, and whether no colour at all already
-   * means it (a stroke's does). Not its name: the Layer field above already says which it is.
-   */
-  layer?: { color: string; several: boolean; byDefault: boolean }
+  /** The layer of what the colour is for, offered as a colour to follow (`LAYER_COLOR`). */
+  layer?: LayerOption
   /** Only a colour of its own: no shared colours to link to, as for the value of a shared colour itself. */
   plain?: boolean
 }) {
   const doc = useStore((s) => s.doc)
-  const recent = useRecent((s) => s.colors)
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLSpanElement>(null)
   const menu = useRef<HTMLDivElement>(null)
-  const [place, setPlace] = useState<{ left: number; top: number } | null>(null)
-  /** Set while the press that closed the window from elsewhere has not ended: the click it ends with must not open it again. */
-  const closing = useRef(false)
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (e: PointerEvent) => {
-      // The window is drawn outside the field (see below), so a press in either is not a press elsewhere.
-      if (!box.current?.contains(e.target as HTMLElement) && !menu.current?.contains(e.target as HTMLElement)) {
-        closing.current = true
-        // The click of that press reaches the window last, after any button it was on.
-        window.addEventListener('click', () => setTimeout(() => (closing.current = false)), { once: true })
-        setTimeout(() => (closing.current = false), 1500)
-        setOpen(false)
-      }
-    }
-    // The window is placed against the field once; when the panel scrolls under it, it closes.
-    const onScroll = (e: Event) => {
-      if (!(e.target instanceof Element) || !menu.current?.contains(e.target)) setOpen(false)
-    }
-    const onResize = () => setOpen(false)
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    window.addEventListener('pointerdown', onPointerDown, true)
-    window.addEventListener('scroll', onScroll, true)
-    window.addEventListener('resize', onResize)
-    window.addEventListener('keydown', onKey)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown, true)
-      window.removeEventListener('scroll', onScroll, true)
-      window.removeEventListener('resize', onResize)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open])
-  // The window has a width of its own, whatever the width of the field: it hangs under the field,
-  // ending where the field ends, goes above it when there is no room below, and stays in the window.
-  // It is placed once, when it opens: one that moved as its content grew or shrank (a pattern's
-  // settings shown or gone) would jump away from under the pointer between two clicks. What no
-  // longer fits below scrolls inside it.
-  useLayoutEffect(() => {
-    if (!open || !box.current || !menu.current) return setPlace(null)
-    if (place) return
-    const field = box.current.getBoundingClientRect()
-    const list = menu.current.getBoundingClientRect()
-    const margin = 8
-    const left = Math.min(Math.max(margin, field.right - list.width), window.innerWidth - list.width - margin)
-    const below = field.bottom + 4
-    const top = below + list.height + margin <= window.innerHeight ? below : Math.max(margin, field.top - 4 - list.height)
-    setPlace({ left, top })
-  }, [open, place])
-
-  const linked = colorRefOf(stored)
-  const shared = linked === null ? undefined : doc.colors?.[linked]
-  // Following the layer: said so, or meant by having no colour where that is what no colour means.
-  const followsLayer = layer !== undefined && (stored === LAYER_COLOR || (stored === undefined && layer.byDefault))
-  const layerTitle = layer && (layer.several ? t('Follows the colour of each one’s layer') : t('Follows the colour of its layer'))
-  // What is painted: the shared colour's value, the layer's, the property's own colour, or what it falls back on.
-  const shown = followsLayer ? layer!.color : (resolveColor(doc, stored) ?? fallback)
-  const colors = colorsOf(doc)
-
-  /** Makes a shared colour out of the one shown and links this property to it. */
-  const share = () => {
-    const id = newId('color')
-    if (apply([{ op: 'add_color', color: { id, name: t('Colour {n}', { n: colors.length + 1 }), value: shown } }])) commit(colorRef(id))
-  }
+  const close = () => setOpen(false)
+  const { closing, style } = useFloating(open, close, box, menu)
+  const { linked, shared, followsLayer, layerTitle, shown } = colorState(doc, stored, fallback, layer)
 
   return (
     // A click in the chooser is about the colour, not about the row it may sit in.
-    <span className={`color-choice${compact ? ' compact' : ''}`} ref={box} onClick={(e) => e.stopPropagation()}>
+    <span className={`color-choice${compact ? ' compact' : ''}${caption ? ' captioned' : ''}`} ref={box} onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
         className={`color-now${linked ? ' linked' : ''}`}
@@ -373,92 +352,46 @@ export function ColorChoice({
           setOpen(!open)
         }}
       >
-        {/* A layer with no colour of its own shows an empty swatch, crossed out, rather than black. */}
-        {compact && stored === undefined && unset && !followsLayer ? <i className="none" /> : <i style={swatch(shown)} />}
         {compact ? (
-          linked && <Link2 size={9} />
-        ) : stored === LAYER_COLOR ? (
           <>
-            <Layers size={12} />
-            <span>{t('Layer')}</span>
+            <span className="swatch-box">
+              {/* A layer with no colour of its own shows an empty swatch, crossed out, rather than black. */}
+              {stored === undefined && unset && !followsLayer ? <i className="none" /> : <i style={swatch(shown)} />}
+              {linked ? <Link2 size={9} /> : followsLayer && <Layers size={9} />}
+            </span>
+            {caption && <span>{caption}</span>}
           </>
-        ) : linked ? (
-          <>
-            <Link2 size={12} />
-            <span>{shared?.name ?? t('Missing colour')}</span>
-          </>
-        ) : stored === undefined ? (
-          <em className="faint">{unset && t(unset)}</em>
         ) : (
-          <span>{shown}</span>
+          <>
+            <i style={swatch(shown)} />
+            {stored === LAYER_COLOR ? (
+              <>
+                <Layers size={12} />
+                <span>{t('Layer')}</span>
+              </>
+            ) : linked ? (
+              <>
+                <Link2 size={12} />
+                <span>{shared?.name ?? t('Missing colour')}</span>
+              </>
+            ) : stored === undefined ? (
+              <em className="faint">{unset && t(unset)}</em>
+            ) : (
+              <span>{shown}</span>
+            )}
+          </>
         )}
       </button>
       {open &&
         // Drawn at the top of the page, not inside the field: a bar that is moved into place with a
         // transform would otherwise take the window along and put it somewhere else.
         createPortal(
-          <div className="color-menu" ref={menu} style={place ? { left: place.left, top: place.top, maxHeight: `calc(100vh - ${place.top + 8}px)` } : { visibility: 'hidden' }} onClick={(e) => e.stopPropagation()}>
-            <Picker
-              value={shown}
-              onChange={commit}
-              onSettle={remember}
-              actions={
-                // Linked, as the ticked shared colour below shows: one button, beside the eyedropper, lets it go.
-                linked && (
-                  <button
-                    type="button"
-                    className="color-eyedropper"
-                    title={`${t('Unlink from “{name}”', { name: shared?.name ?? t('Missing colour') })}. ${t('It keeps this colour, as its own, and no longer follows the shared one.')}`}
-                    aria-label={t('Unlink from “{name}”', { name: shared?.name ?? t('Missing colour') })}
-                    onClick={() => commit(shown)}
-                  >
-                    <Unlink size={14} />
-                  </button>
-                )
-              }
-            />
-            {layer && (
-              <button type="button" className={`color-option${followsLayer ? ' active' : ''}`} title={layerTitle} onClick={() => (commit(layer.byDefault ? undefined : LAYER_COLOR), setOpen(false))}>
-                <i style={swatch(layer.color)} />
-                <span>{t('Colour of the layer')}</span>
-                {followsLayer && <Check size={12} />}
-              </button>
-            )}
-            {recent.length > 0 && (
-              <>
-                <h4>{t('Recent')}</h4>
-                <div className="color-swatches">
-                  {recent.map((color) => (
-                    <button key={color} type="button" title={color} aria-label={color} className={!linked && color === shown ? 'active' : ''} style={swatch(color)} onClick={() => (commit(color), remember(color))} />
-                  ))}
-                </div>
-              </>
-            )}
-            {!plain && <h4>{t('Shared colours')}</h4>}
-            {!plain && colors.map((color) => (
-              <button key={color.id} type="button" className={`color-option${color.id === linked ? ' active' : ''}`} title={t('Link to this shared colour')} onClick={() => commit(colorRef(color.id))}>
-                <i style={swatch(color.value)} />
-                <span>{color.name}</span>
-                {color.id === linked && <Check size={12} />}
-              </button>
-            ))}
-            {!linked && !plain && (
-              <button type="button" className="color-option" onClick={share}>
-                <Plus size={12} />
-                <span>{t('New shared colour')}</span>
-              </button>
-            )}
-            {stored !== undefined && !plain && (
-              <button type="button" className="color-option color-reset" onClick={() => (commit(undefined), setOpen(false))}>
-                <span>
-                  {t('Reset')}
-                  {unset ? ` (${t(unset)})` : ''}
-                </span>
-              </button>
-            )}
+          <div className={`color-menu ${FLOATING}`} ref={menu} style={style} onClick={(e) => e.stopPropagation()}>
+            <ColorPanel stored={stored} fallback={fallback} unset={unset} commit={commit} close={close} layer={layer} plain={plain} />
           </div>,
           document.body,
         )}
     </span>
   )
 }
+

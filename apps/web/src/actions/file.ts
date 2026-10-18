@@ -6,6 +6,7 @@ import { pdfFonts } from '../pdfFonts'
 import { platform, type OpenedFile } from '../platform'
 import { usePrefs } from '../prefs'
 import { recoverable } from '../recovery'
+import { hideSplash } from '../splash'
 import { apply, cancel, isDirty, loadDocument, select, useStore } from '../store'
 import { imperialUnit } from '../units'
 import { toast, useWindows } from '../windows'
@@ -82,22 +83,30 @@ export const openRequested = (file: OpenedFile) =>
 
 let started = false
 
+/** How long the loading screen may wait for `startUp` before the editor is shown anyway, in milliseconds. */
+const SPLASH_LIMIT = 8000
+
 /**
  * What happens once when the app starts: the file it was launched with is opened, or, without
- * one, the welcome window offers where to begin.
+ * one, the welcome window offers where to begin. The loading screen covers the editor until then.
  */
 export const startUp = () =>
   guarded(async () => {
     // The interface is rebuilt when the language changes; the app starts only once.
     if (started) return
     started = true
-    // Unsaved work from a window that stopped without closing is offered back in the welcome window.
-    const lost = (await recoverable()).length > 0
-    const file = await platform.initial()
-    if (file) openFile(file)
-    if (lost || (!file && usePrefs.getState().showWelcome)) useWindows.setState({ welcomeOpen: true })
-    // Asked only now, so that a drawing the app was started for counts as the one it was launched with.
-    platform.onOpenFile?.((file) => openRequested(file))
+    // Browser storage that never answers must not keep the editor hidden.
+    setTimeout(hideSplash, SPLASH_LIMIT)
+    try {
+      // Unsaved work from a window that stopped without closing is offered back in the welcome window.
+      const [kept, file] = await Promise.all([recoverable(), platform.initial()])
+      if (file) openFile(file)
+      if (kept.length > 0 || (!file && usePrefs.getState().showWelcome)) useWindows.setState({ welcomeOpen: true })
+      // Asked only now, so that a drawing the app was started for counts as the one it was launched with.
+      platform.onOpenFile?.((file) => openRequested(file))
+    } finally {
+      hideSplash()
+    }
   })
 
 /** Opens the drawing that comes with the app, as a new one with no file: a furnished flat to explore. */

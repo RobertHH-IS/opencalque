@@ -1,4 +1,4 @@
-import { add, DEFAULT_PAPER_SCALE, dist, len, norm, PAPER_FORMATS, paperSize, perp, scale, sub, wallArc, wallEdgeLines, wallMiddle, wallSides, type Document, type NodeInput, type NodeOf, type Op, type SnapKind, type Vec2 } from '@opencalque/core'
+import { add, DEFAULT_PAPER_SCALE, dist, len, norm, PAPER_FORMATS, paperSize, perp, scale, sub, wallArc, wallEdgeLines, wallMiddle, wallSides, type Document, type NodeInput, type NodeOf, type Op, type SnapKind, type Style, type Vec2 } from '@opencalque/core'
 import { dimensionToolLook } from '../actions'
 import { registry } from '../extensions'
 import { t } from '../i18n'
@@ -100,12 +100,13 @@ export function paperLabel(paper: { x: number; y: number; width: number; height:
 }
 
 /**
- * The look given to what is drawn next, as chosen in the bar above the tools: a colour, a line
- * weight, a kind of line. Nothing at all when each is left to the layer and the defaults.
+ * The look given to what is drawn next, as chosen in the bar above the tools: the colour of its
+ * lines and, for a closed shape, its fill. Nothing at all when its lines are left to the layer and
+ * it has no fill. Weights and kinds of line are set afterwards, in the properties.
  */
-export function currentStyle(inkOnly = false): { style?: { stroke?: string; strokeWidth?: number; dash?: number[] } } {
-  const { drawColor, drawWeight, drawDash } = get()
-  const style = { ...(drawColor ? { stroke: drawColor } : {}), ...(!inkOnly && drawWeight ? { strokeWidth: drawWeight } : {}), ...(!inkOnly && drawDash ? { dash: drawDash } : {}) }
+export function currentStyle(closed = false): { style?: Style } {
+  const { drawColor, drawFill, drawPattern } = get()
+  const style = { ...(drawColor ? { stroke: drawColor } : {}), ...(closed && drawFill ? { fill: drawFill } : {}), ...(closed && drawPattern ? { pattern: drawPattern } : {}) }
   return Object.keys(style).length > 0 ? { style } : {}
 }
 
@@ -165,7 +166,7 @@ export function wallOps(id: string, a: Vec2, b: Vec2): Op[] {
 /** The node a two-point tool makes from its two points. */
 export function shape(tool: Tool, id: string, a: Vec2, b: Vec2, offset = 0): NodeInput {
   const { scope, activeLayer, wallThickness, wallType, annotationTemplate, paperScale, base, doc } = get()
-  const common = { id, parent: scope, layer: activeLayer, ...(tool !== 'dimension' && tool !== 'paper' ? currentStyle() : {}) }
+  const common = { id, parent: scope, layer: activeLayer, ...(tool !== 'dimension' && tool !== 'paper' ? currentStyle(tool === 'rect' || tool === 'ellipse') : {}) }
   switch (tool) {
     case 'paper': {
       // Counted in the drawing as it was before this paper started to be drawn.
@@ -206,5 +207,5 @@ export const axisOf = (from: Vec2, to: Vec2): Overlay['axis'] => {
 /** The polyline the line tool makes from the points clicked. */
 export const polyline = (id: string, points: Vec2[], closed: boolean): NodeInput => {
   const { scope, activeLayer } = get()
-  return { id, type: 'polyline', parent: scope, layer: activeLayer, points, closed, ...currentStyle() }
+  return { id, type: 'polyline', parent: scope, layer: activeLayer, points, closed, ...currentStyle(closed) }
 }

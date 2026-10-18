@@ -60,6 +60,8 @@ export const cropModifier: ModifierKind = {
 /** Patterns a hatch can draw. The names are what is stored, and what is translated for display. */
 export const HATCH_PATTERNS = ['Lines', 'Cross', 'Planks', 'Tiles', 'Dots', 'Zigzag'] as const
 export const HATCH_INK = '#9aa3b2'
+/** The weight of a pattern's strokes, in screen pixels, when it does not say. */
+export const HATCH_WEIGHT = 0.6
 /** The spacing in mm and the angle in degrees each pattern has when a fill does not say. */
 export const PATTERN_DEFAULTS: Record<string, { spacing: number; angle: number }> = {
   Lines: { spacing: 100, angle: 45 },
@@ -154,7 +156,7 @@ export const hatchModifier: ModifierKind = {
     ...prims,
     ...prims.flatMap((prim): Primitive[] =>
       prim.kind === 'path' && prim.closed && prim.points.length >= 3
-        ? hatchStrokes(prim.points, params, frame).map((points): Primitive => ({ kind: 'path', points, stroke: HATCH_INK, strokeWidth: 0.6, texture: true, backdrop: prim.backdrop, clip: [...(prim.clip ?? []), prim.points] }))
+        ? hatchStrokes(prim.points, params, frame).map((points): Primitive => ({ kind: 'path', points, stroke: HATCH_INK, strokeWidth: HATCH_WEIGHT, texture: true, backdrop: prim.backdrop, clip: [...(prim.clip ?? []), prim.points] }))
         : [],
     ),
   ],

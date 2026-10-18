@@ -9,6 +9,7 @@ import { usePrefs } from './prefs'
 import { loadExtensions, registry, useExtensions } from './extensions'
 import { loadDocument } from './store'
 import { startTheme } from './theme'
+import { startUpdates } from './updates'
 import './styles.css'
 
 // The language is known only now, so the first empty drawing is made here, with its page and
@@ -16,6 +17,7 @@ import './styles.css'
 loadExtensions()
 setLanguage(usePrefs.getState().language, registry.translations)
 startTheme()
+startUpdates()
 loadDocument(blankDocument(), null)
 
 /** Rebuilds the whole interface when the language or the unit changes; drawing and settings live outside it. */

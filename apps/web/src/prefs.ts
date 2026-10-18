@@ -21,6 +21,8 @@ export interface Prefs {
   autosave: boolean
   /** Offer a new drawing, a file or the example in a window when the app starts. */
   showWelcome: boolean
+  /** Desktop app: look for a newer version when the app starts, and download it where it can install it. */
+  checkUpdates: boolean
   showGrid: boolean
   snapToGrid: boolean
   snapToObjects: boolean
@@ -71,6 +73,7 @@ const DEFAULTS: Prefs = {
   fraction: 16,
   autosave: true,
   showWelcome: true,
+  checkUpdates: true,
   showGrid: true,
   snapToGrid: true,
   snapToObjects: true,

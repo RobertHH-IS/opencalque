@@ -748,6 +748,7 @@ body.scrubbing .quick-field input[title] {
 }
 
 .color-now > i,
+.swatch-box > i,
 .color-option > i {
   flex: none;
   width: 14px;
@@ -1669,6 +1670,13 @@ button.crumb.ahead:hover {
   font-size: 11px;
 }
 
+/* A newer version of the desktop app, at the end of the menu bar. */
+.menubar-update {
+  flex: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .assistant-actions .icon-button {
   width: 26px;
   height: 26px;
@@ -2139,16 +2147,6 @@ button.crumb.ahead:hover {
   text-align: right;
 }
 
-.quick-color {
-  width: 18px;
-  height: 18px;
-  margin: 0 3px;
-  padding: 0;
-  border: 2px solid var(--bg);
-  border-radius: 50%;
-  cursor: pointer;
-}
-
 .quick-select {
   height: 24px;
   margin-left: 6px;
@@ -2159,10 +2157,6 @@ button.crumb.ahead:hover {
   font: inherit;
   font-size: 11px;
   cursor: pointer;
-}
-
-.quick-color.active {
-  box-shadow: 0 0 0 2px var(--accent);
 }
 
 /* A lighter line for the tool icons than the icon set's default. */
@@ -2496,17 +2490,6 @@ button.crumb.ahead:hover {
   outline: none;
 }
 
-/* In the bar above the tools the kinds of line sit in a row of their own width */
-.quickbar .dash-picker {
-  flex: none;
-  margin-left: 6px;
-}
-
-.quickbar .dash-picker button {
-  flex: none;
-  width: 30px;
-}
-
 /* The colour chooser as a swatch alone, in a row of a list or in a bar */
 
 .color-choice.compact {
@@ -2523,13 +2506,18 @@ button.crumb.ahead:hover {
   background: none;
 }
 
-.color-choice.compact .color-now > i {
+.color-choice.compact .swatch-box > i {
   width: 18px;
   height: 18px;
 }
 
-/* Linked to a shared colour: a small link in the corner of the swatch. */
-.color-choice.compact .color-now > svg {
+/* Linked to a shared colour, or following the layer: a small mark in the corner of the swatch. */
+.color-choice.compact .swatch-box {
+  position: relative;
+  display: flex;
+}
+
+.color-choice.compact .swatch-box > svg {
   position: absolute;
   right: -4px;
   bottom: -4px;
@@ -2539,12 +2527,29 @@ button.crumb.ahead:hover {
   color: var(--accent);
 }
 
-.quickbar .color-choice.compact {
-  margin-left: 4px;
+/* In the bar above the tools: the swatch and what it is for, said beside it, as one button. */
+.color-choice.compact.captioned .color-now {
+  width: auto;
+  height: 28px;
+  gap: 7px;
+  padding: 0 10px 0 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: var(--hover);
 }
 
-.quickbar .color-choice.compact .color-now > i {
-  border-radius: 50%;
+.color-choice.compact.captioned .color-now:hover {
+  border-color: var(--border);
+}
+
+.color-choice.compact.captioned .color-now > span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.color-choice.compact.captioned .swatch-box > i {
+  width: 16px;
+  height: 16px;
 }
 
 /* In a row of a list the swatch keeps its own size, whatever the row gives its other parts. */
@@ -3190,6 +3195,7 @@ select.faint-choice,
   position: fixed;
   z-index: 20;
   width: 136px;
+  overflow-y: auto;
   padding: 4px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -3339,7 +3345,8 @@ select.faint-choice,
 }
 
 /* A colour that is not set, in a row's swatch: empty, crossed out (a layer with no colour of its own) */
-.color-now > i.none {
+.color-now > i.none,
+.swatch-box > i.none {
   background: linear-gradient(to top right, transparent calc(50% - 0.75px), var(--danger) calc(50% - 0.75px), var(--danger) calc(50% + 0.75px), transparent calc(50% + 0.75px)), var(--bg);
 }
 
@@ -3434,4 +3441,87 @@ select.faint-choice,
   border-radius: 50%;
   background: transparent;
   box-shadow: 0 0 0 1px rgb(0 0 0 / 35%);
+}
+
+/* A fill's swatch: its pattern drawn over its colour */
+.fill-swatch {
+  position: relative;
+  overflow: hidden;
+}
+
+.fill-swatch > svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * The fill window: a tab for each kind of fill, then what that kind is set by. It is as tall as its
+ * tallest page from the start, so that it is placed for it: changing the kind of fill neither moves
+ * the window from under the pointer nor makes it run off the screen.
+ */
+.fill-menu {
+  width: 256px;
+  min-height: 408px;
+}
+
+.fill-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 8px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--hover);
+}
+
+/* On one line each: a longer name takes the room the shorter ones leave. */
+.fill-tabs button {
+  flex: 1;
+  height: 24px;
+  white-space: nowrap;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.fill-tabs button:hover {
+  color: var(--text);
+}
+
+.fill-tabs button.active {
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 8%);
+  color: var(--text);
+}
+
+.fill-menu > .hint {
+  margin: 4px 4px 6px;
+}
+
+.hatch-preview {
+  height: 72px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  border: 1px solid var(--swatch-edge);
+  border-radius: 6px;
+}
+
+.hatch-preview > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Its rows are those of the properties, in a narrower window. */
+.fill-menu .field {
+  padding: 2px 0;
+}
+
+.fill-menu .field > span {
+  width: 68px;
 }
