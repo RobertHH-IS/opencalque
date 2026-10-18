@@ -790,7 +790,6 @@ export const es: Record<string, string> = {
   "points go on what is drawn, not on the grid": "los puntos se colocan sobre el dibujo, no sobre la cuadrícula",
   "Paste in place": "Pegar en el mismo lugar",
   "It looks as its component does. Lines the component gives no colour take the colour of the layer it is placed on.": "Se ve como su componente. Las líneas a las que el componente no da color toman el de la capa en la que está colocado.",
-  "Take off its own stroke and fill": "Quitar su propio trazo y relleno",
   "A component looks as it is drawn, in the colour of its layer: change the component, or put it on another layer.": "Un componente se ve tal como está dibujado, en el color de su capa: modifique el componente o colóquelo en otra capa.",
   "keeps its proportions, from a corner": "mantiene sus proporciones, desde una esquina",
   "Drag the middle of a side to change one size, a corner to change both": "Arrastre el centro de un lado para cambiar una medida, una esquina para cambiar las dos",

@@ -1,6 +1,6 @@
 import { generateNKeysBetween } from 'fractional-indexing'
 import { colorRefsIn } from './colors'
-import { childrenOf, componentsOf, layersOf, leavesOf, newId } from './document'
+import { childrenOf, componentsOf, layerIn, layersOf, leavesOf, newId, rootOf } from './document'
 import { cloneOps } from './groups'
 import { moveOps, nodePrimitives } from './kinds'
 import { applyOps, OpError, type NodeInput, type Op } from './ops'
@@ -33,10 +33,14 @@ export function createComponent(
   const back = { x: -origin.x, y: -origin.y }
   const componentId = newId('component')
   const instanceId = newId()
+  // What goes into the component leaves its layer: the placement takes the first one, for all of it.
+  const layer = layerIn(doc, first.parent, nodes.find((n) => n.layer !== undefined)?.layer)
+  const inside = (n: Node): Node[] => childrenOf(doc, n.id).flatMap((child) => [child, ...inside(child)])
   const ops: Op[] = [
     { op: 'add_node', node: { type: 'component', id: componentId, name } },
     ...nodes.flatMap((n) => moveOps(doc, n, back)),
-    ...nodes.map((n): Op => ({ op: 'update_node', id: n.id, patch: { parent: componentId } })),
+    ...nodes.map((n): Op => ({ op: 'update_node', id: n.id, patch: { parent: componentId, layer: null } })),
+    ...nodes.flatMap(inside).flatMap((n): Op[] => (n.layer === undefined ? [] : [{ op: 'update_node', id: n.id, patch: { layer: null } }])),
     {
       op: 'add_node',
       node: {
@@ -44,7 +48,7 @@ export function createComponent(
         id: instanceId,
         parent: first.parent,
         order: nodes[0].order,
-        layer: nodes[0].layer,
+        ...(layer ? { layer } : {}),
         component: componentId,
         x: origin.x,
         y: origin.y,
@@ -57,9 +61,10 @@ export function createComponent(
 /**
  * Puts copies of what a component holds in the place of one of its instances, where the instance
  * drew them: they become objects of the drawing, which editing the component no longer changes.
- * They take the instance's place in the stacking order. An instance with a style or modifiers of
- * its own leaves a group that keeps them, so that the drawing looks the same. Returns the new
- * document, the operations that make it, and the ids of what took its place.
+ * They take the instance's place in the stacking order and its layer, whose colour they were drawn
+ * in where the component gives none. An instance with modifiers leaves a group that keeps them, so
+ * that the drawing looks the same. Returns the new document, the operations that make it, and the
+ * ids of what took its place.
  */
 export function detachInstance(doc: Document, instanceId: string, registry: Registry): { doc: Document; ops: Op[]; ids: string[] } {
   const instance = doc.nodes[instanceId]
@@ -70,8 +75,8 @@ export function detachInstance(doc: Document, instanceId: string, registry: Regi
   // rectangle): its shapes are taken as they are drawn, as lines, shapes and texts in a group.
   if ((instance.scaleX ?? 1) !== 1 || (instance.scaleY ?? 1) !== 1) {
     const group = newId('group')
-    const { name = component.name, layer, style, modifiers } = instance
-    const own = { ...(name ? { name } : {}), ...(layer ? { layer } : {}), ...(style ? { style } : {}), ...(modifiers ? { modifiers } : {}) }
+    const { name = component.name, layer, modifiers } = instance
+    const own = { ...(name ? { name } : {}), ...(layer ? { layer } : {}), ...(modifiers ? { modifiers } : {}) }
     const ops: Op[] = [
       { op: 'add_node', node: { type: 'group', id: group, parent: instance.parent, order: instance.order, ...own } },
       ...primitiveNodes(placedShapes(doc, instance, registry), group, layer).map((node): Op => ({ op: 'add_node', node })),
@@ -80,14 +85,16 @@ export function detachInstance(doc: Document, instanceId: string, registry: Regi
     return { doc: applyOps(doc, ops), ops, ids: [group] }
   }
   const parts = childrenOf(doc, component.id)
-  const kept = instance.style !== undefined || (instance.modifiers?.length ?? 0) > 0
+  const kept = (instance.modifiers?.length ?? 0) > 0
+  const { layer } = instance
+  // What a component holds is on no layer: the copies, groups and all, go on the instance's.
+  const onLayer = (op: Op): Op => (layer !== undefined && op.op === 'add_node' ? { ...op, node: { ...op.node, layer } } : op)
   const ops: Op[] = []
   let into = instance.parent
   if (kept) {
     into = newId('group')
-    const { name = component.name, layer, style, modifiers } = instance
-    const own = { ...(name ? { name } : {}), ...(layer ? { layer } : {}), ...(style ? { style } : {}), ...(modifiers ? { modifiers } : {}) }
-    ops.push({ op: 'add_node', node: { type: 'group', id: into, parent: instance.parent, order: instance.order, ...own } })
+    const { name = component.name, modifiers } = instance
+    ops.push({ op: 'add_node', node: { type: 'group', id: into, parent: instance.parent, order: instance.order, ...(name ? { name } : {}), ...(layer ? { layer } : {}), ...(modifiers ? { modifiers } : {}) } })
   }
   // Loose, the copies go where the instance was among its siblings; in a group they keep the component's order.
   const siblings = childrenOf(doc, instance.parent)
@@ -96,7 +103,7 @@ export function detachInstance(doc: Document, instanceId: string, registry: Regi
   const placement = { x: instance.x, y: instance.y }
   const copies = parts.map((part, i) => {
     const copy = cloneOps(doc, part.id, placement, into)
-    ops.push(...copy.ops, ...(kept ? [] : [{ op: 'update_node', id: copy.id, patch: { order: orders[i] } } as Op]))
+    ops.push(...copy.ops.map(onLayer), ...(kept ? [] : [{ op: 'update_node', id: copy.id, patch: { order: orders[i] } } as Op]))
     return copy.id
   })
   ops.push({ op: 'remove_node', id: instanceId })
@@ -110,7 +117,8 @@ export function detachInstance(doc: Document, instanceId: string, registry: Regi
  * The operations that copy what is inside `from` (a page, component or group of `source`) into
  * `to` in `target`, with new ids, however deeply grouped. Pictures bring their files, and walls
  * and dimensions their type or style, unless the target has one of that id already; nodes go to
- * the target layer with the same name as theirs, else to `fallbackLayer`, else to none.
+ * the target layer with the same name as theirs, else to `fallbackLayer`, else to none, and to no
+ * layer at all inside a component.
  * `components` maps the source's component ids to the target's, for the instances among them.
  * With `onTop`, the nodes copied directly into `to` go on top of what is there, in the order they
  * had among themselves, rather than at the places in the stacking order they had where they came from.
@@ -124,6 +132,7 @@ export function transplantOps(
   options: { components: Record<string, string>; only?: Set<string>; fallbackLayer?: string; onTop?: boolean },
 ): { ops: Op[]; top: string[] } {
   const layerByName = new Map(layersOf(target).map((l) => [l.name, l.id]))
+  const layered = rootOf(target, to)?.type !== 'component'
   const ops: Op[] = []
   const top: string[] = []
   const copyInto = (parent: string, into: string, depth: number) => {
@@ -147,7 +156,7 @@ export function transplantOps(
         ops.push({ op: 'add_dimension_style', dimensionStyle })
       }
       const sourceLayer = child.layer === undefined ? undefined : source.layers[child.layer]
-      const layer = (sourceLayer && layerByName.get(sourceLayer.name)) ?? options.fallbackLayer
+      const layer = layered ? ((sourceLayer && layerByName.get(sourceLayer.name)) ?? options.fallbackLayer) : undefined
       const node = { ...child, id: newId(child.type === 'group' ? 'group' : 'n'), parent: into, layer }
       if (node.layer === undefined) delete node.layer
       // Added without an order, each goes on top of the last: the children are taken bottom first.

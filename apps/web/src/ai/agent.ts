@@ -33,7 +33,7 @@ export interface AgentHost {
     selection: string[]
     /** The wall corner selected in place of objects, if one is. */
     corner?: Vec2 | null
-    /** The layer new objects go on. */
+    /** The layer new objects go on; none inside a component. */
     activeLayer?: string
     /** The part of the drawing that is on screen, in millimetres. */
     visible?: Bounds | null
@@ -129,7 +129,7 @@ Kinds with "cutsWalls" are doors and windows. One cuts an opening when it lies o
 
 A "group" holds several nodes so they are selected, moved and stacked as one. It has no coordinates of its own: to group nodes, add a group and set their "parent" to its id; to move a group, move the nodes inside it. Its "opacity" (0 to 1, 1 when left out) makes everything inside it see-through.
 
-A "component" is a reusable definition and an "instance" places it, with "x", "y", "rotation", "scale" and "flipX", and "scaleX" and "scaleY" to stretch it wider or taller than it is drawn. To repeat the same furniture or symbol several times, make one component and place instances of it; changing the component changes them all. An instance has no look of its own: what its component draws without a colour takes the colour of the instance's layer, so to show placed furniture grey (existing) or red (to demolish), put the instances on a layer of that colour rather than giving them a style.
+A "component" is a reusable definition and an "instance" places it, with "x", "y", "rotation", "scale" and "flipX", and "scaleX" and "scaleY" to stretch it wider or taller than it is drawn. To repeat the same furniture or symbol several times, make one component and place instances of it; changing the component changes them all. An instance has no look of its own, and what a component holds has no layer: what the component draws without a colour takes the colour of the layer of each instance, so to show placed furniture grey (existing) or red (to demolish), put the instances on a layer of that colour. Giving an instance a "style", or a node inside a component a "layer", is refused.
 
 A shared colour (the document's "colors", managed with add_color, update_color and remove_color) is used by setting a colour property, such as style.stroke, style.fill or a layer's color, to "var(--<id>)"; changing the shared colour then recolours everything that refers to it. A colour property may also be "var(--layer)": the colour of the layer the node is on, for a fill or a text that should follow its layer as a stroke with no colour of its own already does.
 
@@ -152,7 +152,7 @@ Call apply_operations with a list of operations:
 - set_document: renames the drawing, and with "info" sets its project, client, address and author, which every sheet's title block shows.
 - add_asset embeds a picture's file for an image node; it is for the app's own imports, and you will not need it.
 
-Put new nodes where the person is working (the page, component or group named in the request context) unless they say otherwise, on the layer it names, or on another existing layer that suits them better.
+Put new nodes where the person is working (the page, component or group named in the request context) unless they say otherwise, on the layer it names, or on another existing layer that suits them better; inside a component, on no layer.
 
 When a request leaves out a detail you need, choose a sensible architectural default and say what you chose, rather than asking. Ask a short question only when the request could mean substantially different drawings. Change only what was asked: leave other nodes, and the properties you were not asked about, as they are.
 

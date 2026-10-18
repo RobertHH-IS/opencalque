@@ -8,7 +8,7 @@
     },
     "version": {
       "type": "number",
-      "const": 1
+      "const": 2
     },
     "id": {
       "type": "string",
@@ -458,6 +458,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -470,6 +471,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -532,8 +534,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -646,6 +647,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -658,6 +660,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -720,8 +723,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -851,6 +853,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -863,6 +866,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -925,8 +929,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -1040,6 +1043,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -1052,6 +1056,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -1114,8 +1119,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -1284,6 +1288,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -1296,6 +1301,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -1358,8 +1364,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -1522,6 +1527,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -1534,6 +1540,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -1596,8 +1603,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -1727,6 +1733,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -1739,6 +1746,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -1801,8 +1809,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -1927,6 +1934,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -1939,6 +1947,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -2001,8 +2010,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -2144,6 +2152,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -2156,6 +2165,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -2218,8 +2228,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -2382,6 +2391,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -2394,6 +2404,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -2456,8 +2467,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -2594,6 +2604,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -2606,6 +2617,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -2668,8 +2680,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -2814,6 +2825,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -2826,6 +2838,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -2888,8 +2901,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -3087,6 +3099,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -3099,6 +3112,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -3161,8 +3175,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -3481,6 +3494,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -3493,6 +3507,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -3555,8 +3570,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -3834,6 +3848,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -3846,6 +3861,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -3908,8 +3924,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -4052,6 +4067,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -4064,6 +4080,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -4126,8 +4143,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",
@@ -4271,6 +4287,7 @@
                 "description": "Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as \"a0\", \"a1\" or \"a0V\"; leave it out when adding a node to put it on top."
               },
               "layer": {
+                "description": "Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.",
                 "type": "string",
                 "minLength": 1
               },
@@ -4283,6 +4300,7 @@
                 "type": "boolean"
               },
               "style": {
+                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.",
                 "type": "object",
                 "properties": {
                   "stroke": {
@@ -4345,8 +4363,7 @@
                     }
                   }
                 },
-                "additionalProperties": false,
-                "description": "Overrides the look of a node. Unset values fall back to the node kind, then the layer color."
+                "additionalProperties": false
               },
               "modifiers": {
                 "description": "Modifiers applied to what this node draws, one after the other in this order. On a group or an instance they apply to everything it holds.",

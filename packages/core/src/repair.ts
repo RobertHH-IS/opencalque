@@ -105,6 +105,24 @@ export function repairDocument(input: Document): { doc: Document; repairs: strin
     }
   }
 
+  // What a component holds is on no layer, each placement giving its own, and a placement has no
+  // look of its own. A drawing of version 1 is brought there by its migration; this is for one
+  // written otherwise.
+  for (const { id } of Object.values(nodes)) {
+    const node = nodes[id]
+    if (node.layer !== undefined && !isContainer(node) && rootOf(doc, node.parent)?.type === 'component') {
+      const { layer: _, ...rest } = node
+      set(rest as Node)
+      repairs.push(`Node "${id}" is inside a component and was on layer "${node.layer}"; what a component holds is on no layer, and is drawn on the layer of each placement.`)
+    }
+    const now = nodes[id]
+    if (now.type === 'instance' && now.style !== undefined) {
+      const { style: _, ...rest } = now
+      set(rest)
+      repairs.push(`Component placement "${id}" had a style of its own, which was taken off: a placement looks as its component is drawn.`)
+    }
+  }
+
   for (const node of Object.values(nodes)) {
     if (node.type === 'wall') {
       if (node.wallType !== undefined && !doc.wallTypes?.[node.wallType]) {

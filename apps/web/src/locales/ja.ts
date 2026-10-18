@@ -790,7 +790,6 @@ export const ja: Record<string, string> = {
   "points go on what is drawn, not on the grid": "点はグリッドではなく描かれた図形にスナップします",
   "Paste in place": "同じ位置に貼り付け",
   "It looks as its component does. Lines the component gives no colour take the colour of the layer it is placed on.": "コンポーネントと同じ見た目になります。コンポーネントが色を指定していない線は、配置されたレイヤーの色になります。",
-  "Take off its own stroke and fill": "独自の線と塗りを外す",
   "A component looks as it is drawn, in the colour of its layer: change the component, or put it on another layer.": "コンポーネントは描かれたとおりに、レイヤーの色で表示されます。コンポーネントを編集するか、別のレイヤーに移してください。",
   "keeps its proportions, from a corner": "角からドラッグすると縦横比を保ちます",
   "Drag the middle of a side to change one size, a corner to change both": "辺の中央をドラッグすると片方の寸法、角をドラッグすると両方が変わります",

@@ -3,7 +3,7 @@ import { t } from '../i18n'
 import { platform } from '../platform'
 import { CLAUDE_MODELS, setAiPrefs, usePrefs, type Prefs } from '../prefs'
 import { registry } from '../extensions'
-import { applyOrThrow, collapseHistory, useStore } from '../store'
+import { applyOrThrow, collapseHistory, layerHere, useStore } from '../store'
 import { visibleArea } from '../view'
 import { runRequest, systemPrompt, TOOLS, type AgentHost, type RequestContext } from './agent'
 import { anthropicProvider } from './anthropic'
@@ -78,9 +78,10 @@ export const useChat = create(() => ({
 const host: AgentHost = {
   registry,
   state: () => {
-    const { doc, scope, selection, corner, activeLayer, view, viewport } = useStore.getState()
+    const state = useStore.getState()
+    const { doc, scope, selection, corner, view, viewport } = state
     const visible = visibleArea(view, viewport)
-    return { doc, scope, selection, corner, activeLayer, visible }
+    return { doc, scope, selection, corner, activeLayer: layerHere(state).layer, visible }
   },
   // Throws on a failed operation, which the agent reports back to the model.
   apply: applyOrThrow,

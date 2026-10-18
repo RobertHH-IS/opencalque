@@ -2,7 +2,7 @@ import { canSplit, hitTest, newId, roomAt, snapOpeningToWall, splitOps, splitPla
 import { pickStyle } from '../../actions'
 import { registry } from '../../extensions'
 import { t } from '../../i18n'
-import { apply, cancel, commit, preview } from '../../store'
+import { apply, cancel, commit, layerHere, preview } from '../../store'
 import { formatLength } from '../../units'
 import { gridStep } from '../../view'
 import { snap } from '../aim'
@@ -60,7 +60,7 @@ export const toolHover: Move<'idle'> = (c, _g, e, _at, world, out) => {
     if (roomAt(before, s.scope, world)) {
       const count = Object.values(before.nodes).filter((n) => n.type === 'room').length
       const name = t('Room {n}', { n: String(count + 1).padStart(2, '0') })
-      out.previewed = preview([{ op: 'add_node', node: { id: c.placed, type: 'room', parent: s.scope, layer: s.activeLayer, name, x: Math.round(world.x), y: Math.round(world.y) } }])
+      out.previewed = preview([{ op: 'add_node', node: { id: c.placed, type: 'room', parent: s.scope, ...layerHere(s), name, x: Math.round(world.x), y: Math.round(world.y) } }])
     } else {
       cancel()
       out.status = t('No closed space here: the walls around it must meet all the way round')
@@ -68,7 +68,7 @@ export const toolHover: Move<'idle'> = (c, _g, e, _at, world, out) => {
   } else if (s.tool === 'place' && s.placing) {
     const target = snap(c, world, e, [c.placed])
     out.marker = target.marker
-    const common = { id: c.placed, rotation: s.placingRotation, parent: s.scope, layer: s.activeLayer, x: target.p.x, y: target.p.y }
+    const common = { id: c.placed, rotation: s.placingRotation, parent: s.scope, ...layerHere(s), x: target.p.x, y: target.p.y }
     // Doors and windows jump onto the wall under the cursor and turn to follow it.
     const onWall =
       s.placing.type === 'parametric' && !e.altKey

@@ -37,6 +37,8 @@ function Selection({ nodes }: { nodes: Node[] }) {
   const update: Update = (patch) => apply(nodes.map((node): Op => ({ op: 'update_node', id: node.id, patch: patch(node) })))
   const node = nodes[0]
   const single = nodes.length === 1
+  // What a component holds is on no layer: each placement of it gives its own.
+  const layered = rootOf(doc, node.parent)?.type !== 'component'
   return (
     <>
       <Section title={single ? labelOf(doc, node) : t('{n} objects', { n: nodes.length })}>
@@ -44,17 +46,19 @@ function Selection({ nodes }: { nodes: Node[] }) {
             and a paper are the exceptions: their name is drawn, on the plan and in the title block.
             A room's is in its Name section, with the rest of what is written. */}
         {single && node.type === 'paper' && <Field label={t('Name')} value={node.name ?? ''} onCommit={(name) => update(() => ({ name: name || null }))} />}
-        <label className="field">
-          <span>{t('Layer')}</span>
-          <select value={node.layer ?? ''} onChange={(e) => update(() => ({ layer: e.target.value }))}>
-            {node.layer === undefined && <option value="">{t('None')}</option>}
-            {layersOf(doc).map((layer) => (
-              <option key={layer.id} value={layer.id}>
-                {layer.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {layered && (
+          <label className="field">
+            <span>{t('Layer')}</span>
+            <select value={node.layer ?? ''} onChange={(e) => update(() => ({ layer: e.target.value }))}>
+              {node.layer === undefined && <option value="">{t('None')}</option>}
+              {layersOf(doc).map((layer) => (
+                <option key={layer.id} value={layer.id}>
+                  {layer.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {/* Stacking, aligning and spacing are in the toolbar's Arrange menu, not here. */}
         {single && node.type === 'paper' && (
           <>
@@ -91,11 +95,6 @@ function Selection({ nodes }: { nodes: Node[] }) {
             <button className="text-button" onClick={() => editComponent(node.component, node)}>
               {t('Edit component')}
             </button>
-            {node.style && (
-              <button className="text-button" onClick={() => update(() => ({ style: null }))}>
-                {t('Take off its own stroke and fill')}
-              </button>
-            )}
             {(node.scaleX !== undefined || node.scaleY !== undefined) && (
               // Stretched by the sides of its frame: back to the proportions of its component, its corner where it is.
               <button className="text-button" onClick={() => update(() => ({ scaleX: null, scaleY: null }))}>

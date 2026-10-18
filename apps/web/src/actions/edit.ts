@@ -27,7 +27,7 @@ import {
 import { registry } from '../extensions'
 import { t, tn } from '../i18n'
 import { showPage } from '../navigation'
-import { apply, cancel, commit, select, setTool, useStore } from '../store'
+import { apply, cancel, commit, layerHere, select, setTool, useStore } from '../store'
 import { gridStep } from '../view'
 import { toast } from '../windows'
 import { withPaperContents } from './clipboard'
@@ -331,6 +331,6 @@ export function moveInOrder(ids: string[], target: string, after: boolean): void
 }
 
 export function runCommand(id: string): void {
-  const { doc, scope, selection, activeLayer } = get()
-  guarded(() => registry.commands.get(id)?.run({ doc, scope, selection, activeLayer, apply }))
+  const { doc, scope, selection } = get()
+  guarded(() => registry.commands.get(id)?.run({ doc, scope, selection, activeLayer: layerHere().layer, apply }))
 }

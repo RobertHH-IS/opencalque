@@ -284,9 +284,11 @@ A `.opencalque` file is JSON. JSON Schemas for documents and operations are in [
 
 Through every 1.x version:
 
-- **Drawings.** A drawing saved by 1.0 opens in every later version, with nothing in it lost or changed in meaning. A change to the format that an older version could not read raises its `version`, and every later version brings older drawings up to date as it reads them.
+- **Drawings.** A drawing saved by 1.0 opens in every later version, with nothing in it lost. A change to the format that an older version could not read raises its `version`, and every later version brings older drawings up to date as it reads them.
 - **Extensions written as data.** An extension with `"formatVersion": 1` keeps loading; what is added to the format is optional. Its schema is [`schema/extension.schema.json`](schema/extension.schema.json).
 - **Operations.** An operation valid in 1.0 (from a script, `opencalque apply` or the assistant) stays valid and means the same; new kinds of operation may be added.
+
+One exception, in 1.2 (format version 2): what a component holds is on no layer, each placement giving its own, and a placement of a component has no style. Operations that set either are refused, and drawings made before are brought up to date as they open, looking as they did save in rare cases the [changelog](CHANGELOG.md) lists. Drawings saved by 1.2 do not open in 1.0 and 1.1.
 
 The TypeScript packages of this repository are not published, and their code may change between versions.
 

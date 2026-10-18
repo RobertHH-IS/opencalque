@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { applyOps, createDocument, holdsChildren, layersOf, pagesOf, type Document, type NodeInput, type Op, type Pattern, type Vec2, wallEndsAt } from '@opencalque/core'
+import { applyOps, createDocument, holdsChildren, layerIn, layersOf, pagesOf, type Document, type NodeInput, type Op, type Pattern, type Vec2, wallEndsAt } from '@opencalque/core'
 import type { StoredFile } from './platform'
 import type { Tool } from './tools'
 import { MEASURE_TOOLS, ROOM_TOOLS, SHAPE_TOOLS, TEXT_TOOLS } from './tools'
@@ -323,6 +323,15 @@ export function select(ids: string[]): void {
 /** Selects the wall corner at a point, in place of any objects. */
 export function selectCorner(at: Vec2 | null): void {
   set({ selection: [], corner: at })
+}
+
+/**
+ * The layer of what is drawn or placed where the user is: the active one, but none inside a
+ * component, whose content is drawn on the layer of each placement. Spread into the new node.
+ */
+export function layerHere(s: Pick<State, 'doc' | 'scope' | 'activeLayer'> = get()): { layer?: string } {
+  const layer = layerIn(s.doc, s.scope, s.activeLayer)
+  return layer === undefined ? {} : { layer }
 }
 
 export const isDirty = (s: State = get()) => (s.base ?? s.doc) !== s.saved

@@ -252,6 +252,12 @@ function checkNode(d: Document, node: Node): void {
   }
   const root = rootOf(d, node.parent)
   if (!root) throw new OpError(`Node ${node.id}: is not inside any page or component`)
+  if (node.layer !== undefined && root.type === 'component') {
+    throw new OpError(`Node ${node.id}: what is inside a component has no layer, each placement of the component giving its own. Leave "layer" out.`)
+  }
+  if (node.type === 'instance' && node.style !== undefined) {
+    throw new OpError(`Node ${node.id}: an instance has no style; it looks as its component is drawn. Change the shapes inside the component, or put the instance on a layer of another colour.`)
+  }
   if (node.type === 'image' && !d.assets?.[node.asset]) throw new OpError(`Unknown asset "${node.asset}"`)
   if (node.type === 'dimension' && node.dimensionStyle !== undefined && !d.dimensionStyles?.[node.dimensionStyle]) throw new OpError(`Unknown dimension style "${node.dimensionStyle}"`)
   if (node.type === 'instance') {

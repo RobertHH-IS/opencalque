@@ -790,7 +790,6 @@ export const ko: Record<string, string> = {
   "points go on what is drawn, not on the grid": "점이 그리드가 아니라 그려진 것에 붙습니다",
   "Paste in place": "제자리에 붙여넣기",
   "It looks as its component does. Lines the component gives no colour take the colour of the layer it is placed on.": "컴포넌트와 같은 모양으로 보입니다. 컴포넌트가 색을 정하지 않은 선은 배치된 레이어의 색을 따릅니다.",
-  "Take off its own stroke and fill": "개별 선과 채우기 제거",
   "A component looks as it is drawn, in the colour of its layer: change the component, or put it on another layer.": "컴포넌트는 그려진 그대로, 레이어의 색으로 보입니다. 컴포넌트를 수정하거나 다른 레이어로 옮기세요.",
   "keeps its proportions, from a corner": "모서리에서 끌면 비율 유지",
   "Drag the middle of a side to change one size, a corner to change both": "변의 가운데를 끌면 한쪽 크기가, 모서리를 끌면 양쪽 크기가 바뀝니다",

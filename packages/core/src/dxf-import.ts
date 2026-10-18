@@ -1,4 +1,4 @@
-import { layersOf, newId } from './document'
+import { layersOf, newId, rootOf } from './document'
 import { DXF_CAP } from './dxf'
 import { dist, norm, perp, sub, type Bounds, type Vec2 } from './geometry'
 import type { LayerInput, NodeInput, Op } from './ops'
@@ -939,9 +939,11 @@ export function dxfOps(doc: Document, parent: string, text: string, options: Dxf
   }
 
   let added = 0
+  // Read into a component, what it holds is on no layer: each placement gives its own.
+  const layered = rootOf(doc, parent)?.type !== 'component'
   const emit = (made: Made, into: string) => {
     const id = made.children ? newId('group') : undefined
-    const layer = layerId(made.layer)
+    const layer = layered ? layerId(made.layer) : undefined
     ops.push({ op: 'add_node', node: { ...made.node, ...(id ? { id } : {}), parent: into, ...(layer ? { layer } : {}) } as NodeInput })
     if (!made.children && made.node.type !== 'paper') added++
     for (const child of made.children ?? []) emit(child, id!)

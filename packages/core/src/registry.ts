@@ -64,7 +64,8 @@ export interface CommandHost {
   /** The page or component currently being edited. */
   scope: string
   selection: string[]
-  activeLayer: string
+  /** The layer new objects go on; none inside a component, whose content takes the layer of each placement. */
+  activeLayer?: string
   apply(ops: Op[]): void
 }
 

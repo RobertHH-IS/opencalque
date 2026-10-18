@@ -6,6 +6,7 @@ import type { Tool } from '../tools'
 import { formatLength, formatNumber, unit } from '../units'
 import type { Overlay, SizeLabel, AngleMark } from './draw'
 import { BOXES, FORMAT_REACH } from './gesture'
+import { layerHere } from '../store'
 import { get } from './runtime'
 
 /* What the drawing tools make, and the sizes and labels shown while they make it. */
@@ -165,8 +166,8 @@ export function wallOps(id: string, a: Vec2, b: Vec2): Op[] {
 
 /** The node a two-point tool makes from its two points. */
 export function shape(tool: Tool, id: string, a: Vec2, b: Vec2, offset = 0): NodeInput {
-  const { scope, activeLayer, wallThickness, wallType, annotationTemplate, paperScale, base, doc } = get()
-  const common = { id, parent: scope, layer: activeLayer, ...(tool !== 'dimension' && tool !== 'paper' ? currentStyle(tool === 'rect' || tool === 'ellipse') : {}) }
+  const { scope, wallThickness, wallType, annotationTemplate, paperScale, base, doc } = get()
+  const common = { id, parent: scope, ...layerHere(), ...(tool !== 'dimension' && tool !== 'paper' ? currentStyle(tool === 'rect' || tool === 'ellipse') : {}) }
   switch (tool) {
     case 'paper': {
       // Counted in the drawing as it was before this paper started to be drawn.
@@ -178,7 +179,7 @@ export function shape(tool: Tool, id: string, a: Vec2, b: Vec2, offset = 0): Nod
       // A type that is still in the drawing: one chosen in another drawing is not.
       return { ...common, type: 'wall', a, b, thickness: wallThickness, ...(wallType && doc.wallTypes?.[wallType] ? { wallType } : {}) }
     case 'divider':
-      return { id, parent: scope, layer: activeLayer, type: 'divider', a, b }
+      return { id, parent: scope, ...layerHere(), type: 'divider', a, b }
     case 'annotation':
       // The tip is the first point clicked, the text goes at the second; the words are typed afterwards.
       return { ...annotationTemplate, ...common, type: 'annotation', a, b, text: '' } as NodeInput
@@ -206,6 +207,6 @@ export const axisOf = (from: Vec2, to: Vec2): Overlay['axis'] => {
 
 /** The polyline the line tool makes from the points clicked. */
 export const polyline = (id: string, points: Vec2[], closed: boolean): NodeInput => {
-  const { scope, activeLayer } = get()
-  return { id, type: 'polyline', parent: scope, layer: activeLayer, points, closed, ...currentStyle(closed) }
+  const { scope } = get()
+  return { id, type: 'polyline', parent: scope, ...layerHere(), points, closed, ...currentStyle(closed) }
 }

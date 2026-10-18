@@ -241,8 +241,8 @@ const placedFill = (field: FieldSpec): FieldSpec => (field.type === 'fill' && fi
 
 export function fieldsOf(node: Node, doc: Document): FieldSpec[] {
   const fields = FIELDS[node.type] ?? []
-  // One that was given a look of its own by an earlier version keeps it, shown so that it can be changed or taken off.
-  if (node.type === 'instance') return node.style ? [...fields, ...STYLE] : fields
+  // A placement looks as its component is drawn: it has no look of its own to set.
+  if (node.type === 'instance') return fields
   if (node.type !== 'parametric') return drawnSolid(doc, node.parent) ? fields.map(placedFill) : fields
   const params = registry.parametric.get(node.kind)?.params ?? []
   const own = params.map((p): FieldSpec => ({

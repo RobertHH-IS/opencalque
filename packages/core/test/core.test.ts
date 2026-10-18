@@ -282,12 +282,27 @@ describe('groups', () => {
     expect(Math.max(...after.map((b) => b.maxY))).toBeCloseTo(before.maxY)
   })
 
-  it('keeps the style of a detached instance on a group in its place', () => {
-    const made = createComponent(two(), registry, ['w1', 'w2'], 'Corner')
-    const styled = applyOps(made.doc, [{ op: 'update_node', id: made.instanceId, patch: { style: { stroke: '#ff0000' } } }])
-    const { doc, ids: [groupId] } = detachInstance(styled, made.instanceId, registry)
-    expect(doc.nodes[groupId]).toMatchObject({ type: 'group', name: 'Corner', style: { stroke: '#ff0000' } })
-    expect(childrenOf(doc, groupId).map((n) => n.type)).toEqual(['wall', 'wall'])
+  it('takes what goes into a component off its layer, groups and all, and puts the placement on it', () => {
+    const start = applyOps(two(), [
+      { op: 'add_layer', layer: { id: 'old', name: 'Existing', color: '#808080' } },
+      { op: 'update_node', id: 'w1', patch: { layer: 'old' } },
+      { op: 'update_node', id: 'w2', patch: { layer: 'old' } },
+    ])
+    const grouped = groupNodes(start, ['w2']).doc
+    const group = childrenOf(grouped, 'page_1').find((n) => n.type === 'group')!
+    const made = createComponent(applyOps(grouped, [{ op: 'update_node', id: group.id, patch: { layer: 'old' } }]), registry, ['w1', group.id], 'Corner')
+    expect(made.doc.nodes[made.instanceId]).toMatchObject({ layer: 'old' })
+    expect(['w1', 'w2', group.id].map((id) => made.doc.nodes[id].layer)).toEqual([undefined, undefined, undefined])
+  })
+
+  it('puts the copies of a detached instance on its layer, and keeps its modifiers on a group', () => {
+    const made = createComponent(applyOps(two(), [{ op: 'add_layer', layer: { id: 'old', name: 'Existing', color: '#808080' } }, { op: 'update_node', id: 'w1', patch: { layer: 'old' } }]), registry, ['w1', 'w2'], 'Corner')
+    const loose = detachInstance(made.doc, made.instanceId, registry)
+    expect(loose.ids.map((id) => loose.doc.nodes[id].layer)).toEqual(['old', 'old'])
+    const cropped = applyOps(made.doc, [{ op: 'update_node', id: made.instanceId, patch: { modifiers: [{ type: 'crop', frame: { x: 0, y: 0 }, params: { width: 500, height: 500 } }] } }])
+    const { doc, ids: [groupId] } = detachInstance(cropped, made.instanceId, registry)
+    expect(doc.nodes[groupId]).toMatchObject({ type: 'group', name: 'Corner', layer: 'old', modifiers: [{ type: 'crop' }] })
+    expect(childrenOf(doc, groupId).map((n) => [n.type, n.layer])).toEqual([['wall', 'old'], ['wall', 'old']])
     expect(parseDocument(JSON.parse(serializeDocument(doc)))).toEqual(doc)
   })
 })
@@ -370,8 +385,11 @@ describe('clipboard', () => {
     expect(inside.map((n) => n.type).sort()).toEqual(['instance', 'wall'])
     expect(inside.find((n) => n.type === 'wall')).toMatchObject({ a: { x: 0, y: 500 }, layer: 'layer_1' })
     expect(componentsOf(pasted.doc).map((c) => c.name)).toEqual(['Chair'])
+    // The placement goes to the layer of the same name; what the component holds is on none.
+    expect(inside.find((n) => n.type === 'instance')).toMatchObject({ layer: 'x' })
     const chair = childrenOf(pasted.doc, componentsOf(pasted.doc)[0].id)[0]
-    expect(chair).toMatchObject({ type: 'rect', layer: 'x' })
+    expect(chair.type).toBe('rect')
+    expect(chair.layer).toBeUndefined()
     // Pasting the same thing again reuses the component, and so does pasting another copy of it.
     expect(componentsOf(pasteNodes(pasted.doc, parseDocument(clip), 'page_1', { x: 0, y: 0 }).doc)).toHaveLength(1)
     const again = JSON.parse(JSON.stringify(copyNodes(doc, [groupId])))

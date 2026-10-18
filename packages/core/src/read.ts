@@ -1,4 +1,5 @@
 import * as z from 'zod'
+import { MIGRATIONS } from './migrations'
 import { repairDocument } from './repair'
 import { DocumentSchema, FORMAT, FORMAT_VERSION, FORMER_FORMAT, NODE_TYPES, type Document } from './schema'
 import { keepUnknown } from './unknown'
@@ -21,12 +22,6 @@ export class NewerFormatError extends Error {
     this.name = 'NewerFormatError'
   }
 }
-
-/**
- * The steps that bring a drawing from one version of the format to the next, as plain JSON: the
- * one at index 0 turns version 1 into version 2, and so on. There are none yet.
- */
-const MIGRATIONS: ((doc: Record<string, unknown>) => Record<string, unknown>)[] = []
 
 const isPlain = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 const invalid = (why: string) => new Error(`Not a valid OpenCalque document:\n${why}`)

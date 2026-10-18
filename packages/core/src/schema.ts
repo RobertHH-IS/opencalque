@@ -6,7 +6,7 @@ z.config({ jitless: true })
 export const FORMAT = 'opencalque'
 /** What `format` was before the project was renamed. Such drawings are still read. */
 export const FORMER_FORMAT = 'opencad'
-export const FORMAT_VERSION = 1
+export const FORMAT_VERSION = 2
 
 const Id = z.string().min(1)
 
@@ -118,10 +118,10 @@ const base = {
   order: z
     .string()
     .describe('Fractional index giving the z-order among siblings (plain string comparison, later = on top). A key of the fractional-indexing package, such as "a0", "a1" or "a0V"; leave it out when adding a node to put it on top.'),
-  layer: Id.optional(),
+  layer: Id.optional().describe('Id of the layer the node is on. A node inside a component has none: what a component holds is drawn on the layer of each of its instances.'),
   visible: z.boolean().optional().describe('Defaults to true.'),
   locked: z.boolean().optional().describe('Defaults to false.'),
-  style: StyleSchema.optional(),
+  style: StyleSchema.optional().describe('Overrides the look of a node. Unset values fall back to the node kind, then the layer color. An instance has none: it looks as its component is drawn.'),
   modifiers: z
     .array(ModifierSchema)
     .optional()

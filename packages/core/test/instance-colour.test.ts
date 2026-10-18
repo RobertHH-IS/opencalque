@@ -12,11 +12,10 @@ describe('the colour of a placed component', () => {
     { op: 'add_node', node: { id: 'logo', type: 'line', parent: 'chair', a: { x: 0, y: 0 }, b: { x: 400, y: 0 }, style: { stroke: '#0000ff' } } },
     { op: 'add_node', node: { id: 'table', type: 'component' } },
     { op: 'add_node', node: { id: 'top', type: 'rect', parent: 'table', x: 0, y: 0, width: 800, height: 800 } },
-    { op: 'add_node', node: { id: 'nested', type: 'instance', parent: 'table', component: 'chair', x: 0, y: 900, layer: 'demolish' } },
+    { op: 'add_node', node: { id: 'nested', type: 'instance', parent: 'table', component: 'chair', x: 0, y: 900 } },
     { op: 'add_node', node: { id: 'plain', type: 'instance', parent: 'page_1', component: 'chair', x: 0, y: 0 } },
     { op: 'add_node', node: { id: 'grey', type: 'instance', parent: 'page_1', component: 'chair', x: 0, y: 0, layer: 'existing' } },
     { op: 'add_node', node: { id: 'set', type: 'instance', parent: 'page_1', component: 'table', x: 0, y: 0, layer: 'existing' } },
-    { op: 'add_node', node: { id: 'old', type: 'instance', parent: 'page_1', component: 'chair', x: 0, y: 0, layer: 'existing', style: { stroke: '#00aa00' } } },
   ] as Op[])
 
   it('draws what the component leaves uncoloured in the colour of the layer it is placed on', () => {
@@ -24,13 +23,15 @@ describe('the colour of a placed component', () => {
     expect(strokes(doc, 'grey')).toEqual(['#808080', '#0000ff'])
   })
 
-  it('lets a component placed inside another take its own layer, or else the outer one', () => {
-    // The table top in grey, the chair inside it in the red of its own layer, its logo blue.
-    expect(strokes(doc, 'set')).toEqual(['#808080', '#ff0000', '#0000ff'])
+  it('draws a component placed inside another in the colour of the outer placement', () => {
+    // The table top and the chair inside it in grey, its logo blue.
+    expect(strokes(doc, 'set')).toEqual(['#808080', '#808080', '#0000ff'])
   })
 
-  it('keeps the look an instance was given by an earlier version', () => {
-    expect(strokes(doc, 'old')).toEqual(['#00aa00', '#00aa00'])
+  it('gives a placement no look of its own, and what a component holds no layer', () => {
+    expect(() => applyOps(doc, [{ op: 'update_node', id: 'grey', patch: { style: { stroke: '#00aa00' } } }])).toThrow(/an instance has no style/)
+    expect(() => applyOps(doc, [{ op: 'update_node', id: 'seat', patch: { layer: 'demolish' } }])).toThrow(/has no layer/)
+    expect(() => applyOps(doc, [{ op: 'update_node', id: 'nested', patch: { layer: 'demolish' } }])).toThrow(/has no layer/)
   })
 })
 

@@ -6,9 +6,13 @@ heading per version, then `### New`, `### Improved` or `### Fixed` with one line
 
 ## 1.2.0
 
+A change of the format that breaks with 1.0 on one point: what a component holds is no longer on a layer, and a placed component no longer has a stroke or fill of its own. Drawings made before are brought up to date as they open and look as they did, but for the rare cases listed under Improved. Scripts that set either are refused with a message saying what to do instead, and drawings saved by this version do not open in 1.0 and 1.1.
+
 ### Improved
 - Words that keep things apart. The window that lists everything that can be placed is the Object library: it holds components, which you draw and edit from inside, and parametric objects, drawn from their sizes and options, which the properties now call so. Object › Create component is Object › Make into a component, since the selection is replaced by a placement of the new component.
 - Vectorize turns a parametric object into a group of the shapes it draws, in its place, instead of a component: edit them at once, and make them into a component afterwards if it is to be reused. The white that hid what lay under the object comes along as a group of its own, White background, which can be deleted.
+- What a component holds is on no layer: a component takes the layer of each place it is put, which decides whether it shows, whether it can be picked and the colour of what it leaves uncoloured. Making a component takes its shapes off their layers and puts it on theirs, ungrouping one puts its shapes on its layer, and the Layer field is gone from what is inside a component. Hiding a layer no longer hides part of a component placed on another layer. In a drawing made before, what was hidden or locked with its layer stays so, and what took its layer's colour keeps that colour as its own, except where every placement of the component is on that same layer and still gives it.
+- A placed component has no stroke or fill of its own any more, nor the button that took them off. In a drawing made before, a placement given one is turned into a placement of a copy of its component, named after it with a number, which carries that look. Three things can look slightly different: a hatch given to a placement starts from the component rather than the drawing, a component placed inside another on a layer of another colour takes the colour of the outer one, and a styled component inside another styled one keeps its own dashes.
 
 ## 1.1.0 — 2026-10-18
 

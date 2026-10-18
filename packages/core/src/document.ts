@@ -66,6 +66,14 @@ export function rootOf(doc: Document, id: string | null): ContainerNode | undefi
   return node && isContainer(node) ? node : undefined
 }
 
+/**
+ * The layer for a node put in `parent`: `layer` on a page, none inside a component, whose content
+ * is drawn on the layer of each of its placements.
+ */
+export function layerIn(doc: Document, parent: string | null, layer: string | undefined): string | undefined {
+  return layer === undefined || rootOf(doc, parent)?.type === 'component' ? undefined : layer
+}
+
 const leafCache = new WeakMap<Document['nodes'], Map<string, Node[]>>()
 
 /** Everything drawn inside a page or component, with groups opened up: the groups themselves are left out. */
@@ -156,6 +164,8 @@ export function checkIntegrity(doc: Document): string[] {
     const parent = node.parent === null ? undefined : doc.nodes[node.parent]
     if (!parent || !holdsChildren(parent)) problems.push(`Node ${key}: parent must be an existing page, component or group`)
     else if (!rootOf(doc, node.parent)) problems.push(`Node ${key}: is not inside any page or component`)
+    if (node.layer !== undefined && rootOf(doc, node.parent)?.type === 'component') problems.push(`Node ${key}: is inside a component and has a layer`)
+    if (node.type === 'instance' && node.style !== undefined) problems.push(`Node ${key}: an instance has a style`)
     if (node.type === 'image' && !doc.assets?.[node.asset]) problems.push(`Node ${key}: unknown asset "${node.asset}"`)
     if (node.type === 'instance') {
       const component = doc.nodes[node.component]

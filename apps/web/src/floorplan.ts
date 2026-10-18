@@ -4,7 +4,7 @@ import { showPanel } from './dock'
 import { t } from './i18n'
 import { platform } from './platform'
 import { registry } from './extensions'
-import { apply, select, setTool, useStore } from './store'
+import { apply, layerHere, select, setTool, useStore } from './store'
 import { visibleArea } from './view'
 import { toast } from './windows'
 
@@ -80,7 +80,7 @@ function seeThrough(canvas: HTMLCanvasElement): boolean {
 export async function placePicture(bytes: Uint8Array, at?: Vec2): Promise<void> {
   const { canvas } = await fromImage(bytes, true)
   const see = seeThrough(canvas)
-  const { scope, activeLayer, view, viewport } = useStore.getState()
+  const { scope, view, viewport } = useStore.getState()
   const area = visibleArea(view, viewport) ?? { minX: 0, minY: 0, maxX: 10000, maxY: 10000 }
   // A pixel of the picture on a pixel of the screen, as it was where it was copied.
   const natural = 1 / ((window.devicePixelRatio || 1) * view.zoom)
@@ -93,7 +93,7 @@ export async function placePicture(bytes: Uint8Array, at?: Vec2): Promise<void> 
   const mime = see ? 'image/png' : 'image/jpeg'
   const ops: Op[] = [
     { op: 'add_asset', asset: { id: asset, mime, data: canvas.toDataURL(mime, 0.85).split(',')[1], width: canvas.width, height: canvas.height } },
-    { op: 'add_node', node: { type: 'image', id: node, name: t('Pasted picture'), parent: scope, layer: activeLayer, asset, x: tidy(centre.x - width / 2), y: tidy(centre.y - height / 2), width, height } },
+    { op: 'add_node', node: { type: 'image', id: node, name: t('Pasted picture'), parent: scope, ...layerHere(), asset, x: tidy(centre.x - width / 2), y: tidy(centre.y - height / 2), width, height } },
   ]
   if (apply(ops)) select([node])
 }
@@ -121,11 +121,12 @@ export async function placeFloorPlan(file: { name: string; bytes: Uint8Array }, 
     const height = (width * canvas.height) / canvas.width
     const { doc, scope, view, viewport } = useStore.getState()
     const reference = t('Reference')
-    const layer = layersOf(doc).find((l) => l.name === reference)?.id ?? newId('layer')
+    // On a layer of its own, but on none inside a component, whose placements give theirs.
+    const placed = layerHere({ doc, scope, activeLayer: layersOf(doc).find((l) => l.name === reference)?.id ?? newId('layer') })
     const asset = newId('asset')
     const node = newId()
     const ops: Op[] = [
-      ...(doc.layers[layer] ? [] : [{ op: 'add_layer', layer: { id: layer, name: reference } } as Op]),
+      ...(!placed.layer || doc.layers[placed.layer] ? [] : [{ op: 'add_layer', layer: { id: placed.layer, name: reference } } as Op]),
       { op: 'add_asset', asset: { id: asset, mime: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1], width: canvas.width, height: canvas.height } },
       {
         op: 'add_node',
@@ -134,7 +135,7 @@ export async function placeFloorPlan(file: { name: string; bytes: Uint8Array }, 
           id: node,
           name: file.name,
           parent: scope,
-          layer,
+          ...placed,
           asset,
           // Beneath everything already drawn.
           x: (at?.x ?? (viewport.width / 2 - view.x) / view.zoom) - width / 2,

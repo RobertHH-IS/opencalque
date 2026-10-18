@@ -790,7 +790,6 @@ export const zh: Record<string, string> = {
   "points go on what is drawn, not on the grid": "点捕捉到已绘制的对象上，而不是网格上",
   "Paste in place": "原位粘贴",
   "It looks as its component does. Lines the component gives no colour take the colour of the layer it is placed on.": "它的外观与其组件相同。组件未指定颜色的线条采用其所在图层的颜色。",
-  "Take off its own stroke and fill": "移除其自身的描边和填充",
   "A component looks as it is drawn, in the colour of its layer: change the component, or put it on another layer.": "组件按其绘制的样子显示，并使用其图层的颜色：请修改组件，或将其放到另一个图层。",
   "keeps its proportions, from a corner": "从角点拖动时保持比例",
   "Drag the middle of a side to change one size, a corner to change both": "拖动边的中点改变一个尺寸，拖动角点同时改变两个尺寸",
