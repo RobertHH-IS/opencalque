@@ -155,7 +155,7 @@ function arrange(api: DockviewApi): void {
 
 /**
  * A remembered arrangement without the panels this version no longer has (a panel can be retired,
- * as Assets was when the component library replaced it). Null when taking them out would leave an
+ * as Assets was when the object library replaced it). Null when taking them out would leave an
  * empty group, in which case the default arrangement is the safer choice.
  */
 function withoutUnknownPanels(saved: any): any | null {

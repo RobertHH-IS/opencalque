@@ -346,7 +346,7 @@ function Toolbar() {
       <ToolGroup tools={ROOM_TOOLS} current={roomTool} more={t('Room divider')} />
       <PlaceButton kind="arch.door" icon={DoorOpen} />
       <PlaceButton kind="arch.window" icon={Grid2x2} />
-      <CommandButton command="warehouse.components" title={t('Component library: stairs, furniture and every other object')} onClick={() => executeById('warehouse.components')}>
+      <CommandButton command="warehouse.components" title={t('Object library: stairs, furniture and every other object')} onClick={() => executeById('warehouse.components')}>
         <LibraryBig size={18} />
       </CommandButton>
       <hr />
@@ -464,7 +464,7 @@ function Breadcrumb() {
           <i className="type-icon">
             <LibraryBig size={13} />
           </i>
-          <span>{t('Component library')}</span>
+          <span>{t('Object library')}</span>
         </span>
       )}
       {shown.map(({ item, ahead }, i) => {

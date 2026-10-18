@@ -118,7 +118,7 @@ function defaultSize(kind: ParametricKind): string {
   }
 }
 
-/** The section of the component library looked at last, kept on this computer: the library opens on it again. */
+/** The section of the object library looked at last, kept on this computer: the library opens on it again. */
 function lastSection(): string {
   try {
     return localStorage.getItem(SECTION_KEY) ?? 'all'
@@ -128,7 +128,7 @@ function lastSection(): string {
 }
 
 /**
- * The component library: every object that can be placed, in one searchable grid. That is the
+ * The object library: every object that can be placed, in one searchable grid. That is the
  * parametric objects of the extensions in use (doors, windows, stairs…), the components of the
  * drawing that is open, and those of each library of the warehouse.
  */
@@ -175,7 +175,7 @@ function Components({ libraries }: { libraries: Library[] }) {
       applyOrThrow([...result.ops, ...names])
       close()
       if (ids.length === 1) setTool('place', { type: 'instance', component: result.imported[ids[0]], carried })
-      else toast(tn(ids.length, '{n} component added. It is in the component library, under “In this drawing”.', '{n} components added. They are in the component library, under “In this drawing”.'))
+      else toast(tn(ids.length, '{n} component added. It is in the object library, under “In this drawing”.', '{n} components added. They are in the object library, under “In this drawing”.'))
     })
 
   // The sections: the drawing's own components first; then each library, split into the rooms its
@@ -432,7 +432,7 @@ function Components({ libraries }: { libraries: Library[] }) {
               ))}
             </Fragment>
           ))}
-          {shown.length === 0 && <p className="hint">{loading ? t('Loading…') : filter === DRAWING && words.length === 0 ? t('This drawing has no component yet. Select objects and choose Object › Create component.') : t('Nothing matches.')}</p>}
+          {shown.length === 0 && <p className="hint">{loading ? t('Loading…') : filter === DRAWING && words.length === 0 ? t('This drawing has no component yet. Select objects and choose Object › Make into a component.') : t('Nothing matches.')}</p>}
         </div>
       </div>
     </>
@@ -454,7 +454,7 @@ function Extensions({ catalog }: { catalog: DeclarativeExtension[] }) {
       // Building it is the validation: a broken extension is refused here, not at the next start.
       declarativeExtension(extension)
       change({ installed: { ...installed, [extension.id]: extension } })
-      toast(t('{name} installed. Its objects are in the component library.', { name: own(extension, extension.name) }))
+      toast(t('{name} installed. Its objects are in the object library.', { name: own(extension, extension.name) }))
     })
   const remove = (id: string) => {
     const { [id]: _, ...rest } = installed
@@ -564,7 +564,7 @@ export function ExtensionWarehouse() {
   )
 }
 
-/** The component library: everything that can be placed, from the drawing, the app and a web catalog. */
+/** The object library: everything that can be placed, from the drawing, the app and a web catalog. */
 export function Warehouse() {
   const open = useWindows((s) => s.warehouse) === 'components'
   const { libraries } = useCatalog(open)
@@ -572,9 +572,9 @@ export function Warehouse() {
   if (!open) return null
   return (
     <div className="palette-backdrop" onMouseDown={close} onKeyDown={(e) => e.key === 'Escape' && close()}>
-      <div className="dialog warehouse" role="dialog" aria-label={t('Component library')} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="dialog warehouse" role="dialog" aria-label={t('Object library')} onMouseDown={(e) => e.stopPropagation()}>
         <header>
-          <h2>{t('Component library')}</h2>
+          <h2>{t('Object library')}</h2>
           {/* Nothing is to be confirmed here: the window is only closed, as Escape or a click beside it does. */}
           <IconButton title={t('Close')} onClick={close}>
             <X size={16} />

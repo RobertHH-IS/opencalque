@@ -69,7 +69,7 @@ export function ContextMenu() {
   if (!at) return null
   const commands = allCommands()
   // Only what can be done to what was clicked: unlike the menu bar, whose items keep their places
-  // and are greyed, this menu leaves out what does not apply (Ungroup on a wall, Create component
+  // and are greyed, this menu leaves out what does not apply (Ungroup on a wall, Make into a component
   // on a component), and the separators left doubled or at an end.
   const items: (Command | null)[] = []
   for (const id of [...(hasSelection ? ON_SELECTION : ON_NOTHING), ...(onPicture ? [null, 'tool.calibrate'] : []), ...(onPolyline ? [null, 'shape.close', 'shape.open', 'shape.curve', 'shape.straighten'] : [])]) {

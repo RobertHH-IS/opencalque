@@ -261,7 +261,7 @@ export function CanvasView() {
     const s = get()
     const at = local(c, e)
     const world = toWorld(at, s.view)
-    // Dragged here from the component library: it is put down where it is let go, once, and selected.
+    // Dragged here from the object library: it is put down where it is let go, once, and selected.
     if (s.tool === 'place' && s.placing?.carried && s.base) {
       const id = c.placed
       commit()

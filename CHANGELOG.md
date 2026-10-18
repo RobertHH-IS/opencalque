@@ -4,6 +4,11 @@ What changed in each version of OpenCalque. The app shows this list under About,
 a version becomes the description of its release on GitHub. Newest first; one `## version — date`
 heading per version, then `### New`, `### Improved` or `### Fixed` with one line per change.
 
+## 1.2.0
+
+### Improved
+- Words that keep things apart. The window that lists everything that can be placed is the Object library: it holds components, which you draw and edit from inside, and parametric objects, drawn from their sizes and options, which the properties now call so. Object › Create component is Object › Make into a component, since the selection is replaced by a placement of the new component.
+
 ## 1.1.0 — 2026-10-18
 
 The desktop app now updates itself. Anyone on 1.0.0 downloads this version by hand once; from here on, new versions come by themselves.

@@ -9,7 +9,7 @@ import { closeWindows, toast } from './windows'
 export type { Tool } from './tools'
 export type { View } from './view'
 
-/** What the place tool puts down; `carried` while it is being dragged from the component library, to be put down where the button is let go. */
+/** What the place tool puts down; `carried` while it is being dragged from the object library, to be put down where the button is let go. */
 export type Placing = ({ type: 'instance'; component: string } | { type: 'parametric'; kind: string }) & { carried?: boolean }
 
 /**

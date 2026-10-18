@@ -24,7 +24,7 @@ const TYPE_LABELS: Record<Node['type'], string> = {
   dimension: msg('Dimension'),
   image: msg('Picture'),
   instance: msg('Instance'),
-  parametric: msg('Object'),
+  parametric: msg('Parametric object'),
 }
 
 const TYPE_ICONS: Record<Node['type'], LucideIcon> = {

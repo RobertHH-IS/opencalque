@@ -51,7 +51,7 @@ Agent terminals have `ELECTRON_RUN_AS_NODE=1`, which breaks Electron. Prefix Ele
 - Modifiers (`packages/core/src/modifiers.ts`) are pure functions from primitives to primitives, run in list order at the end of `nodePrimitives`. Positions in a modifier are relative to its `frame`, which is all that moving and transforming code touches. Never make a modifier read or change the document.
 - Hints and the size fields depend on `drawStep` in the store; show nothing that cannot be used at the current step.
 - Rotate, mirror and scale nodes with `transformOps` (`packages/core/src/transform.ts`), which asks each type's kind what it means (`transform` in `kinds.ts`, required of every type).
-- There is no Assets panel: everything that can be placed is in the component library (`WarehouseDialog.tsx`).
+- There is no Assets panel: everything that can be placed is in the object library (`WarehouseDialog.tsx`). Keep the words apart: a component is the reusable definition, an instance one placement of it, a parametric object one drawn from its parameters (ARCHITECTURE, "Components").
 - Exports (SVG, DXF, PDF) draw from primitives through `paintOrder`; a new kind of primitive or style needs handling in `svg.ts`, `dxf.ts`, `pdf.ts` and `apps/web/src/canvas/draw.ts`.
 - The shape of a wall corner (`joins`) and which lines of a wall are drawn (`edges`) are separate settings. Never draw or hide a wall line as a side effect of a joint: go through `endLineShown` / `endLineOps`.
 - A wall corner is a position, not a node. Use `wallEndsAt`, `moveCornerOps`, `cornerJoin` and `cornerJoinOps` (`packages/core/src/walls/joints.ts`); how a corner is joined lives on each wall end, in `joins`.

@@ -104,7 +104,7 @@ pnpm notices      # rewrite THIRD-PARTY-NOTICES.txt after adding or updating a d
 - Change what several objects have in common in one go, or copy a look from one object to others with the eyedropper.
 
 **Reuse**
-- A searchable, illustrated component library: furniture, kitchen, bathroom and electrical symbols.
+- A searchable, illustrated object library: furniture, kitchen, bathroom and electrical symbols.
 - Extensions that add new parametric objects as data, not code, so installing one is safe.
 - Any drawing can be used as a library; catalogs can be published anywhere on the web.
 
@@ -170,7 +170,7 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Navigate | Scroll to zoom, middle-drag or `Space`+drag to pan, `Shift+1` to fit; a tap on `Space` goes back to selecting |
 | Snapping | Snaps to existing points, then to the grid. `Shift` constrains to 45°, `Alt` turns it off |
 | Edit | Drag objects or their square handles, or type exact values in the right panel |
-| Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the component library. Double-click an instance to edit the component; every instance updates |
+| Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the object library. Double-click an instance to edit the component; every instance updates |
 | Walls | Walls that end at the same point join cleanly, at any angle. Double-click the last corner to close the walls back to the first one |
 | Dimensions | `D`, click the two points, then click where the dimension line should sit. End markers, line, extension lines, text, font, unit and decimals are in the right panel; set them before drawing to change the defaults |
 | Measure | `M`, click two points for a live reading. Nothing is added to the drawing. The arrow beside the button, or `Shift+M`, measures an angle: click its corner, then a point along each side |
@@ -182,14 +182,14 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Align | With two or more selected, Arrange in the right panel aligns them left, centre, right, top, middle or bottom; with three or more it spaces them evenly |
 | Pages | In the Pages panel: add, rename, duplicate with everything on it, move up or down |
 | Shared layers | In the Layers panel, the pages icon on a layer shows what is on it on every page: a frame, a logo, a title. It is changed on the page it was drawn on |
-| Component library | The books button in the toolbar: every object and component, pictured, with a search. Click one, then click on the drawing |
+| Object library | The books button in the toolbar: every component and parametric object, pictured, with a search. Click one, then click on the drawing |
 | Doors and windows | The Door or Window button in the toolbar, then click on a wall: it snaps on, turns to follow the wall, opens towards your cursor and cuts the opening. Drag it to slide it along the wall. Type, hinge side, width and more are in the right panel |
-| Compass | Component library → Compass (north). Turn it with the round handle above it, or type its rotation; size and letter are in the right panel |
+| Compass | Object library → Compass (north). Turn it with the round handle above it, or type its rotation; size and letter are in the right panel |
 | Select | Click an object. A component or a library object is picked anywhere inside its outline; a plain shape with no fill by its line. A room is picked by its name, so what stands on its floor stays easy to click |
 | Arcs and curves | Draw an ellipse (`O`), then type a start and an end angle under "Arc from" and "Arc to" in the right panel: angles run clockwise from the right. Tick Curved on a polyline to make it flow through its points |
 | Repeat | Select something, Object → Repeat in rows and columns, then set how many across, how many rows and the steps under Modifiers. The copies are drawn, not made: change the object and they all follow |
 | Import DXF | File → Import, or drop the file. It must be a text (ASCII) DXF; a DWG has to be saved as DXF first. Blocks come in as groups, and a file laid out as a sheet as a paper with what its windows show. Its pictures come in only through the command line (`opencalque import`), which also makes one drawing of several DXF files, a page each |
-| Stairs | Component library → straight, L-shaped, U-shaped or spiral. `R` rotates before placing. Steps, tread, width and turn direction are in the right panel |
+| Stairs | Object library → straight, L-shaped, U-shaped or spiral. `R` rotates before placing. Steps, tread, width and turn direction are in the right panel |
 | Groups | `Ctrl+G` groups the selection, `Ctrl+Shift+G` ungroups. Double-click a group to edit inside it |
 | Order | `]` to front, `[` to back, `Ctrl+]` and `Ctrl+[` one step. Also in the properties panel, the right-click menu, or drag rows in the Structure panel |
 | Right-click | On an object or the drawing, for order, grouping, copy and paste |

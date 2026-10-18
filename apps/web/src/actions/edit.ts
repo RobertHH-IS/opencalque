@@ -263,7 +263,7 @@ export const vectorizeSelection = () =>
     const made = parametricComponentOps(doc, node.id, registry, kind ? t(kind.label) : node.kind)
     if (!made || !apply(made.ops)) return
     select([made.id])
-    toast(kind?.opening ? t('Made into a component of its shapes. It no longer cuts the wall it is in.') : t('Made into a component of its shapes, in the component library under “In this drawing”.'))
+    toast(kind?.opening ? t('Made into a component of its shapes. It no longer cuts the wall it is in.') : t('Made into a component of its shapes, in the object library under “In this drawing”.'))
   })
 
 export const makeComponent = () =>

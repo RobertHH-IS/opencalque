@@ -12,7 +12,7 @@ interface Windows {
   preferencesPage: string | null
   exportOpen: boolean
   aboutOpen: boolean
-  /** Whether the component library is open. */
+  /** Whether the object library is open. */
   warehouse: 'components' | null
   toast: string | null
 }

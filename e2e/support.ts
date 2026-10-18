@@ -44,7 +44,7 @@ export async function recordSaves(page: Page) {
 
 export const canvas = (page: Page) => page.locator('.stage canvas')
 export const objectRows = (page: Page) => page.locator('[data-panel="objects"] .row')
-/** A section of the component library, in the list on its left, by its name. */
+/** A section of the object library, in the list on its left, by its name. */
 export const librarySection = (page: Page, name: string) => page.locator('.warehouse-section', { has: page.locator('.warehouse-section-name', { hasText: new RegExp(`^${name}$`) }) })
 
 /** Draws a wall from one point of the canvas to another, in CSS pixels from its top-left corner. */

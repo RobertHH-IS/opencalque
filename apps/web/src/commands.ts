@@ -231,7 +231,7 @@ const STATIC: Command[] = [
 
   // A component alone is one already: making another from it would only wrap it.
   { id: 'component.vectorize', title: msg('Vectorize into a component'), short: msg('Vectorize'), category: 'Components', interrupts: true, when: onlyParametric, run: vectorizeSelection },
-  { id: 'component.create', title: msg('Create component from selection'), short: msg('Create a component'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: () => selected() && !onlyInstance(), run: makeComponent },
+  { id: 'component.create', title: msg('Make into a component'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: () => selected() && !onlyInstance(), run: makeComponent },
   { id: 'component.finish', title: msg('Finish editing this group or component'), category: 'Components', when: () => get().scope !== get().page, run: () => editComponent(null) },
 
   { id: 'view.zoomToFit', title: msg('Zoom to fit'), category: 'View', keys: ['Shift+1'], run: zoomToFit },
@@ -289,7 +289,7 @@ const STATIC: Command[] = [
   tool('divider', msg('Room divider'), 'Shift+A'),
   { id: 'tool.calibrate', title: msg('Set the scale of an imported plan'), category: 'Tools', run: () => setTool('calibrate') },
 
-  { id: 'warehouse.components', title: msg('Component library…'), category: 'Insert', global: true, run: () => useWindows.setState({ warehouse: 'components' }) },
+  { id: 'warehouse.components', title: msg('Object library…'), category: 'Insert', global: true, run: () => useWindows.setState({ warehouse: 'components' }) },
   { id: 'warehouse.extensions', title: msg('Extensions…'), category: 'General', global: true, run: () => useWindows.setState({ preferencesOpen: true, preferencesPage: 'extensions' }) },
   { id: 'page.add', title: msg('Add page'), category: 'Pages', run: () => apply([{ op: 'add_node', node: { type: 'page', name: t('Page {n}', { n: pagesOf(get().doc).length + 1 }) } }]) },
   { id: 'layer.add', title: msg('Add layer'), category: 'Layers', run: () => apply([{ op: 'add_layer', layer: { name: t('Layer {n}', { n: Object.keys(get().doc.layers).length + 1 }) } }]) },

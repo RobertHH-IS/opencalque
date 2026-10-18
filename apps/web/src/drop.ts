@@ -19,7 +19,7 @@ function installExtension(content: any): void {
   const { installed, disabled } = usePrefs.getState().extensions
   setPrefs({ extensions: { disabled, installed: { ...installed, [content.id]: content } } })
   loadExtensions()
-  toast(t('{name} installed. Its objects are in the component library.', { name: String(content.name) }))
+  toast(t('{name} installed. Its objects are in the object library.', { name: String(content.name) }))
 }
 
 /**

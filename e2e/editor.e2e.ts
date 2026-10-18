@@ -420,7 +420,7 @@ test('stretches a window placed on a wall by either of its ends, the other stayi
   await openEditor(page)
   // At the first zoom (0.1 px/mm, the origin at 320, 220), a wall along y = 800 mm from x = -200 to 3800 mm.
   await drawWall(page, [300, 300], [700, 300])
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Window$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
   // Centred on the wall under the pointer, at x = 1800 mm: 1200 mm wide, it runs from 1200 to 2400 (440 to 560 on screen).
@@ -449,7 +449,7 @@ test('stretches a window placed on a wall by either of its ends, the other stayi
 test('makes a stair longer by its top in whole steps, and wider by its side', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Stair, straight$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
   // At the first zoom (0.1 px/mm, the origin at 320, 220): its foot at (1800, 3800) mm, 900 wide and 12 steps of 270 up,
@@ -502,13 +502,13 @@ test('brings a washbasin against a wall of a plan whose walls are grouped', asyn
   await expect(field('X')).toHaveValue('100')
 })
 
-test('lists the furniture by room in the component library, the adjustable pieces with the rest', async ({ page }) => {
+test('lists the furniture by room in the object library, the adjustable pieces with the rest', async ({ page }) => {
   // The adjustable furniture installed as 1.0.0-rc.3 shipped it, all of it listed as furniture: the copy that ships now replaces it.
   const furniture = JSON.parse(readFileSync('packages/warehouse/extensions/furniture.json', 'utf8'))
   const old = { ...furniture, version: '1.1.0', objects: furniture.objects.map((object: Record<string, unknown>) => ({ ...object, category: 'furniture' })) }
   await startWith(page, { extensions: { installed: { [old.id]: old }, disabled: [] } })
   await openEditor(page)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   const sections = await page.locator('.warehouse-sections .warehouse-section-name').allTextContents()
   expect(sections.filter((name) => ['Living room', 'Dining room', 'Bedroom', 'Office', 'Furniture'].includes(name))).toEqual(['Living room', 'Dining room', 'Bedroom', 'Office'])
   await librarySection(page, 'Bedroom').click()
@@ -523,7 +523,7 @@ test('lists the furniture by room in the component library, the adjustable piece
 test('drags a component from the library onto the drawing, where it is let go', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   await librarySection(page, 'Dining room').click()
   const card = (await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Chair$/ }) }).boundingBox())!
   const box = (await canvas(page).boundingBox())!
@@ -531,7 +531,7 @@ test('drags a component from the library onto the drawing, where it is let go', 
   await page.mouse.down()
   // The library closes as soon as the card is dragged, and the chair follows the pointer.
   await page.mouse.move(card.x + card.width / 2 + 20, card.y + card.height / 2, { steps: 4 })
-  await expect(page.getByRole('dialog', { name: 'Component library' })).toBeHidden()
+  await expect(page.getByRole('dialog', { name: 'Object library' })).toBeHidden()
   // At the first zoom (0.1 px/mm, the origin at 320, 220): let go at (-200, 800) mm, a chair is put there, one, and selected.
   await page.mouse.move(box.x + 300, box.y + 300, { steps: 8 })
   await page.mouse.up()
@@ -544,7 +544,7 @@ test('drags a component from the library onto the drawing, where it is let go', 
   await page.mouse.click(box.x + 600, box.y + 500)
   await expect(objectRows(page)).toHaveCount(1)
   // Let go beside the drawing, over a panel, it stays on the pointer as after a click on its card.
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   await page.mouse.move(card.x + card.width / 2, card.y + card.height / 2)
   await page.mouse.down()
   await page.mouse.move(box.x - 40, box.y + 300, { steps: 8 })
@@ -555,10 +555,10 @@ test('drags a component from the library onto the drawing, where it is let go', 
   await expect(objectRows(page)).toHaveCount(2)
 })
 
-test('opens the component library on the section looked at last', async ({ page }) => {
+test('opens the object library on the section looked at last', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
-  const library = page.getByTitle('Component library: stairs, furniture and every other object')
+  const library = page.getByTitle('Object library: stairs, furniture and every other object')
   const section = (name: string) => librarySection(page, name)
   const heading = (name: string) => page.locator('.warehouse-heading-name', { hasText: new RegExp(`^${name}$`) })
   await library.click()
@@ -583,11 +583,11 @@ test('opens the component library on the section looked at last', async ({ page 
   await expect(section('All')).toHaveClass(/active/)
 })
 
-test('searches every section of the component library, and counts what each section holds', async ({ page }) => {
+test('searches every section of the object library, and counts what each section holds', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
-  const dialog = page.getByRole('dialog', { name: 'Component library' })
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
+  const dialog = page.getByRole('dialog', { name: 'Object library' })
   const search = page.getByPlaceholder('Search every object and component…')
   const count = (name: string) => librarySection(page, name).locator('.warehouse-count')
   await librarySection(page, 'Bathroom').click()
@@ -607,10 +607,10 @@ test('searches every section of the component library, and counts what each sect
   await expect(dialog).toHaveCount(0)
 })
 
-test('takes the components of a drawing on this computer from the foot of the component library', async ({ page }) => {
+test('takes the components of a drawing on this computer from the foot of the object library', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   const other = drawing({
     stool: { id: 'stool', type: 'component', parent: null, order: 'a0', name: 'Stool' },
     seat: { id: 'seat', type: 'ellipse', parent: 'stool', order: 'a0', cx: 0, cy: 0, rx: 200, ry: 200 },
@@ -632,7 +632,7 @@ test('places the wall-hung toilet from the library in a drawing that took a doub
     counter: { id: 'counter', type: 'rect', parent: 'basin', order: 'a0', x: 0, y: 0, width: 1200, height: 500 },
   })
   await choose(page, () => page.keyboard.press('Control+o'), 'plan.opencalque', plan)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Toilet, wall-hung$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
   await page.mouse.click(box.x + 400, box.y + 300)
@@ -713,7 +713,7 @@ test('resizes a table by its side, the furniture installed before it could be', 
   const old = { ...furniture, version: '1.0.0', objects: furniture.objects.map(({ box: _, ...object }: Record<string, unknown>) => object) }
   await startWith(page, { extensions: { installed: { [old.id]: old }, disabled: [] } })
   await openEditor(page)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Table with chairs$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
   // At the first zoom (0.1 px/mm, the origin at 320, 220): its corner at (1800, 2800) mm, 1800 long and 900 wide,
@@ -762,7 +762,7 @@ test('stretches a placed component by a side of its frame, and gives it its prop
 test('vectorizes a stair into a component of its shapes from the right-click menu', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Stair, straight$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
   await page.mouse.click(box.x + 500, box.y + 600)
@@ -807,7 +807,7 @@ test('turns a rectangle about its middle from the angle typed, and arranges it f
 test('turns a compass by its knob, its box turning with it, and turns it again from where the knob went', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
-  await page.getByTitle('Component library: stairs, furniture and every other object').click()
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
   await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Compass \(north\)$/ }) }).click()
   const box = (await canvas(page).boundingBox())!
   // At the first zoom (0.1 px/mm, the origin at 320, 220).

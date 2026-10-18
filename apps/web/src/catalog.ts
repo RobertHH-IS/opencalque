@@ -23,7 +23,7 @@ export interface Library {
   /** Number of components, when known without opening the library. */
   components?: number
   /**
-   * Where the component library lists components of this library, by their id: a room such as
+   * Where the object library lists components of this library, by their id: a room such as
    * 'bedroom' or 'dining' (or any section of the library). One not given is listed under the
    * library's name.
    */

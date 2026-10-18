@@ -39,7 +39,7 @@ describe('the libraries that ship with the app', () => {
       const source = await library.load()
       const ids = componentsOf(source).map((component) => component.id)
       const first = importComponents(createDocument(), source, ids, { original: true })
-      // Named in the user's language, as the component library does.
+      // Named in the user's language, as the object library does.
       const named = applyOps(first.doc, Object.values(first.imported).map((id): Op => ({ op: 'update_node', id, patch: { name: `${first.doc.nodes[id].name}!` } })))
       for (const id of ids) {
         const again = importComponents(named, source, [id], { original: true })
