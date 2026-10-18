@@ -1,6 +1,6 @@
 import { childrenOf, isVisible, newId } from './document'
 import { LAYER_COLOR } from './colors'
-import { nodePrimitives, parametricPrimitives } from './kinds'
+import { nodePrimitives, objectBacking, parametricPrimitives } from './kinds'
 import type { NodeInput, Op } from './ops'
 import { transformPrimitive, type Primitive } from './primitives'
 import type { Registry } from './registry'
@@ -32,42 +32,47 @@ export function primitiveNodes(prims: Primitive[], parent: string, layer?: strin
 }
 
 /**
- * The operations that make a parametric object into a component of the drawing and a placement of
- * it where the object was: its shapes, as it draws them now, become the component's, to be edited
- * one by one; the placement takes the object's place, turn, mirror, layer and modifiers. What its
- * parameters did is not kept: a door made so no longer cuts its wall. Returns the placement's id.
+ * The operations that vectorize a parametric object: the shapes it draws now, where it draws them,
+ * become a group in its place, to be edited one by one. The group takes the object's name (or
+ * `names.group`), place in the stacking order, layer and modifiers. A placed object hides what lies
+ * under it (`objectBacking`) and a group does not, so that white comes along as filled shapes of
+ * its own, in a group named `names.backing` under the rest, to be deleted when it is not wanted.
+ * What its parameters did is not kept: a door made so no longer cuts its wall. Returns the group's id.
  */
-export function parametricComponentOps(doc: Document, id: string, registry: Registry, name: string): { ops: Op[]; id: string } | null {
+export function vectorizeOps(doc: Document, id: string, registry: Registry, names: { group: string; backing: string }): { ops: Op[]; id: string } | null {
   const node = doc.nodes[id]
   if (node?.type !== 'parametric' || node.parent === null) return null
   // Its own look over what the kind draws, as it is drawn: a line keeps a look the kind gave it as its own.
   const prims = parametricPrimitives(node, { doc, registry, depth: 0 }).map((p): Primitive =>
     p.own || !node.style ? p : { ...p, stroke: node.style.stroke ?? p.stroke, strokeWidth: node.style.strokeWidth ?? p.strokeWidth, fill: node.style.fill ?? p.fill, dash: node.style.dash ?? p.dash },
   )
-  const component = newId('component')
-  const placement = newId()
+  const placed = (shapes: Primitive[]) => shapes.map((p) => transformPrimitive(p, node))
+  const layer = node.layer
+  const group = newId('group')
   const ops: Op[] = [
-    { op: 'add_node', node: { type: 'component', id: component, name } },
-    ...primitiveNodes(prims, component).map((child): Op => ({ op: 'add_node', node: child })),
     { op: 'remove_node', id },
     {
       op: 'add_node',
       node: {
-        type: 'instance',
-        id: placement,
+        type: 'group',
+        id: group,
         parent: node.parent,
         order: node.order,
-        component,
-        x: node.x,
-        y: node.y,
-        ...(node.rotation ? { rotation: node.rotation } : {}),
-        ...(node.flipX ? { flipX: true } : {}),
-        ...(node.layer ? { layer: node.layer } : {}),
+        name: node.name ?? names.group,
+        ...(layer ? { layer } : {}),
         ...(node.modifiers?.length ? { modifiers: node.modifiers } : {}),
       } as NodeInput,
     },
   ]
-  return { ops, id: placement }
+  // Each shape is put on top of those before it, so the white goes first.
+  const backing = newId('group')
+  const white = primitiveNodes(placed(objectBacking(prims)), backing, layer)
+  if (white.length > 0) {
+    ops.push({ op: 'add_node', node: { type: 'group', id: backing, parent: group, name: names.backing, ...(layer ? { layer } : {}) } as NodeInput })
+    ops.push(...white.map((shape): Op => ({ op: 'add_node', node: shape })))
+  }
+  ops.push(...primitiveNodes(placed(prims), group, layer).map((shape): Op => ({ op: 'add_node', node: shape })))
+  return { ops, id: group }
 }
 
 /**

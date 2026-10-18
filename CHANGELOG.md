@@ -8,6 +8,7 @@ heading per version, then `### New`, `### Improved` or `### Fixed` with one line
 
 ### Improved
 - Words that keep things apart. The window that lists everything that can be placed is the Object library: it holds components, which you draw and edit from inside, and parametric objects, drawn from their sizes and options, which the properties now call so. Object › Create component is Object › Make into a component, since the selection is replaced by a placement of the new component.
+- Vectorize turns a parametric object into a group of the shapes it draws, in its place, instead of a component: edit them at once, and make them into a component afterwards if it is to be reused. The white that hid what lay under the object comes along as a group of its own, White background, which can be deleted.
 
 ## 1.1.0 — 2026-10-18
 

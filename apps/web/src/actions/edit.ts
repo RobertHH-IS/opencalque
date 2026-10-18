@@ -13,11 +13,11 @@ import {
   orderAfter,
   orderBefore,
   orderBetween,
-  parametricComponentOps,
   placeInOps,
   reorderOps,
   sceneBounds,
   transformOps,
+  vectorizeOps,
   ungroupNode,
   wallFollowOps,
   type Modifier,
@@ -251,8 +251,8 @@ export const ungroupSelection = () =>
   })
 
 /**
- * Makes the one selected parametric object into a component of the drawing, of the shapes it
- * draws, placed where it was: to be edited shape by shape, as a vectorized object.
+ * Vectorizes the one selected parametric object: the shapes it draws become a group in its place,
+ * to be edited one by one, over the white it was backed with (`vectorizeOps`).
  */
 export const vectorizeSelection = () =>
   guarded(() => {
@@ -260,10 +260,10 @@ export const vectorizeSelection = () =>
     const node = doc.nodes[selection[0]]
     if (selection.length !== 1 || node?.type !== 'parametric') return
     const kind = registry.parametric.get(node.kind)
-    const made = parametricComponentOps(doc, node.id, registry, kind ? t(kind.label) : node.kind)
+    const made = vectorizeOps(doc, node.id, registry, { group: kind ? t(kind.label) : node.kind, backing: t('White background') })
     if (!made || !apply(made.ops)) return
     select([made.id])
-    toast(kind?.opening ? t('Made into a component of its shapes. It no longer cuts the wall it is in.') : t('Made into a component of its shapes, in the object library under “In this drawing”.'))
+    toast(kind?.opening ? t('Vectorized into a group of its shapes. It no longer cuts the wall it is in.') : t('Vectorized into a group of its shapes.'))
   })
 
 export const makeComponent = () =>

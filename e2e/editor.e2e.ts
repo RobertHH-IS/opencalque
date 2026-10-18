@@ -759,7 +759,7 @@ test('stretches a placed component by a side of its frame, and gives it its prop
   await expect(back).toHaveCount(0)
 })
 
-test('vectorizes a stair into a component of its shapes from the right-click menu', async ({ page }) => {
+test('vectorizes a stair into a group of its shapes from the right-click menu', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
   await page.getByTitle('Object library: stairs, furniture and every other object').click()
@@ -772,10 +772,10 @@ test('vectorizes a stair into a component of its shapes from the right-click men
   await expect(field('Steps')).toHaveCount(1)
   await page.mouse.click(box.x + 545, box.y + 450, { button: 'right' })
   await page.getByRole('menuitem', { name: 'Vectorize' }).click()
-  // A component placed where the stair was: its shapes to edit, no steps to set.
+  // A group where the stair was, named after it: its shapes to edit, no steps to set.
   await expect(field('Steps')).toHaveCount(0)
-  await expect(page.getByRole('button', { name: 'Edit component' })).toBeVisible()
-  await expect(field('X').locator('input')).toHaveValue('1800')
+  await expect(page.getByRole('button', { name: 'Ungroup' })).toBeVisible()
+  await expect(objectRows(page).filter({ hasText: 'Stair, straight' })).toHaveCount(1)
 })
 
 test('turns a rectangle about its middle from the angle typed, and arranges it from the toolbar', async ({ page }) => {

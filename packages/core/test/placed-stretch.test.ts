@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { architecture } from '../../ext-architecture/src'
-import { applyOps, boundsOfPoints, buildScene, childrenOf, createDocument, detachInstance, frameGrips, parametricComponentOps, Registry, resizeFrame, resizePatch, type Document, type NodeOf, type Op } from '../src'
+import { applyOps, boundsOfPoints, buildScene, childrenOf, createDocument, detachInstance, frameGrips, Registry, resizeFrame, resizePatch, toSVG, vectorizeOps, type Document, type NodeOf, type Op } from '../src'
 
 const registry = new Registry().use(architecture)
 // A sink: a 600 × 400 basin with a round bowl, drawn from its corner, placed at (1000, 2000).
@@ -67,18 +67,43 @@ describe('stretching a placed component', () => {
   })
 })
 
-describe('making a parametric object into a component', () => {
-  const start = applyOps(createDocument(), [{ op: 'add_node', node: { type: 'parametric', id: 'door', parent: 'page_1', kind: 'arch.door', props: { width: 900 }, x: 500, y: 700, rotation: 90 } } as Op])
+describe('vectorizing a parametric object', () => {
+  const names = { group: 'Stair', backing: 'White background' }
+  const start = applyOps(createDocument(), [
+    { op: 'add_node', node: { type: 'rect', id: 'floor', parent: 'page_1', x: 0, y: 0, width: 6000, height: 6000, style: { fill: '#c0c0c0' } } },
+    { op: 'add_node', node: { type: 'parametric', id: 'stair', parent: 'page_1', name: 'Stair to the attic', kind: 'arch.stair', props: {}, x: 500, y: 700, rotation: 90 } },
+    { op: 'add_node', node: { type: 'line', id: 'over', parent: 'page_1', a: { x: 0, y: 0 }, b: { x: 6000, y: 6000 } } },
+  ] as Op[])
 
-  it('draws the same, as a component placed where the object was', () => {
-    const made = parametricComponentOps(start, 'door', registry, 'Door')!
+  it('draws the same, as a group of its shapes in its place, over the white that hid what was under it', () => {
+    const made = vectorizeOps(start, 'stair', registry, names)!
     const doc = applyOps(start, made.ops)
-    expect(doc.nodes.door).toBeUndefined()
-    const instance = doc.nodes[made.id] as NodeOf<'instance'>
-    expect(instance).toMatchObject({ type: 'instance', x: 500, y: 700, rotation: 90 })
-    expect(childrenOf(doc, instance.component).length).toBeGreaterThan(2)
-    const before = buildScene(start, 'page_1', registry)[0].bounds!
-    const after = buildScene(doc, 'page_1', registry).find((item) => item.id === made.id)!.bounds!
-    for (const key of ['minX', 'minY', 'maxX', 'maxY'] as const) expect(after[key]).toBeCloseTo(before[key], 3)
+    expect(doc.nodes.stair).toBeUndefined()
+    expect(doc.nodes[made.id]).toMatchObject({ type: 'group', parent: 'page_1', name: 'Stair to the attic' })
+    // Between the floor and the line, as the stair was.
+    expect(childrenOf(doc, 'page_1').map((n) => n.id)).toEqual(['floor', made.id, 'over'])
+    const [backing, ...shapes] = childrenOf(doc, made.id)
+    expect(backing).toMatchObject({ type: 'group', name: 'White background' })
+    expect(childrenOf(doc, backing.id).every((n) => n.style?.fill === '#ffffff' && n.style.stroke === 'none')).toBe(true)
+    expect(shapes.length).toBeGreaterThan(2)
+    expect(toSVG(doc, 'page_1', registry)).toBe(toSVG(start, 'page_1', registry))
+  })
+
+  it('takes its layer and modifiers, and leaves out the white when nothing of it is closed and unfilled', () => {
+    const layered = applyOps(start, [
+      { op: 'add_layer', layer: { id: 'stairs', name: 'Stairs' } },
+      { op: 'update_node', id: 'stair', patch: { layer: 'stairs', style: { fill: '#ffeecc' }, modifiers: [{ type: 'crop', frame: { x: 0, y: 0 }, params: { width: 3000, height: 1500 } }] } },
+    ] as Op[])
+    const made = vectorizeOps(layered, 'stair', registry, names)!
+    const doc = applyOps(layered, made.ops)
+    expect(doc.nodes[made.id]).toMatchObject({ layer: 'stairs', modifiers: [{ type: 'crop' }] })
+    const parts = childrenOf(doc, made.id)
+    expect(parts.some((n) => n.type === 'group')).toBe(false)
+    expect(parts.every((n) => n.layer === 'stairs')).toBe(true)
+    expect(toSVG(doc, 'page_1', registry)).toBe(toSVG(layered, 'page_1', registry))
+  })
+
+  it('is only for parametric objects', () => {
+    expect(vectorizeOps(start, 'floor', registry, names)).toBeNull()
   })
 })

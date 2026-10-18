@@ -230,7 +230,7 @@ const STATIC: Command[] = [
   },
 
   // A component alone is one already: making another from it would only wrap it.
-  { id: 'component.vectorize', title: msg('Vectorize into a component'), short: msg('Vectorize'), category: 'Components', interrupts: true, when: onlyParametric, run: vectorizeSelection },
+  { id: 'component.vectorize', title: msg('Vectorize'), category: 'Edit', interrupts: true, when: onlyParametric, run: vectorizeSelection },
   { id: 'component.create', title: msg('Make into a component'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: () => selected() && !onlyInstance(), run: makeComponent },
   { id: 'component.finish', title: msg('Finish editing this group or component'), category: 'Components', when: () => get().scope !== get().page, run: () => editComponent(null) },
 
