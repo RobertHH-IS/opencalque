@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { applyOps, componentsOf, createDocument, declarativeExtension, importComponents, toSVG, type DeclarativeExtension, type Document, type Op, type ParametricKind } from '@opencalque/core'
 import { Globe, HardDrive, Pencil, SlidersHorizontal, TextCursorInput, Trash2, X } from 'lucide-react'
 import { DRAWING_EXTENSIONS, guarded, importLibraryFrom } from './actions'
+import { carry, svgUrl } from './carry'
 import { language, msg, t, tn } from './i18n'
 import { platform } from './platform'
 import { setPrefs, usePrefs } from './prefs'
@@ -17,8 +18,6 @@ const close = () => useWindows.setState({ warehouse: null })
 
 /** A text of an extension that is not installed yet, in the user's language when the extension provides it. */
 const own = (extension: { translations?: Record<string, Record<string, string>> }, text: string) => extension.translations?.[language()]?.[text] ?? text
-
-const svgUrl = (svg: string) => `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`
 
 /** A drawing of a parametric object with its default sizes; a door or window is shown in a piece of wall. */
 function objectPicture(kind: ParametricKind): string {
@@ -50,33 +49,6 @@ interface Card {
   parametric?: boolean
   /** The library a component of a library is in, and its id there. */
   library?: { id: string; component: string }
-}
-
-/**
- * Lets a card be dragged onto the drawing. Once the pointer has moved a few pixels with the button
- * held, the library closes and what the card holds follows the pointer as after a click on it; let
- * go over the drawing, it is put down there (the canvas does that, for a `carried` placing). Let go
- * anywhere else, it stays on the pointer, as after a click.
- */
-function carry(e: React.PointerEvent, card: Card): void {
-  if (e.button !== 0 || (e.target as Element).closest('input, button')) return
-  const from = { x: e.clientX, y: e.clientY }
-  const move = (m: PointerEvent) => {
-    if (Math.hypot(m.clientX - from.x, m.clientY - from.y) < 5) return
-    window.removeEventListener('pointermove', move)
-    card.place(true)
-  }
-  // Heard after the canvas, which has put it down if it was let go there.
-  const end = () => {
-    window.removeEventListener('pointermove', move)
-    window.removeEventListener('pointerup', end)
-    window.removeEventListener('pointercancel', end)
-    const { placing } = useStore.getState()
-    if (placing?.carried) useStore.setState({ placing: { ...placing, carried: false } })
-  }
-  window.addEventListener('pointermove', move)
-  window.addEventListener('pointerup', end)
-  window.addEventListener('pointercancel', end)
 }
 
 /** Where parametric objects that say no category, or one nothing else is in, are listed. */
@@ -382,7 +354,8 @@ function Components({ libraries }: { libraries: Library[] }) {
                   title={[card.name, card.about ?? card.description, t('Click, then click on the drawing to place it, or drag it onto the drawing')].filter(Boolean).join('\n\n')}
                   onClick={() => card.place()}
                   onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && card.place()}
-                  onPointerDown={(e) => carry(e, card)}
+                  // Dragged a few pixels, the library closes and the card's content follows the pointer.
+                  onPointerDown={(e) => carry(e, card.place)}
                   // Dragged, the card is what it holds, not a picture to drop as a file.
                   onDragStart={(e) => e.preventDefault()}
                 >

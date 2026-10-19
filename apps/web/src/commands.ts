@@ -249,6 +249,7 @@ const STATIC: Command[] = [
   },
   panel('pages'),
   panel('layers'),
+  panel('components'),
   panel('objects'),
   panel('colors'),
   panel('wallTypes'),

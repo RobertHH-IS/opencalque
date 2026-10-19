@@ -170,7 +170,7 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Navigate | Scroll to zoom, middle-drag or `Space`+drag to pan, `Shift+1` to fit; a tap on `Space` goes back to selecting |
 | Snapping | Snaps to existing points, then to the grid. `Shift` constrains to 45°, `Alt` turns it off |
 | Edit | Drag objects or their square handles, or type exact values in the right panel |
-| Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the object library. Double-click an instance to edit the component; every instance updates |
+| Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the Components panel, beside Layers, or from the object library. Double-click an instance to edit the component; every instance updates |
 | Walls | Walls that end at the same point join cleanly, at any angle. Double-click the last corner to close the walls back to the first one |
 | Dimensions | `D`, click the two points, then click where the dimension line should sit. End markers, line, extension lines, text, font, unit and decimals are in the right panel; set them before drawing to change the defaults |
 | Measure | `M`, click two points for a live reading. Nothing is added to the drawing. The arrow beside the button, or `Shift+M`, measures an angle: click its corner, then a point along each side |

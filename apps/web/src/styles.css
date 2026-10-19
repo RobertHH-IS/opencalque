@@ -3525,3 +3525,16 @@ select.faint-choice,
 .fill-menu .field > span {
   width: 68px;
 }
+
+/* The picture of a component in its row: drawn dark on paper, in either theme. */
+.row .thumb {
+  flex: none;
+  box-sizing: border-box;
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  object-fit: contain;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}

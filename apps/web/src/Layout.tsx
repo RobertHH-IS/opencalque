@@ -6,7 +6,7 @@ import { Guard } from './Guard'
 import { MoreTabs } from './MoreTabs'
 import { t } from './i18n'
 import { AssistantPanel } from './panels/AssistantPanel'
-import { Colors, Layers, Objects, Pages } from './panels/LeftPanel'
+import { Colors, Components, Layers, Objects, Pages } from './panels/LeftPanel'
 import { WallTypes } from './panels/WallTypesPanel'
 import { DimensionStyles } from './panels/DimensionStylesPanel'
 import { Properties } from './panels/properties/Properties'
@@ -52,6 +52,7 @@ const COMPONENTS: Record<PanelId | typeof CANVAS, FunctionComponent> = {
   canvas: guarded(() => t('The drawing area'), Stage),
   pages: scrolling('pages', Pages),
   layers: scrolling('layers', Layers),
+  components: scrolling('components', Components),
   objects: scrolling('objects', Objects),
   colors: scrolling('colors', Colors),
   wallTypes: scrolling('wallTypes', WallTypes),
@@ -61,9 +62,9 @@ const COMPONENTS: Record<PanelId | typeof CANVAS, FunctionComponent> = {
 }
 
 /** Where a panel goes when it is opened and its usual neighbours are closed too. */
-const SIDE: Record<PanelId, 'left' | 'right'> = { pages: 'left', layers: 'left', objects: 'left', colors: 'left', wallTypes: 'left', dimensionStyles: 'left', properties: 'right', assistant: 'right' }
+const SIDE: Record<PanelId, 'left' | 'right'> = { pages: 'left', layers: 'left', components: 'left', objects: 'left', colors: 'left', wallTypes: 'left', dimensionStyles: 'left', properties: 'right', assistant: 'right' }
 /** The panel each one shares tabs with by default. */
-const PARTNER: Record<PanelId, PanelId> = { pages: 'layers', layers: 'pages', objects: 'colors', colors: 'objects', wallTypes: 'colors', dimensionStyles: 'wallTypes', properties: 'assistant', assistant: 'properties' }
+const PARTNER: Record<PanelId, PanelId> = { pages: 'layers', layers: 'pages', components: 'layers', objects: 'colors', colors: 'objects', wallTypes: 'colors', dimensionStyles: 'wallTypes', properties: 'assistant', assistant: 'properties' }
 
 const title = (id: PanelId) => t(PANELS[id])
 
@@ -143,6 +144,7 @@ function arrange(api: DockviewApi): void {
     api.addPanel({ id, component: id, title: title(id), position, initialWidth })
   add('layers', { referencePanel: CANVAS, direction: 'left' }, 250)
   add('pages', { referencePanel: 'layers', direction: 'within' })
+  add('components', { referencePanel: 'layers', direction: 'within' })
   add('objects', { referencePanel: 'layers', direction: 'below' })
   add('colors', { referencePanel: 'objects', direction: 'within' })
   add('wallTypes', { referencePanel: 'objects', direction: 'within' })

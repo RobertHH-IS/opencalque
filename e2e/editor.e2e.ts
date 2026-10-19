@@ -778,6 +778,42 @@ test('vectorizes a stair into a group of its shapes from the right-click menu', 
   await expect(objectRows(page).filter({ hasText: 'Stair, straight' })).toHaveCount(1)
 })
 
+test('lists the components of the drawing in their own panel, and places one from there by a click or a drag', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 400, box.y + 380)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  await page.keyboard.press('Control+Alt+k')
+  await page.locator('.dv-tab', { hasText: 'Components' }).click()
+  const rows = page.locator('[data-panel="components"] .row')
+  const count = rows.first().locator('.uses')
+  await expect(rows).toHaveCount(1)
+  // Its placement is selected, so its row is too.
+  await expect(rows.first()).toHaveClass(/selected/)
+  await expect(count).toHaveText('1')
+  // Clicked, it goes on the pointer, and a click on the drawing puts it down.
+  await rows.first().click()
+  await page.mouse.click(box.x + 600, box.y + 500)
+  await expect(count).toHaveText('2')
+  await page.keyboard.press('Escape')
+  // Dragged onto the drawing, it is put down where it is let go.
+  const row = (await rows.first().boundingBox())!
+  await page.mouse.move(row.x + 10, row.y + row.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(row.x + 40, row.y + row.height / 2)
+  await page.mouse.move(box.x + 700, box.y + 300)
+  await page.mouse.up()
+  await expect(count).toHaveText('3')
+  // Deleted from its row, it goes with its placements.
+  await rows.first().getByRole('button', { name: 'Delete component and its instances' }).click()
+  await expect(rows).toHaveCount(0)
+  await expect(objectRows(page)).toHaveCount(0)
+})
+
 test('turns a rectangle about its middle from the angle typed, and arranges it from the toolbar', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
@@ -1141,7 +1177,7 @@ test('leaves out whole the tabs a narrow column has no room for, lists them behi
   await page.mouse.move(b.x + b.width - 8, y, { steps: 4 })
   await expect(marks).toHaveCount(1)
   await page.mouse.up()
-  await expect(pages).toHaveText(['Pages', 'Layers'])
+  await expect(pages).toHaveText(['Pages', 'Layers', 'Components'])
 })
 
 test('imports a DXF of twenty thousand lines in a few seconds', async ({ page }) => {

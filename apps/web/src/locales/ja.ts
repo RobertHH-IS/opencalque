@@ -100,6 +100,7 @@ export const ja: Record<string, string> = {
   "The service did not recognise the model “{model}” or the address {url}.": "サービスがモデル「{model}」またはアドレス {url} を認識しませんでした。",
   "Could not reach {url}. Check the address and that the service is running.": "{url} に接続できませんでした。アドレスと、サービスが起動していることを確認してください。",
   "Components": "コンポーネント",
+  "How many times it is placed": "配置されている数",
   "Panels": "パネル",
   "Pages": "ページ",
   "Layers": "レイヤー",

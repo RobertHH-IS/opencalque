@@ -100,6 +100,7 @@ export const zh: Record<string, string> = {
   "The service did not recognise the model “{model}” or the address {url}.": "服务无法识别模型“{model}”或地址 {url}。",
   "Could not reach {url}. Check the address and that the service is running.": "无法连接 {url}。请检查地址，并确认服务正在运行。",
   "Components": "组件",
+  "How many times it is placed": "放置的次数",
   "Panels": "面板",
   "Pages": "页面",
   "Layers": "图层",

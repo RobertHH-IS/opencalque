@@ -100,6 +100,7 @@ export const es: Record<string, string> = {
   "The service did not recognise the model “{model}” or the address {url}.": "El servicio no reconoció el modelo «{model}» o la dirección {url}.",
   "Could not reach {url}. Check the address and that the service is running.": "No se pudo contactar con {url}. Compruebe la dirección y que el servicio esté en marcha.",
   "Components": "Componentes",
+  "How many times it is placed": "Cuántas veces está colocado",
   "Panels": "Paneles",
   "Pages": "Páginas",
   "Layers": "Capas",

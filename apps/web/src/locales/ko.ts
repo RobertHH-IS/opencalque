@@ -100,6 +100,7 @@ export const ko: Record<string, string> = {
   "The service did not recognise the model “{model}” or the address {url}.": "서비스가 모델 “{model}” 또는 주소 {url}을(를) 인식하지 못했습니다.",
   "Could not reach {url}. Check the address and that the service is running.": "{url}에 연결할 수 없습니다. 주소가 맞는지, 서비스가 실행 중인지 확인하세요.",
   "Components": "컴포넌트",
+  "How many times it is placed": "배치된 횟수",
   "Panels": "패널",
   "Pages": "페이지",
   "Layers": "레이어",

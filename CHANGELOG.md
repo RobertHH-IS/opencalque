@@ -8,6 +8,9 @@ heading per version, then `### New`, `### Improved` or `### Fixed` with one line
 
 A change of the format that breaks with 1.0 on one point: what a component holds is no longer on a layer, and a placed component no longer has a stroke or fill of its own. Drawings made before are brought up to date as they open and look as they did, but for the rare cases listed under Improved. Scripts that set either are refused with a message saying what to do instead, and drawings saved by this version do not open in 1.0 and 1.1.
 
+### New
+- A Components panel, a tab beside Layers and Pages, lists the components of the drawing, with a picture of each and how many times it is placed. Click one and then click on the drawing to place it, or drag it there; double-click its name to rename it; its buttons open it to be edited or delete it with its placements, and its + makes a component of the selection. Selecting a placement highlights its component.
+
 ### Improved
 - Words that keep things apart. The window that lists everything that can be placed is the Object library: it holds components, which you draw and edit from inside, and parametric objects, drawn from their sizes and options, which the properties now call so. Object › Create component is Object › Make into a component, since the selection is replaced by a placement of the new component.
 - Vectorize turns a parametric object into a group of the shapes it draws, in its place, instead of a component: edit them at once, and make them into a component afterwards if it is to be reused. The white that hid what lay under the object comes along as a group of its own, White background, which can be deleted.

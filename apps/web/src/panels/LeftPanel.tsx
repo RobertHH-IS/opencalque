@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Plus, Trash2, Copy } from 'lucide-react'
-import { childrenOf, layersOf, pagesOf, type Document, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
+import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Pencil, Plus, Trash2, Copy } from 'lucide-react'
+import { childrenOf, componentsOf, layersOf, pagesOf, toSVG, type Document, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
 import { moveInOrder, duplicatePage, placeIn } from '../actions'
+import { carry, svgUrl } from '../carry'
 import { ColorChoice } from '../ColorChoice'
+import { allCommands, executeById } from '../commands'
+import { registry, useExtensions } from '../extensions'
 import { msg, t } from '../i18n'
 import { editComponent, showPage } from '../navigation'
-import { apply, select, useStore } from '../store'
+import { apply, select, setTool, useStore } from '../store'
 import { EditableText, IconButton, labelOf, Section, TypeIcon } from '../ui'
 
 const rename = (id: string) => (name: string) => apply([{ op: 'update_node', id, patch: { name } }])
@@ -171,6 +174,70 @@ export function Layers() {
           </IconButton>
         </div>
       ))}
+    </Section>
+  )
+}
+
+/** Puts a component of the drawing on the pointer to be placed, or under it while it is dragged to the drawing (`carried`). */
+const placeComponent = (id: string) => (carried = false) => setTool('place', { type: 'instance', component: id, carried })
+
+/**
+ * The components of the drawing, each with a picture and how many times it is placed. A click puts
+ * one on the pointer and a drag puts it down on the drawing, as from the object library; a
+ * double-click on its name renames it, and its buttons open it to be edited or delete it with its
+ * placements. A selected placement highlights its component. What is on every sheet, a component
+ * too, is left out: it is not placed, and is edited from the properties of a paper.
+ */
+export function Components() {
+  const doc = useStore((s) => s.doc)
+  // While something is dragged the drawing changes at every move: the pictures follow once it is let go.
+  const drawn = useStore((s) => s.base ?? s.doc)
+  const selection = useStore((s) => s.selection)
+  const version = useExtensions((s) => s.version)
+  const components = componentsOf(doc).filter((c) => !c.sheet)
+  const pictures = useMemo(() => new Map(componentsOf(drawn).map((c) => [c.id, svgUrl(toSVG(drawn, c.id, registry))])), [drawn, version])
+  const placed = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const node of Object.values(drawn.nodes)) if (node.type === 'instance') counts.set(node.component, (counts.get(node.component) ?? 0) + 1)
+    return counts
+  }, [drawn])
+  const chosen = new Set(selection.flatMap((id) => (doc.nodes[id]?.type === 'instance' ? [(doc.nodes[id] as { component: string }).component] : [])))
+  const make = allCommands().find((c) => c.id === 'component.create')
+  const action = (
+    <IconButton title={t('Make into a component')} disabled={!(make?.when?.() ?? true)} onClick={() => executeById('component.create')}>
+      <Plus size={14} />
+    </IconButton>
+  )
+  return (
+    <Section title={t('Components')} action={action}>
+      {components.length === 0 && <p className="hint">{t('This drawing has no component yet. Select objects and choose Object › Make into a component.')}</p>}
+      {components.map((component) => {
+        const picture = pictures.get(component.id)
+        return (
+          <div
+            key={component.id}
+            className={`row${chosen.has(component.id) ? ' selected' : ''}`}
+            title={t('Click, then click on the drawing to place it, or drag it onto the drawing')}
+            onClick={() => placeComponent(component.id)()}
+            // The first click of the double-click that renames it has put it on the pointer: it is taken off.
+            onDoubleClick={() => setTool('select')}
+            onPointerDown={(e) => carry(e, placeComponent(component.id))}
+            onDragStart={(e) => e.preventDefault()}
+          >
+            {picture ? <img className="thumb" src={picture} alt="" draggable={false} /> : <i className="thumb" />}
+            <EditableText value={component.name ?? component.id} onChange={rename(component.id)} />
+            <span className="faint uses" title={t('How many times it is placed')}>
+              {placed.get(component.id) ?? 0}
+            </span>
+            <IconButton title={t('Edit component')} onClick={() => editComponent(component.id)}>
+              <Pencil size={13} />
+            </IconButton>
+            <IconButton title={t('Delete component and its instances')} onClick={() => apply([{ op: 'remove_node', id: component.id }])}>
+              <Trash2 size={13} />
+            </IconButton>
+          </div>
+        )
+      })}
     </Section>
   )
 }

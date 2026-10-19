@@ -100,6 +100,7 @@ export const de: Record<string, string> = {
   "The service did not recognise the model “{model}” or the address {url}.": "Der Dienst kennt das Modell „{model}“ oder die Adresse {url} nicht.",
   "Could not reach {url}. Check the address and that the service is running.": "{url} ist nicht erreichbar. Prüfen Sie die Adresse und ob der Dienst läuft.",
   "Components": "Komponenten",
+  "How many times it is placed": "Wie oft sie platziert ist",
   "Panels": "Fenster",
   "Pages": "Seiten",
   "Layers": "Ebenen",

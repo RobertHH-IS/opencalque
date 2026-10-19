@@ -11,6 +11,7 @@ import { msg } from './i18n'
 export const PANELS = {
   pages: msg('Pages'),
   layers: msg('Layers'),
+  components: msg('Components'),
   objects: msg('Structure'),
   colors: msg('Colours'),
   wallTypes: msg('Wall types'),
