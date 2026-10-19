@@ -575,12 +575,8 @@ test('opens the object library on the section looked at last', async ({ page }) 
     await expect(heading('Bedroom')).toHaveCount(0)
     await page.keyboard.press('Escape')
   }
-  // In this drawing, which has no component of its own, is not opened on: All is.
-  await library.click()
-  await section('In this drawing').click()
-  await page.keyboard.press('Escape')
-  await library.click()
-  await expect(section('All')).toHaveClass(/active/)
+  // What the drawing holds already is not in it: that is the Components panel's.
+  await expect(section('In this drawing')).toHaveCount(0)
 })
 
 test('searches every section of the object library, and counts what each section holds', async ({ page }) => {
@@ -617,9 +613,45 @@ test('takes the components of a drawing on this computer from the foot of the ob
   })
   await choose(page, () => page.getByRole('button', { name: 'From a file…' }).click(), 'stools.opencalque', other)
   await expect(page.locator('.toast')).toContainText('Imported 1 component from stools.opencalque')
-  // The library shows them where they now are.
-  await expect(librarySection(page, 'In this drawing')).toHaveClass(/active/)
-  await expect(page.locator('.warehouse-card strong')).toHaveText(['Stool'])
+  // They are shown where they now are, in the Components panel; taken again, they are components of their own.
+  const rows = page.locator('[data-panel="components"] .row')
+  await expect(rows.locator('.editable')).toHaveText(['Stool'])
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
+  await choose(page, () => page.getByRole('button', { name: 'From a file…' }).click(), 'stools.opencalque', other)
+  await expect(rows.locator('.editable')).toHaveText(['Stool', 'Stool 2'])
+})
+
+test('takes a component of its own from the object library each time, placed as often as clicked', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const box = (await canvas(page).boundingBox())!
+  const armchair = page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Armchair$/ }) }).first()
+  // Taken once and put down twice: one component, placed twice.
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
+  await armchair.click()
+  await page.mouse.click(box.x + 300, box.y + 300)
+  await page.mouse.click(box.x + 500, box.y + 300)
+  await page.keyboard.press('Escape')
+  await page.locator('.dv-tab', { hasText: 'Components' }).click()
+  const panel = page.locator('[data-panel="components"]')
+  await expect(panel.locator('.row .editable')).toHaveText(['Armchair'])
+  await expect(panel.locator('.row .uses')).toHaveText(['2'])
+  // Taken again: another component, of its own.
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
+  await armchair.click()
+  await page.mouse.click(box.x + 700, box.y + 300)
+  await page.keyboard.press('Escape')
+  await expect(panel.locator('.row .editable')).toHaveText(['Armchair', 'Armchair 2'])
+  await expect(panel.locator('.row .uses')).toHaveText(['2', '1'])
+  // The panel finds them by name.
+  const search = panel.getByPlaceholder('Search the components…')
+  await search.fill('chair 2')
+  await expect(panel.locator('.row .editable')).toHaveText(['Armchair 2'])
+  await search.fill('sofa')
+  await expect(panel.locator('.row')).toHaveCount(0)
+  await expect(panel.getByText('Nothing matches.')).toBeVisible()
+  await search.press('Escape')
+  await expect(panel.locator('.row')).toHaveCount(2)
 })
 
 test('places the wall-hung toilet from the library in a drawing that took a double washbasin from where it was being made', async ({ page }) => {

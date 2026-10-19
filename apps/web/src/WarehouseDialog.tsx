@@ -1,13 +1,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { applyOps, componentsOf, createDocument, declarativeExtension, toSVG, type DeclarativeExtension, type Document, type Op, type ParametricKind } from '@opencalque/core'
-import { Globe, HardDrive, Pencil, SlidersHorizontal, TextCursorInput, Trash2, X } from 'lucide-react'
-import { deleteComponent, DRAWING_EXTENSIONS, guarded, importLibraryFrom, libraryOps, openComponent } from './actions'
+import { Globe, HardDrive, SlidersHorizontal, X } from 'lucide-react'
+import { DRAWING_EXTENSIONS, guarded, importLibraryFrom, libraryOps } from './actions'
+import { showPanel } from './dock'
 import { carry, svgUrl } from './carry'
 import { language, msg, t, tn } from './i18n'
 import { platform } from './platform'
 import { setPrefs, usePrefs } from './prefs'
 import { BUILT_IN_EXTENSION, loadExtensions, registry, useExtensions } from './extensions'
-import { apply, applyOrThrow, setTool, useStore } from './store'
+import { applyOrThrow, setTool, useStore } from './store'
 import { toast, useWindows } from './windows'
 import { IconButton } from './ui'
 import { bundledExtensions, bundledLibraries, remoteCatalog, type Library } from './catalog'
@@ -42,8 +43,6 @@ interface Card {
   picture: string
   /** Puts it on the pointer, to be placed on the drawing; `carried` while the card is being dragged there. */
   place(carried?: boolean): void
-  /** Id of the component, for one that belongs to the drawing and can therefore be renamed, edited and deleted here. */
-  own?: string
   /** A parametric object: its sizes and options are set once placed. Marked on its card. */
   parametric?: boolean
   /** The library a component of a library is in, and its id there. */
@@ -52,7 +51,6 @@ interface Card {
 
 /** Where parametric objects that say no category, or one nothing else is in, are listed. */
 const OBJECTS = 'objects'
-const DRAWING = 'drawing'
 /** Groups of parametric objects that no library is, by the category they say, and their names. */
 const CATEGORIES: Record<string, string> = {
   architecture: msg('Architecture'),
@@ -99,12 +97,12 @@ function lastSection(): string {
 }
 
 /**
- * The object library: every object that can be placed, in one searchable grid. That is the
- * parametric objects of the extensions in use (doors, windows, stairs…), the components of the
- * drawing that is open, and those of each library of the warehouse.
+ * The object library: what can be brought into the drawing, in one searchable grid. That is the
+ * parametric objects of the extensions in use (doors, windows, stairs…) and the components of each
+ * library of the warehouse, each taken a component of the drawing's own. What the drawing holds
+ * already is in the Components panel, not here.
  */
 function Components({ libraries }: { libraries: Library[] }) {
-  const doc = useStore((s) => s.doc)
   const version = useExtensions((s) => s.version)
   const [loaded, setLoaded] = useState<Record<string, Document>>({})
   const [chosenSection, setChosenSection] = useState(lastSection)
@@ -113,8 +111,6 @@ function Components({ libraries }: { libraries: Library[] }) {
   const [searchSection, setSearchSection] = useState('all')
   // The sizes on the cards are in the unit the user works in.
   const lengthUnit = usePrefs((p) => p.unit)
-  /** Key of the card whose name is being typed. */
-  const [renaming, setRenaming] = useState<string | null>(null)
 
   useEffect(() => {
     let stale = false
@@ -130,11 +126,10 @@ function Components({ libraries }: { libraries: Library[] }) {
   }, [libraries])
 
   /**
-   * Copies components of a library into the drawing. One alone is put on the pointer instead, and
-   * comes into the drawing with its first placement: nothing is left when the placing is given up.
-   * What comes in is the library's: a copy brought in before is reused only while nothing in it
-   * has been changed, and one that was is left as another component of the drawing's own. It is
-   * named in the user's language, like what the library showed.
+   * Copies components of a library into the drawing, each a component of its own however many
+   * times it was taken before, named in the user's language like what the library showed
+   * (`libraryOps`). One alone is put on the pointer instead, and comes into the drawing with its
+   * first placement: nothing is left when the placing is given up.
    */
   const add = (library: Document, ids: string[], from?: Library, carried?: boolean) =>
     guarded(() => {
@@ -142,7 +137,8 @@ function Components({ libraries }: { libraries: Library[] }) {
       close()
       if (ids.length === 1) return setTool('place', { type: 'library', library, component: ids[0], names, carried })
       applyOrThrow(libraryOps(useStore.getState().doc, library, ids, names).ops)
-      toast(tn(ids.length, '{n} component added. It is in the object library, under “In this drawing”.', '{n} components added. They are in the object library, under “In this drawing”.'))
+      showPanel('components')
+      toast(tn(ids.length, '{n} component added. It is in the Components panel.', '{n} components added. They are in the Components panel.'))
     })
 
   // The sections: the drawing's own components first; then each library, split into the rooms its
@@ -162,11 +158,10 @@ function Components({ libraries }: { libraries: Library[] }) {
   const lists = [...HEADINGS.map(([heading, ids]) => ({ heading, ids: ids.filter((id) => present.has(id)) })), { heading: msg('Others'), ids: rest }].filter((list) => list.ids.length > 0)
   const nameOf = (id: string) => {
     const library = libraries.find((l) => l.id === id)
-    if (id === DRAWING) return t('In this drawing')
     if (id === OBJECTS) return t('Other objects')
     return library ? own(library, library.name) : CATEGORIES[id] ? t(CATEGORIES[id]) : t(id)
   }
-  const groups = [DRAWING, ...lists.flatMap((list) => list.ids)].map((id) => ({ id, name: nameOf(id) }))
+  const groups = lists.flatMap((list) => list.ids).map((id) => ({ id, name: nameOf(id) }))
 
   // Pictures are the objects themselves, rendered the way the drawing renders them.
   const objectCards = useMemo(
@@ -183,19 +178,6 @@ function Components({ libraries }: { libraries: Library[] }) {
         place: (carried) => (close(), setTool('place', { type: 'parametric', kind: kind.kind, carried })),
       })),
     [version, lengthUnit],
-  )
-  const drawingCards = useMemo(
-    () =>
-      componentsOf(doc).map((c): Card => ({
-        key: `drawing ${c.id}`,
-        own: c.id,
-        group: DRAWING,
-        name: c.name ?? c.id,
-        description: c.description ?? '',
-        picture: svgUrl(toSVG(doc, c.id, registry)),
-        place: (carried) => (close(), setTool('place', { type: 'instance', component: c.id, carried })),
-      })),
-    [doc, version],
   )
   const libraryCards = useMemo(
     () =>
@@ -214,14 +196,13 @@ function Components({ libraries }: { libraries: Library[] }) {
     [loaded, version, libraries],
   )
 
-  /** Copies the components of a drawing on this computer into this one, and shows them where they now are. */
+  /** Copies the components of a drawing on this computer into this one, and shows them where they now are: in the Components panel. */
   const fromFile = () =>
     guarded(async () => {
       const file = await platform.open(DRAWING_EXTENSIONS)
       if (!file) return
+      close()
       importLibraryFrom(file.name, file.content)
-      setSearch('')
-      setFilter(DRAWING)
     })
 
   const setFilter = (section: string) => {
@@ -235,16 +216,14 @@ function Components({ libraries }: { libraries: Library[] }) {
   const words = search.toLowerCase().split(/\s+/).filter(Boolean)
   const offered = (section: string) => section === 'all' || groups.some((group) => group.id === section)
   // A search looks through every section, narrowed to one only when one is chosen while searching.
-  // Otherwise the section looked at last is shown, while there is something in it to show: not a
-  // library that is no longer offered, nor the drawing's own components in a drawing that has none.
-  const filter =
-    words.length > 0 ? (offered(searchSection) ? searchSection : 'all') : offered(chosenSection) && (chosenSection !== DRAWING || drawingCards.length > 0) ? chosenSection : 'all'
+  // Otherwise the section looked at last is shown, while it is offered: not a library gone since.
+  const filter = words.length > 0 ? (offered(searchSection) ? searchSection : 'all') : offered(chosenSection) ? chosenSection : 'all'
   const choose = (section: string) => (words.length > 0 ? setSearchSection(section) : setFilter(section))
 
   // Every section with what it holds that matches the search, which the list of sections counts.
   const found = groups.map((group) => ({
     ...group,
-    cards: [...objectCards, ...drawingCards, ...libraryCards].filter((card) => card.group === group.id && words.every((word) => `${card.name} ${card.description} ${group.name}`.toLowerCase().includes(word))),
+    cards: [...objectCards, ...libraryCards].filter((card) => card.group === group.id && words.every((word) => `${card.name} ${card.description} ${group.name}`.toLowerCase().includes(word))),
   }))
   const counts: Record<string, number> = { all: 0 }
   for (const group of found) {
@@ -290,7 +269,6 @@ function Components({ libraries }: { libraries: Library[] }) {
         {/* The sections as a list to pick from, where the window is too narrow to show them beside what they hold. */}
         <select className="warehouse-section-picker" aria-label={t('Sections')} value={filter} onChange={(e) => choose(e.target.value)}>
           <option value="all">{t('All')}</option>
-          <option value={DRAWING}>{nameOf(DRAWING)}</option>
           {lists.map(({ heading, ids }) => (
             <optgroup key={heading} label={t(heading)}>
               {ids.map((id) => (
@@ -305,7 +283,6 @@ function Components({ libraries }: { libraries: Library[] }) {
       <div className="warehouse-body">
         <nav className="warehouse-sections" aria-label={t('Sections')}>
           {section('all', t('All'))}
-          {section(DRAWING, nameOf(DRAWING))}
           {lists.map(({ heading, ids }) => (
             <Fragment key={heading}>
               <h5>{t(heading)}</h5>
@@ -315,7 +292,7 @@ function Components({ libraries }: { libraries: Library[] }) {
           {/* Where more comes from: a drawing on this computer, whose components join this one's, or a catalog on the web, whose libraries join these. */}
           <div className="warehouse-more">
             <h5>{t('More components')}</h5>
-            <button className="warehouse-section" title={t('Copies the components of a drawing on this computer into this one, under “In this drawing”')} onClick={fromFile}>
+            <button className="warehouse-section" title={t('Copies the components of a drawing on this computer into this one, where the Components panel lists them')} onClick={fromFile}>
               <HardDrive size={13} />
               <span className="warehouse-section-name">{t('From a file…')}</span>
             </button>
@@ -360,47 +337,13 @@ function Components({ libraries }: { libraries: Library[] }) {
                       <SlidersHorizontal size={11} />
                     </span>
                   )}
-                  {renaming === card.key && card.own ? (
-                    <input
-                      className="inline-input"
-                      autoFocus
-                      defaultValue={card.name}
-                      onClick={(e) => e.stopPropagation()}
-                      onFocus={(e) => e.target.select()}
-                      onBlur={(e) => {
-                        setRenaming(null)
-                        const name = e.target.value.trim()
-                        if (name && name !== card.name) apply([{ op: 'update_node', id: card.own!, patch: { name } }])
-                      }}
-                      onKeyDown={(e) => {
-                        e.stopPropagation()
-                        if (e.key === 'Escape') e.currentTarget.value = card.name
-                        if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
-                      }}
-                    />
-                  ) : (
-                    <strong>{card.name}</strong>
-                  )}
+                  <strong>{card.name}</strong>
                   <span className="faint">{card.description}</span>
-                  {card.own && (
-                    // What can be done to a component of the drawing, besides placing it.
-                    <span className="warehouse-actions" onClick={(e) => e.stopPropagation()}>
-                      <IconButton title={t('Rename')} onClick={() => setRenaming(card.key)}>
-                        <TextCursorInput size={13} />
-                      </IconButton>
-                      <IconButton title={t('Edit component')} onClick={() => (close(), openComponent(card.own!))}>
-                        <Pencil size={13} />
-                      </IconButton>
-                      <IconButton title={t('Delete component and its instances')} onClick={() => deleteComponent(card.own!)}>
-                        <Trash2 size={13} />
-                      </IconButton>
-                    </span>
-                  )}
                 </div>
               ))}
             </Fragment>
           ))}
-          {shown.length === 0 && <p className="hint">{loading ? t('Loading…') : filter === DRAWING && words.length === 0 ? t('This drawing has no component yet. Select objects and choose Object › Make into a component.') : t('Nothing matches.')}</p>}
+          {shown.length === 0 && <p className="hint">{loading ? t('Loading…') : t('Nothing matches.')}</p>}
         </div>
       </div>
     </>

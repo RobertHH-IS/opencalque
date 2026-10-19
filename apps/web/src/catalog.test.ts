@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, childrenOf, componentsOf, createDocument, declarativeExtension, importComponents, moveOps, Registry, type Op } from '@opencalque/core'
+import { childrenOf, componentsOf, createDocument, declarativeExtension, importComponents, Registry, toSVG } from '@opencalque/core'
 import { bundledExtensions, bundledLibraries } from './catalog'
 
 /**
  * Every place ever given in a library that ships with the app, with the component it holds. A
- * drawing that took a component from a library knows it by its place there, and places that one
- * again when the library's component at that place is clicked: so a place keeps its component for
- * good. A new component is added at the end (and here); one taken out leaves its place empty
- * (null), and an empty place is never filled again.
+ * drawing saved before 1.2 knows the components it took from a library by their place there
+ * (`meta.source`), which a paste still goes by: so a place keeps its component for good. A new
+ * component is added at the end (and here); one taken out leaves its place empty (null), and an
+ * empty place is never filled again.
  */
 const PLACES: Record<string, (string | null)[]> = {
   furniture: ['Double bed', 'Single bed', 'Sofa, two seats', 'Armchair', 'Chair', 'Dining table, six chairs', 'Desk with chair', 'Wardrobe', 'Coffee table, round'],
@@ -34,22 +34,19 @@ describe('the libraries that ship with the app', () => {
     }
   })
 
-  it('give a drawing one component for each placed several times, until it is changed there', async () => {
+  it('give a drawing a component of its own each time one is taken, which draws as the library does', async () => {
+    const plain = new Registry()
     for (const library of bundledLibraries()) {
       const source = await library.load()
       const ids = componentsOf(source).map((component) => component.id)
-      const first = importComponents(createDocument(), source, ids, { original: true })
-      // Named in the user's language, as the object library does.
-      const named = applyOps(first.doc, Object.values(first.imported).map((id): Op => ({ op: 'update_node', id, patch: { name: `${first.doc.nodes[id].name}!` } })))
+      const first = importComponents(createDocument(), source, ids, { fresh: true })
       for (const id of ids) {
-        const again = importComponents(named, source, [id], { original: true })
-        expect(again.imported[id], `${library.id} ${id}`).toBe(first.imported[id])
-        expect(again.doc).toBe(named)
+        const again = importComponents(first.doc, source, [id], { fresh: true })
+        const copy = again.imported[id]
+        expect(copy, `${library.id} ${id}`).not.toBe(first.imported[id])
+        expect(childrenOf(again.doc, copy).length).toBe(childrenOf(source, id).length)
+        expect(toSVG(again.doc, copy, plain)).toBe(toSVG(source, id, plain))
       }
-      // Something of it moved in the drawing, it is the drawing's own: the library's comes in beside it.
-      const [part] = childrenOf(named, first.imported[ids[0]])
-      const moved = applyOps(named, moveOps(named, part, { x: 10, y: 0 }))
-      expect(importComponents(moved, source, [ids[0]], { original: true }).imported[ids[0]]).not.toBe(first.imported[ids[0]])
     }
   })
 })

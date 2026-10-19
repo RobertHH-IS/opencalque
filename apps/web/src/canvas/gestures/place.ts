@@ -2,7 +2,7 @@ import { canSplit, hitTest, newId, roomAt, snapOpeningToWall, splitOps, splitPla
 import { libraryOps, pickStyle } from '../../actions'
 import { registry } from '../../extensions'
 import { t } from '../../i18n'
-import { apply, cancel, commit, layerHere, preview, type Placing } from '../../store'
+import { apply, cancel, commit, layerHere, preview, useStore, type Placing } from '../../store'
 import { formatLength } from '../../units'
 import { gridStep } from '../../view'
 import { snap } from '../aim'
@@ -22,12 +22,17 @@ export const eyedropperDown: Press = (c, _e, _at, world) => {
   if (source) pickStyle(source.node)
 }
 
-/** What follows the pointer is put down, and the next one follows it. */
+/**
+ * What follows the pointer is put down, and the next one follows it. A library's component comes
+ * in with the first: the next ones are placements of that same one, not further copies.
+ */
 export const placeDown: Press = (c) => {
-  if (get().base) {
-    commit()
-    c.placed = newId()
-  }
+  const { base, placing } = get()
+  if (!base) return
+  const brought = placing?.type === 'library' ? fromLibrary(base, placing).id : null
+  commit()
+  if (brought) useStore.setState({ placing: { type: 'instance', component: brought, carried: placing?.carried } })
+  c.placed = newId()
 }
 
 /**
@@ -57,7 +62,7 @@ export const splitDown: Press = (c, e, _at, world) => {
  */
 let brought: { doc: Document; placing: Placing; ops: Op[]; id: string } | null = null
 
-/** The operations that bring the component of a library placing into `doc` (none once an unchanged copy is there), and its id there. */
+/** The operations that bring the component of a library placing into `doc`, a component of its own, and its id there. */
 function fromLibrary(doc: Document, placing: Extract<Placing, { type: 'library' }>): { ops: Op[]; id: string } {
   if (brought?.doc !== doc || brought.placing !== placing) {
     const { ops, imported } = libraryOps(doc, placing.library, [placing.component], placing.names)

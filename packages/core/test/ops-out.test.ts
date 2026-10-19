@@ -37,15 +37,19 @@ describe('the operations a helper returns', () => {
     same(stretched, detachInstance(stretched, made.instanceId, registry))
   })
 
-  it('bring the components in, also when one is taken back as it was', () => {
+  it('bring the components in, anew or as a paste finds them', () => {
     const library = createComponent(plan(), registry, ['w1', 'r'], 'Corner')
     const empty = createDocument()
-    const first = importComponents(empty, library.doc, [library.componentId], { original: true })
+    const first = importComponents(empty, library.doc, [library.componentId], { fresh: true })
     same(empty, first)
-    // The same again finds the copy already there: nothing more comes in.
-    const again = importComponents(first.doc, library.doc, [library.componentId], { original: true })
-    expect(again.ops).toEqual([])
+    // Fresh again, another comes in.
+    const again = importComponents(first.doc, library.doc, [library.componentId], { fresh: true })
     same(first.doc, again)
+    // As a paste does, the copy already there is found: nothing more comes in.
+    const kept = importComponents(empty, library.doc, [library.componentId])
+    const found = importComponents(kept.doc, library.doc, [library.componentId])
+    expect(found.ops).toEqual([])
+    same(kept.doc, found)
   })
 
   it('paste, components and all', () => {

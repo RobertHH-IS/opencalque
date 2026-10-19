@@ -3542,6 +3542,24 @@ select.faint-choice,
   color: var(--text);
 }
 
+.panel-search {
+  box-sizing: border-box;
+  width: calc(100% - 24px);
+  height: 26px;
+  margin: 2px 8px 6px 16px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.panel-search:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
 .thumb {
   flex: none;
   box-sizing: border-box;

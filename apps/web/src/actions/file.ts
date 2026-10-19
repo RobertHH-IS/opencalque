@@ -1,5 +1,6 @@
-import { applyOps, componentsOf, createDocument, dxfOps, importComponents, NewerFormatError, parseDocument, pdfFontCharacters, quantities, quantitiesCsv, readDocument, serializeDocument, toDXF, toPDF, toSVG, type Document, type Op, type QuantityLabels } from '@opencalque/core'
+import { applyOps, componentsOf, createDocument, dxfOps, freeComponentName, importComponents, NewerFormatError, parseDocument, pdfFontCharacters, quantities, quantitiesCsv, readDocument, serializeDocument, toDXF, toPDF, toSVG, type Document, type Op, type QuantityLabels } from '@opencalque/core'
 import { abortable } from '../abortable'
+import { showPanel } from '../dock'
 import { registry } from '../extensions'
 import { language, t, tn } from '../i18n'
 import { pdfFonts } from '../pdfFonts'
@@ -249,31 +250,33 @@ export const importDxf = () =>
   })
 
 /**
- * Copies the components of another drawing, given as the text of its file, into this one: as that
- * drawing has them, beside any copy brought in before and changed here since.
+ * Copies the components of another drawing, given as the text of its file, into this one, each a
+ * component of its own however many times it was taken before (`libraryOps`), and shows them in
+ * the Components panel.
  */
 export function importLibraryFrom(name: string, content: string): void {
-  const before = componentsOf(get().doc).length
   const source = parseDocument(JSON.parse(content))
-  const { ops } = importComponents(get().doc, source, undefined, { original: true })
-  if (!apply(ops)) return
-  const count = componentsOf(get().doc).length - before
-  if (count === 0) return toast(t('{file} has no components to import. To work on that drawing, open it instead (File → Open).', { file: name }))
-  toast(tn(count, 'Imported {n} component from {file}', 'Imported {n} components from {file}', { file: name }))
+  const ids = componentsOf(source).map((c) => c.id)
+  if (ids.length === 0) return toast(t('{file} has no components to import. To work on that drawing, open it instead (File → Open).', { file: name }))
+  if (!apply(libraryOps(get().doc, source, ids).ops)) return
+  showPanel('components')
+  toast(tn(ids.length, 'Imported {n} component from {file}', 'Imported {n} components from {file}', { file: name }))
 }
 
 /**
- * The operations that copy components of a library into the drawing, as the library has them
- * (`importComponents`), each named in the user's language as the library shows it (`names`, its
- * translations), and the id each has in the drawing: for one brought in before and unchanged since,
- * the copy already there, and no operation.
+ * The operations that copy components of a library into the drawing, as the library has them, each
+ * a component of its own however many times it was taken before (`importComponents`, `fresh`), and
+ * the id each is given. Each is named in the user's language as the library shows it (`names`, its
+ * translations), with a number when the drawing has one of that name already.
  */
 export function libraryOps(doc: Document, library: Document, ids: string[], names: Record<string, string> = {}): { ops: Op[]; imported: Record<string, string> } {
-  const result = importComponents(doc, library, ids, { original: true })
+  const result = importComponents(doc, library, ids, { fresh: true })
+  const given = new Set<string>()
   const named = Object.values(result.imported).flatMap((id): Op[] => {
-    const name = result.doc.nodes[id]?.name
-    const shown = name && names[name]
-    return shown && shown !== name ? [{ op: 'update_node', id, patch: { name: shown } }] : []
+    const name = result.doc.nodes[id]?.name ?? ''
+    const shown = freeComponentName(doc, names[name] ?? (name || 'Component'), given)
+    given.add(shown)
+    return shown !== name ? [{ op: 'update_node', id, patch: { name: shown } }] : []
   })
   return { ops: [...result.ops, ...named], imported: result.imported }
 }

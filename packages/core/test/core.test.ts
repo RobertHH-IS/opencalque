@@ -8,6 +8,7 @@ import {
   createComponent,
   createDocument,
   detachInstance,
+  freeComponentName,
   hitTest,
   groupNodes,
   importComponents,
@@ -522,44 +523,29 @@ describe('components', () => {
     expect(again.imported).toEqual(first.imported)
   })
 
-  it('imports from a library what the library holds, beside a copy changed in the drawing since', () => {
-    const library = createComponent(drawn(), registry, ['r', 'l'], 'Thing')
-    const take = (doc: Document, original = true) => importComponents(doc, library.doc, [library.componentId], { original })
-    const first = take(createDocument())
-    const copy = first.imported[library.componentId]
-    // Renamed, as the library does in the user's language, it still draws the same: it is reused.
-    const renamed = applyOps(first.doc, [{ op: 'update_node', id: copy, patch: { name: 'Chose' } }])
-    const again = take(renamed)
-    expect(again.imported[library.componentId]).toBe(copy)
-    expect(again.doc).toBe(renamed)
-    // Changed, it is another component of the drawing's own, and the library's comes in beside it.
-    const rect = childrenOf(first.doc, copy).find((n) => n.type === 'rect')!
-    const changed = applyOps(first.doc, [{ op: 'update_node', id: rect.id, patch: { width: 80 } }])
-    const fresh = take(changed)
-    const other = fresh.imported[library.componentId]
-    expect(other).not.toBe(copy)
-    expect(componentsOf(fresh.doc)).toHaveLength(2)
-    expect(childrenOf(fresh.doc, copy).find((n) => n.type === 'rect')).toMatchObject({ width: 80 })
-    expect(childrenOf(fresh.doc, other).find((n) => n.type === 'rect')).toMatchObject({ width: 50 })
-    // The unchanged copy is the one taken next time; a paste, which does not ask for the original, takes the first.
-    expect(take(fresh.doc).imported[library.componentId]).toBe(other)
-    expect(take(fresh.doc, false).imported[library.componentId]).toBe(copy)
-  })
-
-  it('imports a library component anew when a component inside it was changed in the drawing', () => {
+  it('imports from a library a component of its own each time, its dependencies with it', () => {
     const inner = createComponent(drawn(), registry, ['r'], 'Inner')
     const outer = createComponent(inner.doc, registry, [inner.instanceId, 'l'], 'Outer')
-    const first = importComponents(createDocument(), outer.doc, [outer.componentId], { original: true })
-    expect(importComponents(first.doc, outer.doc, [outer.componentId], { original: true }).doc).toBe(first.doc)
-    const innerCopy = first.imported[inner.componentId]
-    const [rect] = childrenOf(first.doc, innerCopy)
-    const changed = applyOps(first.doc, [{ op: 'update_node', id: rect.id, patch: { height: 10 } }])
-    const again = importComponents(changed, outer.doc, [outer.componentId], { original: true })
+    const take = (doc: Document) => importComponents(doc, outer.doc, [outer.componentId], { fresh: true })
+    const first = take(createDocument())
+    const again = take(first.doc)
     expect(componentsOf(again.doc)).toHaveLength(4)
-    expect(again.imported[inner.componentId]).not.toBe(innerCopy)
     expect(again.imported[outer.componentId]).not.toBe(first.imported[outer.componentId])
+    expect(again.imported[inner.componentId]).not.toBe(first.imported[inner.componentId])
     const instance = childrenOf(again.doc, again.imported[outer.componentId]).find((n) => n.type === 'instance')
     expect(instance).toMatchObject({ component: again.imported[inner.componentId] })
+    // Nothing says where it came from, so that a paste takes it for no other.
+    expect(componentsOf(again.doc).map((c) => c.meta?.source)).toEqual([undefined, undefined, undefined, undefined])
+  })
+
+  it('names a component after another already there with the first number free', () => {
+    const doc = applyOps(createDocument(), [
+      { op: 'add_node', node: { type: 'component', name: 'Socket' } },
+      { op: 'add_node', node: { type: 'component', name: 'Socket 2' } },
+    ])
+    expect(freeComponentName(doc, 'Switch')).toBe('Switch')
+    expect(freeComponentName(doc, 'Socket')).toBe('Socket 3')
+    expect(freeComponentName(doc, 'Socket', new Set(['Socket 3']))).toBe('Socket 4')
   })
 })
 

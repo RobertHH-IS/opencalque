@@ -212,28 +212,16 @@ export function transplantOps(
   return { ops, top }
 }
 
-/** Whether two values hold the same, whatever the order of their keys; a key set to undefined is no key. */
-function sameValue(a: unknown, b: unknown): boolean {
-  if (a === b) return true
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false
-  const one = a as Record<string, unknown>
-  const other = b as Record<string, unknown>
-  const keys = Object.keys(one).filter((key) => one[key] !== undefined)
-  return keys.length === Object.keys(other).filter((key) => other[key] !== undefined).length && keys.every((key) => sameValue(one[key], other[key]))
-}
-
-/** Whether two containers of a document hold the same, in the same order, however deeply grouped, whatever the ids of what they hold. */
-function sameContents(doc: Document, a: string, b: string): boolean {
-  const one = childrenOf(doc, a)
-  const other = childrenOf(doc, b)
-  const content = ({ id: _, parent: __, order: ___, ...rest }: Node) => rest
-  return one.length === other.length && one.every((n, i) => sameValue(content(n), content(other[i])) && (n.type !== 'group' || sameContents(doc, n.id, other[i].id)))
-}
-
-/** Whether two components of a document draw the same thing. Their names, descriptions and where they came from do not count. */
-function sameComponent(doc: Document, a: string, b: string): boolean {
-  const definition = ({ id: _, parent: __, order: ___, name: ____, description: _____, meta: ______, ...rest }: Node & { description?: string }) => rest
-  return sameValue(definition(doc.nodes[a]), definition(doc.nodes[b])) && sameContents(doc, a, b)
+/**
+ * `name`, or, when a component of the drawing is called so already, `name` followed by the first
+ * number from 2 that none is; `taken` adds names given in the same go.
+ */
+export function freeComponentName(doc: Document, name: string, taken: ReadonlySet<string> = new Set()): string {
+  const used = new Set([...componentsOf(doc).flatMap((c) => (c.name ? [c.name] : [])), ...taken])
+  if (!used.has(name)) return name
+  let n = 2
+  while (used.has(`${name} ${n}`)) n++
+  return `${name} ${n}`
 }
 
 /**
@@ -243,9 +231,10 @@ function sameComponent(doc: Document, a: string, b: string): boolean {
  * where it first came from (`meta.source`, "drawing#component"), however many documents it went
  * through on the way, so that a component copied to the clipboard and pasted back into its own
  * drawing is the same component, its new instances instances of it.
- * With `original`, what comes in is always what the source holds: a component brought in before
- * is reused only while it still draws the same, and one changed since in the document is left as
- * it is, another of its own, the source's coming in beside it. Libraries are imported that way.
+ * With `fresh`, every component comes in anew, as the source holds it, however many times it was
+ * brought in before: a component of the document's own, which keeps no `meta.source`, so that
+ * nothing takes it for another. Libraries, and drawings whose components are taken, are imported
+ * that way; a paste is not.
  * Returns the new document, the operations that make it, and a map from source component id to
  * local component id.
  */
@@ -253,13 +242,13 @@ export function importComponents(
   doc: Document,
   source: Document,
   componentIds: string[] = componentsOf(source).map((c) => c.id),
-  options: { original?: boolean } = {},
+  options: { fresh?: boolean } = {},
 ): { doc: Document; ops: Op[]; imported: Record<string, string> } {
   const imported: Record<string, string> = {}
   // The components the document has, by where they come from: its own, and copies of others, in
   // the order they were added.
-  const known = new Map<string, string[]>()
-  const know = (key: string, id: string) => known.set(key, [...(known.get(key) ?? []), id])
+  const knownAs = new Map<string, string[]>()
+  const know = (key: string, id: string) => knownAs.set(key, [...(knownAs.get(key) ?? []), id])
   for (const n of Object.values(doc.nodes)) {
     if (n.type !== 'component') continue
     know(`${doc.id}#${n.id}`, n.id)
@@ -275,33 +264,25 @@ export function importComponents(
     if (imported[sourceId]) return
     const component = source.nodes[sourceId]
     if (component?.type !== 'component') throw new OpError(`"${sourceId}" is not a component of the library`)
-    const candidates = [...(known.get(origin(component, sourceId)) ?? []), ...(known.get(`${source.id}#${sourceId}`) ?? [])]
-    if (candidates.length > 0 && !options.original) {
-      imported[sourceId] = candidates[0]
-      return
+    if (!options.fresh) {
+      const known = [...(knownAs.get(origin(component, sourceId)) ?? []), ...(knownAs.get(`${source.id}#${sourceId}`) ?? [])]
+      if (known.length > 0) {
+        imported[sourceId] = known[0]
+        return
+      }
     }
-    const before = result
-    const mark = ops.length
     const id = newId('component')
     imported[sourceId] = id
     // Nested components first, so the instances copied below have something to point at.
     for (const leaf of leavesOf(source, sourceId)) if (leaf.type === 'instance') copy(leaf.component)
-    const { id: _, order: __, parent: ___, ...definition } = component
-    const added: Op[] = [{ op: 'add_node', node: { ...definition, id, meta: { ...component.meta, source: origin(component, sourceId) } } }]
+    const { id: _, order: __, parent: ___, meta, ...definition } = component
+    const { source: ____, ...own } = meta ?? {}
+    const where = options.fresh ? (Object.keys(own).length > 0 ? { meta: own } : {}) : { meta: { ...meta, source: origin(component, sourceId) } }
+    const added: Op[] = [{ op: 'add_node', node: { ...definition, id, ...where } }]
     result = applyOps(result, added)
     const contents = transplantOps(result, source, sourceId, id, { components: imported }).ops
     result = applyOps(result, contents)
     ops.push(...added, ...contents)
-    // The copy is compared with those already there once it is in the same document, so that both
-    // went through the same operations. One that draws the same is taken instead, and the copy
-    // dropped: nothing else came in with it, since a nested component copied anew would have made
-    // the two differ.
-    const same = candidates.find((other) => sameComponent(result, other, id))
-    if (same) {
-      result = before
-      ops.length = mark
-      imported[sourceId] = same
-    }
   }
 
   for (const id of componentIds) copy(id)

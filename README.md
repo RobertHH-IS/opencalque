@@ -170,7 +170,7 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Navigate | Scroll to zoom, middle-drag or `Space`+drag to pan, `Shift+1` to fit; a tap on `Space` goes back to selecting |
 | Snapping | Snaps to existing points, then to the grid. `Shift` constrains to 45°, `Alt` turns it off |
 | Edit | Drag objects or their square handles, or type exact values in the right panel |
-| Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the Components panel, beside Layers, or from the object library. Double-click an instance to edit the component; every instance updates |
+| Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the Components panel, beside Layers. Double-click an instance to edit the component; every instance updates |
 | Walls | Walls that end at the same point join cleanly, at any angle. Double-click the last corner to close the walls back to the first one |
 | Dimensions | `D`, click the two points, then click where the dimension line should sit. End markers, line, extension lines, text, font, unit and decimals are in the right panel; set them before drawing to change the defaults |
 | Measure | `M`, click two points for a live reading. Nothing is added to the drawing. The arrow beside the button, or `Shift+M`, measures an angle: click its corner, then a point along each side |
@@ -182,7 +182,7 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Align | With two or more selected, Arrange in the right panel aligns them left, centre, right, top, middle or bottom; with three or more it spaces them evenly |
 | Pages | In the Pages panel: add, rename, duplicate with everything on it, move up or down |
 | Shared layers | In the Layers panel, the pages icon on a layer shows what is on it on every page: a frame, a logo, a title. It is changed on the page it was drawn on |
-| Object library | The books button in the toolbar: every component and parametric object, pictured, with a search. Click one, then click on the drawing |
+| Object library | The books button in the toolbar: every parametric object and library component, pictured, with a search. Click one, then click on the drawing |
 | Doors and windows | The Door or Window button in the toolbar, then click on a wall: it snaps on, turns to follow the wall, opens towards your cursor and cuts the opening. Drag it to slide it along the wall. Type, hinge side, width and more are in the right panel |
 | Compass | Object library → Compass (north). Turn it with the round handle above it, or type its rotation; size and letter are in the right panel |
 | Select | Click an object. A component or a library object is picked anywhere inside its outline; a plain shape with no fill by its line. A room is picked by its name, so what stands on its floor stays easy to click |

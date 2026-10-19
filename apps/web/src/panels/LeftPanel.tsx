@@ -198,7 +198,10 @@ export function Components() {
   const selection = useStore((s) => s.selection)
   const version = useExtensions((s) => s.version)
   const view = usePrefs((p) => p.componentsView)
+  const [search, setSearch] = useState('')
   const components = componentsOf(doc).filter((c) => !c.sheet)
+  const words = search.toLowerCase().split(/\s+/).filter(Boolean)
+  const listed = components.filter((c) => words.every((word) => (c.name ?? c.id).toLowerCase().includes(word)))
   const pictures = useMemo(() => new Map(componentsOf(drawn).map((c) => [c.id, svgUrl(toSVG(drawn, c.id, registry))])), [drawn, version])
   const placed = useMemo(() => componentPlacements(drawn), [drawn])
   const unused = components.filter((c) => !placed.get(c.id)).length
@@ -257,7 +260,19 @@ export function Components() {
   return (
     <Section title={t('Components')} action={action}>
       {components.length === 0 && <p className="hint">{t('This drawing has no component yet. Select objects and choose Object › Make into a component.')}</p>}
-      {view === 'list' ? components.map(entry) : <div className="component-grid">{components.map(entry)}</div>}
+      {components.length > 0 && (
+        <input
+          className="panel-search"
+          type="search"
+          placeholder={t('Search the components…')}
+          aria-label={t('Search the components…')}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && search && (e.stopPropagation(), setSearch(''))}
+        />
+      )}
+      {components.length > 0 && listed.length === 0 && <p className="hint">{t('Nothing matches.')}</p>}
+      {view === 'list' ? listed.map(entry) : <div className="component-grid">{listed.map(entry)}</div>}
       {unused > 0 && (
         <p className="hint">
           <button className="text-button" onClick={deleteUnusedComponents}>
