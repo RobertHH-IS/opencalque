@@ -9,8 +9,8 @@ heading per version, then `### New`, `### Improved` or `### Fixed` with one line
 A change of the format that breaks with 1.0 on one point: what a component holds is no longer on a layer, and a placed component no longer has a stroke or fill of its own. Drawings made before are brought up to date as they open and look as they did, but for the rare cases listed under Improved. Scripts that set either are refused with a message saying what to do instead, and drawings saved by this version do not open in 1.0 and 1.1.
 
 ### New
-- A Components panel, a tab beside Layers and Pages, lists the components of the drawing, one per line or as pictures side by side, with how many times each is placed and a search by name. Click one and then click on the drawing to place it, or drag it there; double-click its name to rename it; its + makes a component of the selection. Selecting a placement highlights its component.
-- A component placed nowhere is shown faint, and those can all be deleted at once, from under the list or with Delete unused components (Ctrl+K).
+- A Components panel, a tab beside Layers and Pages, lists the components of the drawing, one per line or as pictures side by side, with how many times each is placed and a search by name. Click one and then click on the drawing to place it, or drag it there; double-click its name to rename it. Selecting a placement highlights its component.
+- A component placed nowhere is shown faint, and those can all be deleted at once, from the panel's ··· menu or with Delete unused components (Ctrl+K).
 - Deleting a component asks first, saying how many placements go with it.
 
 ### Fixed

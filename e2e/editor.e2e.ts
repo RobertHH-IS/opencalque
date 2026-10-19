@@ -883,12 +883,20 @@ test('shows the components as pictures too, faint when placed nowhere, and delet
   await panel.getByRole('button', { name: 'Show as pictures' }).click()
   await expect(panel.locator('.component-tile')).toHaveCount(2)
   await expect(panel.locator('.component-tile.unused')).toHaveCount(1)
-  // Those placed nowhere go at once, once the question is answered.
-  await panel.getByRole('button', { name: 'Delete 1 unused component' }).click()
+  // Those placed nowhere go at once, from the panel's "···", once the question is answered.
+  const more = panel.getByRole('button', { name: 'More actions' })
+  const purge = page.getByRole('menuitem', { name: 'Delete unused components' })
+  await more.click()
+  await purge.click()
+  await expect(page.getByRole('menu')).toHaveCount(0)
   await page.getByRole('alertdialog', { name: 'Delete unused components' }).getByRole('button', { name: 'Delete' }).click()
   await expect(panel.locator('.component-tile')).toHaveCount(1)
   await expect(panel.locator('.component-tile.unused')).toHaveCount(0)
-  await expect(panel.getByRole('button', { name: /unused/ })).toHaveCount(0)
+  // With none left, the entry is greyed; Escape closes the menu.
+  await more.click()
+  await expect(purge).toBeDisabled()
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('menu')).toHaveCount(0)
 })
 
 test('opens a component from its row filling the view, and comes back to the view it was opened from', async ({ page }) => {

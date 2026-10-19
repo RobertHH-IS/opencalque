@@ -3542,6 +3542,27 @@ select.faint-choice,
   color: var(--text);
 }
 
+/* A panel's "···" and the list it opens (`MoreMenu`). */
+.icon-button[aria-expanded='true'] {
+  background: var(--hover);
+}
+
+.context-menu.more-menu {
+  width: auto;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.more-menu button {
+  align-items: center;
+  gap: 8px;
+}
+
+.menu-icon {
+  display: inline-flex;
+  flex: none;
+}
+
 .panel-search {
   box-sizing: border-box;
   width: calc(100% - 24px);

@@ -4,9 +4,9 @@ import { childrenOf, componentPlacements, componentsOf, layersOf, pagesOf, toSVG
 import { deleteComponent, deleteUnusedComponents, moveInOrder, duplicatePage, openComponent, placeIn } from '../actions'
 import { carry, svgUrl } from '../carry'
 import { ColorChoice } from '../ColorChoice'
-import { allCommands, executeById } from '../commands'
 import { registry, useExtensions } from '../extensions'
-import { msg, t, tn } from '../i18n'
+import { msg, t } from '../i18n'
+import { MoreMenu } from '../MoreMenu'
 import { editComponent, showPage } from '../navigation'
 import { setPrefs, usePrefs } from '../prefs'
 import { apply, select, setTool, useStore } from '../store'
@@ -187,8 +187,8 @@ const placeComponent = (id: string) => (carried = false) => setTool('place', { t
  * how many times the drawing shows it placed (`componentPlacements`). A click puts one on the
  * pointer and a drag puts it down on the drawing, as from the object library; a double-click on its
  * name renames it; its buttons open it, filling the view (`openComponent`), and delete it with its
- * placements once the user has said yes. One placed nowhere is faint, and all of those can be
- * deleted at once. A selected placement highlights its component. What is on every sheet, a
+ * placements once the user has said yes. One placed nowhere is faint, and its "···" menu deletes all
+ * of those at once. A selected placement highlights its component. What is on every sheet, a
  * component too, is left out: it is not placed, and is edited from the properties of a paper.
  */
 export function Components() {
@@ -206,7 +206,6 @@ export function Components() {
   const placed = useMemo(() => componentPlacements(drawn), [drawn])
   const unused = components.filter((c) => !placed.get(c.id)).length
   const chosen = new Set(selection.flatMap((id) => (doc.nodes[id]?.type === 'instance' ? [(doc.nodes[id] as { component: string }).component] : [])))
-  const make = allCommands().find((c) => c.id === 'component.create')
   const action = (
     <span className="section-actions">
       <span className="view-switch">
@@ -217,9 +216,7 @@ export function Components() {
           <LayoutGrid size={14} />
         </IconButton>
       </span>
-      <IconButton title={t('Make into a component')} disabled={!(make?.when?.() ?? true)} onClick={() => executeById('component.create')}>
-        <Plus size={14} />
-      </IconButton>
+      <MoreMenu title={t('More actions')} actions={[{ label: t('Delete unused components'), icon: <Trash2 size={14} />, disabled: unused === 0, run: deleteUnusedComponents }]} />
     </span>
   )
   const place = t('Click, then click on the drawing to place it, or drag it onto the drawing')
@@ -273,13 +270,6 @@ export function Components() {
       )}
       {components.length > 0 && listed.length === 0 && <p className="hint">{t('Nothing matches.')}</p>}
       {view === 'list' ? listed.map(entry) : <div className="component-grid">{listed.map(entry)}</div>}
-      {unused > 0 && (
-        <p className="hint">
-          <button className="text-button" onClick={deleteUnusedComponents}>
-            {tn(unused, 'Delete {n} unused component', 'Delete {n} unused components')}
-          </button>
-        </p>
-      )}
     </Section>
   )
 }
