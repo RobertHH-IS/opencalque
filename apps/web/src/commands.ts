@@ -1,8 +1,9 @@
 import { create } from 'zustand'
 import { platform } from './platform'
-import { buildScene, componentsOf, pagesOf } from '@opencalque/core'
+import { buildScene, componentsOf, pagesOf, unusedComponents } from '@opencalque/core'
 import {
   deleteSelection,
+  deleteUnusedComponents,
   copySelection,
   cutSelection,
   duplicateSelection,
@@ -232,6 +233,7 @@ const STATIC: Command[] = [
   // A component alone is one already: making another from it would only wrap it.
   { id: 'component.vectorize', title: msg('Vectorize'), category: 'Edit', interrupts: true, when: onlyParametric, run: vectorizeSelection },
   { id: 'component.create', title: msg('Make into a component'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: () => selected() && !onlyInstance(), run: makeComponent },
+  { id: 'component.purge', title: msg('Delete unused components'), category: 'Components', when: () => unusedComponents(get().doc).length > 0, run: deleteUnusedComponents },
   { id: 'component.finish', title: msg('Finish editing this group or component'), category: 'Components', when: () => get().scope !== get().page, run: () => editComponent(null) },
 
   { id: 'view.zoomToFit', title: msg('Zoom to fit'), category: 'View', keys: ['Shift+1'], run: zoomToFit },

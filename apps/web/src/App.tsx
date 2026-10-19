@@ -13,6 +13,7 @@ import { MenuBar } from './MenuBar'
 import { platform } from './platform'
 import { startRecovery } from './recovery'
 import { Preferences } from './Preferences'
+import { QuestionWindow } from './QuestionWindow'
 import { isDirty, useStore } from './store'
 import { watchScrubKey } from './ui'
 import { Welcome } from './Welcome'
@@ -116,6 +117,7 @@ export function App() {
       <Welcome />
       <ExportDialog />
       <About />
+      <QuestionWindow />
       <DropTarget />
     </div>
   )

@@ -19,6 +19,7 @@ import {
   transformOps,
   vectorizeOps,
   ungroupNode,
+  unusedComponents,
   wallFollowOps,
   type Modifier,
   type Node,
@@ -29,7 +30,7 @@ import { t, tn } from '../i18n'
 import { showPage } from '../navigation'
 import { apply, cancel, commit, layerHere, select, setTool, useStore } from '../store'
 import { gridStep } from '../view'
-import { toast } from '../windows'
+import { ask, toast } from '../windows'
 import { withPaperContents } from './clipboard'
 import { guarded } from './common'
 
@@ -273,6 +274,36 @@ export const makeComponent = () =>
     const result = createComponent(doc, registry, selection, name)
     if (apply(result.ops)) select([result.instanceId])
   })
+
+/** Deletes a component of the drawing and every placement of it, once the user has said yes. */
+export function deleteComponent(id: string): void {
+  const { doc } = get()
+  const component = doc.nodes[id]
+  if (component?.type !== 'component') return
+  const name = component.name ?? id
+  const placed = Object.values(doc.nodes).filter((node) => node.type === 'instance' && node.component === id).length
+  ask({
+    title: t('Delete component'),
+    message:
+      placed === 0
+        ? t('“{name}” is placed nowhere in the drawing.', { name })
+        : tn(placed, '“{name}” is placed once in the drawing, and that placement goes with it.', '“{name}” is placed {n} times in the drawing, and those placements go with it.', { name }),
+    action: t('Delete'),
+    run: () => apply([{ op: 'remove_node', id }]),
+  })
+}
+
+/** Deletes the components the drawing shows nowhere (`unusedComponents`), once the user has said yes. */
+export function deleteUnusedComponents(): void {
+  const unused = unusedComponents(get().doc)
+  if (unused.length === 0) return
+  ask({
+    title: t('Delete unused components'),
+    message: tn(unused.length, '{n} component is placed nowhere in the drawing.', '{n} components are placed nowhere in the drawing.'),
+    action: t('Delete'),
+    run: () => apply(unused.map((id): Op => ({ op: 'remove_node', id }))),
+  })
+}
 
 /**
  * Changes what the selection is drawn over: all the way to the front or back, or one step past

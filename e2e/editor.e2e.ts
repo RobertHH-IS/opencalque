@@ -808,10 +808,81 @@ test('lists the components of the drawing in their own panel, and places one fro
   await page.mouse.move(box.x + 700, box.y + 300)
   await page.mouse.up()
   await expect(count).toHaveText('3')
-  // Deleted from its row, it goes with its placements.
-  await rows.first().getByRole('button', { name: 'Delete component and its instances' }).click()
+  // Deleted from its row, once the question is answered, it goes with its placements.
+  const remove = rows.first().getByRole('button', { name: 'Delete component and its instances' })
+  const question = page.getByRole('alertdialog', { name: 'Delete component' })
+  await remove.click()
+  await expect(question).toContainText('“Component 1” is placed 3 times in the drawing')
+  await question.getByRole('button', { name: 'Cancel' }).click()
+  await expect(question).toHaveCount(0)
+  await expect(rows).toHaveCount(1)
+  await remove.click()
+  await question.getByRole('button', { name: 'Delete' }).click()
   await expect(rows).toHaveCount(0)
   await expect(objectRows(page)).toHaveCount(0)
+})
+
+test('shows the components as pictures too, faint when placed nowhere, and deletes those at once', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const box = (await canvas(page).boundingBox())!
+  // A component of the library, given up before it is put down, leaves nothing in the drawing.
+  await page.getByTitle('Object library: stairs, furniture and every other object').click()
+  await page.locator('.warehouse-card', { has: page.locator('strong', { hasText: /^Armchair$/ }) }).first().click()
+  await page.mouse.move(box.x + 500, box.y + 300)
+  await page.mouse.move(box.x + 520, box.y + 320)
+  await page.keyboard.press('Escape')
+  await page.locator('.dv-tab', { hasText: 'Components' }).click()
+  const panel = page.locator('[data-panel="components"]')
+  await expect(panel.locator('.row')).toHaveCount(0)
+  // Two of the drawing's own; the placement of the second deleted, it is placed nowhere.
+  for (const x of [300, 600]) {
+    await page.keyboard.press('r')
+    await page.mouse.click(box.x + x, box.y + 300)
+    await page.mouse.click(box.x + x + 100, box.y + 380)
+    await page.keyboard.press('v')
+    await objectRows(page).first().click()
+    await page.keyboard.press('Control+Alt+k')
+  }
+  await page.keyboard.press('Delete')
+  await expect(panel.locator('.row')).toHaveCount(2)
+  await expect(panel.locator('.row.unused')).toHaveCount(1)
+  // As pictures, side by side, with the same faint one.
+  await panel.getByRole('button', { name: 'Show as pictures' }).click()
+  await expect(panel.locator('.component-tile')).toHaveCount(2)
+  await expect(panel.locator('.component-tile.unused')).toHaveCount(1)
+  // Those placed nowhere go at once, once the question is answered.
+  await panel.getByRole('button', { name: 'Delete 1 unused component' }).click()
+  await page.getByRole('alertdialog', { name: 'Delete unused components' }).getByRole('button', { name: 'Delete' }).click()
+  await expect(panel.locator('.component-tile')).toHaveCount(1)
+  await expect(panel.locator('.component-tile.unused')).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: /unused/ })).toHaveCount(0)
+})
+
+test('opens a component from its row filling the view, and comes back to the view it was opened from', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const box = (await canvas(page).boundingBox())!
+  await page.keyboard.press('r')
+  await page.mouse.click(box.x + 100, box.y + 100)
+  await page.mouse.click(box.x + 130, box.y + 120)
+  await page.keyboard.press('v')
+  await objectRows(page).first().click()
+  await page.keyboard.press('Control+Alt+k')
+  const zoom = page.getByTitle('Screen pixels per metre')
+  const seen = await zoom.innerText()
+  await page.locator('.dv-tab', { hasText: 'Components' }).click()
+  await page.locator('[data-panel="components"] .row').first().getByRole('button', { name: 'Edit component' }).click()
+  // Inside it, its rectangle of 300 × 200 mm in the middle of the view, at 2 px a millimetre: its
+  // left side 300 px left of the middle.
+  await expect(zoom).toHaveText('2000 px/m')
+  await page.mouse.click(box.x + box.width / 2 - 300, box.y + box.height / 2)
+  await expect(objectRows(page).first()).toHaveClass(/selected/)
+  // Out again (Esc lets go of the rectangle, then leaves), the drawing is as it was, its placement selected.
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+  await expect(zoom).toHaveText(seen)
+  await expect(objectRows(page).first()).toHaveClass(/selected/)
 })
 
 test('turns a rectangle about its middle from the angle typed, and arranges it from the toolbar', async ({ page }) => {

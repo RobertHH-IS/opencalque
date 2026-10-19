@@ -1,5 +1,5 @@
 import { paperRescaled, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, PAPER_FORMATS, paperFormat, paperSize, type Node, type Op, titleBlockHidden, titleBlockValues, type TitleField } from '@opencalque/core'
-import { editSheetContent } from '../../actions'
+import { openComponent } from '../../actions'
 import { msg, t } from '../../i18n'
 import { apply, useStore } from '../../store'
 import { Field, Section } from '../../ui'
@@ -95,7 +95,7 @@ export function PaperSheet({ node, update }: { node: Extract<Node, { type: 'pape
   const start = () => {
     const at = node.scale ?? DEFAULT_PAPER_SCALE
     const { ops, id } = sheetContentOps({ width: node.width / at, height: node.height / at }, t('On every sheet'))
-    if (apply(ops)) editSheetContent(id)
+    if (apply(ops)) openComponent(id)
   }
   const scale = node.scale ?? DEFAULT_PAPER_SCALE
   const format = paperFormat(node)
@@ -140,7 +140,7 @@ export function PaperSheet({ node, update }: { node: Extract<Node, { type: 'pape
             <span>{t('Show it here')}</span>
             <input type="checkbox" checked={!node.plain} onChange={(e) => update(() => ({ plain: e.target.checked ? null : true }))} />
           </label>
-          <button className="text-button" onClick={() => editSheetContent(common.id)}>
+          <button className="text-button" onClick={() => openComponent(common.id)}>
             {t('Edit what is on every sheet…')}
           </button>
         </>

@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff, Lock, LockOpen, Pencil, Plus, Trash2, Copy } from 'lucide-react'
-import { childrenOf, componentsOf, layersOf, pagesOf, toSVG, type Document, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
-import { moveInOrder, duplicatePage, placeIn } from '../actions'
+import { ChevronDown, ChevronRight, Eye, EyeOff, LayoutGrid, List, Lock, LockOpen, Pencil, Plus, Trash2, Copy } from 'lucide-react'
+import { childrenOf, componentPlacements, componentsOf, layersOf, pagesOf, toSVG, type Document, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
+import { deleteComponent, deleteUnusedComponents, moveInOrder, duplicatePage, openComponent, placeIn } from '../actions'
 import { carry, svgUrl } from '../carry'
 import { ColorChoice } from '../ColorChoice'
 import { allCommands, executeById } from '../commands'
 import { registry, useExtensions } from '../extensions'
-import { msg, t } from '../i18n'
+import { msg, t, tn } from '../i18n'
 import { editComponent, showPage } from '../navigation'
+import { setPrefs, usePrefs } from '../prefs'
 import { apply, select, setTool, useStore } from '../store'
 import { EditableText, IconButton, labelOf, Section, TypeIcon } from '../ui'
 
@@ -182,11 +183,13 @@ export function Layers() {
 const placeComponent = (id: string) => (carried = false) => setTool('place', { type: 'instance', component: id, carried })
 
 /**
- * The components of the drawing, each with a picture and how many times it is placed. A click puts
- * one on the pointer and a drag puts it down on the drawing, as from the object library; a
- * double-click on its name renames it, and its buttons open it to be edited or delete it with its
- * placements. A selected placement highlights its component. What is on every sheet, a component
- * too, is left out: it is not placed, and is edited from the properties of a paper.
+ * The components of the drawing, as a list or as pictures side by side (`componentsView`), each with
+ * how many times the drawing shows it placed (`componentPlacements`). A click puts one on the
+ * pointer and a drag puts it down on the drawing, as from the object library; a double-click on its
+ * name renames it; its buttons open it, filling the view (`openComponent`), and delete it with its
+ * placements once the user has said yes. One placed nowhere is faint, and all of those can be
+ * deleted at once. A selected placement highlights its component. What is on every sheet, a
+ * component too, is left out: it is not placed, and is edited from the properties of a paper.
  */
 export function Components() {
   const doc = useStore((s) => s.doc)
@@ -194,50 +197,74 @@ export function Components() {
   const drawn = useStore((s) => s.base ?? s.doc)
   const selection = useStore((s) => s.selection)
   const version = useExtensions((s) => s.version)
+  const view = usePrefs((p) => p.componentsView)
   const components = componentsOf(doc).filter((c) => !c.sheet)
   const pictures = useMemo(() => new Map(componentsOf(drawn).map((c) => [c.id, svgUrl(toSVG(drawn, c.id, registry))])), [drawn, version])
-  const placed = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const node of Object.values(drawn.nodes)) if (node.type === 'instance') counts.set(node.component, (counts.get(node.component) ?? 0) + 1)
-    return counts
-  }, [drawn])
+  const placed = useMemo(() => componentPlacements(drawn), [drawn])
+  const unused = components.filter((c) => !placed.get(c.id)).length
   const chosen = new Set(selection.flatMap((id) => (doc.nodes[id]?.type === 'instance' ? [(doc.nodes[id] as { component: string }).component] : [])))
   const make = allCommands().find((c) => c.id === 'component.create')
   const action = (
-    <IconButton title={t('Make into a component')} disabled={!(make?.when?.() ?? true)} onClick={() => executeById('component.create')}>
-      <Plus size={14} />
-    </IconButton>
+    <span className="section-actions">
+      <span className="view-switch">
+        <IconButton title={t('Show as a list')} active={view === 'list'} onClick={() => setPrefs({ componentsView: 'list' })}>
+          <List size={14} />
+        </IconButton>
+        <IconButton title={t('Show as pictures')} active={view === 'grid'} onClick={() => setPrefs({ componentsView: 'grid' })}>
+          <LayoutGrid size={14} />
+        </IconButton>
+      </span>
+      <IconButton title={t('Make into a component')} disabled={!(make?.when?.() ?? true)} onClick={() => executeById('component.create')}>
+        <Plus size={14} />
+      </IconButton>
+    </span>
   )
+  const place = t('Click, then click on the drawing to place it, or drag it onto the drawing')
+  /** A row or a tile: what it is, the picture and the name first; how many times it is placed; what can be done to it. */
+  const entry = (component: (typeof components)[number]) => {
+    const id = component.id
+    const count = placed.get(id) ?? 0
+    const picture = pictures.get(id)
+    return (
+      <div
+        key={id}
+        className={`${view === 'list' ? 'row' : 'component-tile'}${chosen.has(id) ? ' selected' : ''}${count === 0 ? ' unused' : ''}`}
+        title={count === 0 ? `${t('Placed nowhere in the drawing')}\n\n${place}` : place}
+        onClick={() => placeComponent(id)()}
+        // The first click of the double-click that renames it has put it on the pointer: it is taken off.
+        onDoubleClick={() => setTool('select')}
+        onPointerDown={(e) => carry(e, placeComponent(id))}
+        onDragStart={(e) => e.preventDefault()}
+      >
+        {picture ? <img className="thumb" src={picture} alt="" draggable={false} /> : <i className="thumb" />}
+        <span className="component-name">
+          <EditableText value={component.name ?? id} onChange={rename(id)} />
+          <span className="faint uses" title={t('How many times it is placed')}>
+            {count}
+          </span>
+        </span>
+        <span className="component-actions">
+          <IconButton title={t('Edit component')} onClick={() => openComponent(id)}>
+            <Pencil size={13} />
+          </IconButton>
+          <IconButton title={t('Delete component and its instances')} onClick={() => deleteComponent(id)}>
+            <Trash2 size={13} />
+          </IconButton>
+        </span>
+      </div>
+    )
+  }
   return (
     <Section title={t('Components')} action={action}>
       {components.length === 0 && <p className="hint">{t('This drawing has no component yet. Select objects and choose Object › Make into a component.')}</p>}
-      {components.map((component) => {
-        const picture = pictures.get(component.id)
-        return (
-          <div
-            key={component.id}
-            className={`row${chosen.has(component.id) ? ' selected' : ''}`}
-            title={t('Click, then click on the drawing to place it, or drag it onto the drawing')}
-            onClick={() => placeComponent(component.id)()}
-            // The first click of the double-click that renames it has put it on the pointer: it is taken off.
-            onDoubleClick={() => setTool('select')}
-            onPointerDown={(e) => carry(e, placeComponent(component.id))}
-            onDragStart={(e) => e.preventDefault()}
-          >
-            {picture ? <img className="thumb" src={picture} alt="" draggable={false} /> : <i className="thumb" />}
-            <EditableText value={component.name ?? component.id} onChange={rename(component.id)} />
-            <span className="faint uses" title={t('How many times it is placed')}>
-              {placed.get(component.id) ?? 0}
-            </span>
-            <IconButton title={t('Edit component')} onClick={() => editComponent(component.id)}>
-              <Pencil size={13} />
-            </IconButton>
-            <IconButton title={t('Delete component and its instances')} onClick={() => apply([{ op: 'remove_node', id: component.id }])}>
-              <Trash2 size={13} />
-            </IconButton>
-          </div>
-        )
-      })}
+      {view === 'list' ? components.map(entry) : <div className="component-grid">{components.map(entry)}</div>}
+      {unused > 0 && (
+        <p className="hint">
+          <button className="text-button" onClick={deleteUnusedComponents}>
+            {tn(unused, 'Delete {n} unused component', 'Delete {n} unused components')}
+          </button>
+        </p>
+      )}
     </Section>
   )
 }

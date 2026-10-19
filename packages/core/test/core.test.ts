@@ -3,6 +3,7 @@ import {
   applyOps,
   buildScene,
   childrenOf,
+  componentPlacements,
   componentsOf,
   createComponent,
   createDocument,
@@ -25,6 +26,7 @@ import {
   Registry,
   serializeDocument,
   toSVG,
+  unusedComponents,
   type Document,
   type Extension,
   type Op,
@@ -579,5 +581,32 @@ describe('drawings from before the rename', () => {
     const doc = parseDocument(old)
     expect(doc.format).toBe('opencalque')
     expect(doc.name).toBe('Plan')
+  })
+})
+
+describe('placements of components', () => {
+  const doc = applyOps(createDocument(), [
+    { op: 'add_node', node: { type: 'component', id: 'chair', name: 'Chair' } },
+    { op: 'add_node', node: { type: 'rect', parent: 'chair', x: 0, y: 0, width: 400, height: 400 } },
+    { op: 'add_node', node: { type: 'component', id: 'table', name: 'Table' } },
+    { op: 'add_node', node: { type: 'instance', parent: 'table', component: 'chair', x: 0, y: 0 } },
+    { op: 'add_node', node: { type: 'instance', parent: 'table', component: 'chair', x: 500, y: 0 } },
+    { op: 'add_node', node: { type: 'component', id: 'stool', name: 'Stool' } },
+    { op: 'add_node', node: { type: 'component', id: 'shelf', name: 'Shelf' } },
+    { op: 'add_node', node: { type: 'instance', parent: 'shelf', component: 'stool', x: 0, y: 0 } },
+    { op: 'add_node', node: { type: 'group', id: 'g', parent: 'page_1' } },
+    { op: 'add_node', node: { type: 'instance', parent: 'g', component: 'table', x: 0, y: 0 } },
+    { op: 'add_node', node: { type: 'instance', parent: 'page_1', component: 'table', x: 2000, y: 0 } },
+  ] as Op[])
+
+  it('counts each placement where the drawing shows it, inside groups and components placed so', () => {
+    // Placed twice in the table, the chair counts two, however many tables there are.
+    expect(Object.fromEntries(componentPlacements(doc))).toEqual({ table: 2, chair: 2 })
+  })
+
+  it('finds the unused ones, with those placed only inside them', () => {
+    expect(unusedComponents(doc).sort()).toEqual(['shelf', 'stool'])
+    const cleared = applyOps(doc, unusedComponents(doc).map((id): Op => ({ op: 'remove_node', id })))
+    expect(componentsOf(cleared).map((c) => c.id).sort()).toEqual(['chair', 'table'])
   })
 })

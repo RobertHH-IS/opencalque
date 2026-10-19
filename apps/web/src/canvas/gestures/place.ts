@@ -1,8 +1,8 @@
-import { canSplit, hitTest, newId, roomAt, snapOpeningToWall, splitOps, splitPlace, wallSides, type NodeInput, type Vec2 } from '@opencalque/core'
-import { pickStyle } from '../../actions'
+import { canSplit, hitTest, newId, roomAt, snapOpeningToWall, splitOps, splitPlace, wallSides, type Document, type NodeInput, type Op, type Vec2 } from '@opencalque/core'
+import { libraryOps, pickStyle } from '../../actions'
 import { registry } from '../../extensions'
 import { t } from '../../i18n'
-import { apply, cancel, commit, layerHere, preview } from '../../store'
+import { apply, cancel, commit, layerHere, preview, type Placing } from '../../store'
 import { formatLength } from '../../units'
 import { gridStep } from '../../view'
 import { snap } from '../aim'
@@ -51,6 +51,21 @@ export const splitDown: Press = (c, e, _at, world) => {
   c.setOverlay({})
 }
 
+/**
+ * What brings a library's component into the drawing to be placed, worked out once for the drawing
+ * as it is: the pointer moves over the same one until a placement is put down.
+ */
+let brought: { doc: Document; placing: Placing; ops: Op[]; id: string } | null = null
+
+/** The operations that bring the component of a library placing into `doc` (none once an unchanged copy is there), and its id there. */
+function fromLibrary(doc: Document, placing: Extract<Placing, { type: 'library' }>): { ops: Op[]; id: string } {
+  if (brought?.doc !== doc || brought.placing !== placing) {
+    const { ops, imported } = libraryOps(doc, placing.library, [placing.component], placing.names)
+    brought = { doc, placing, ops, id: imported[placing.component] }
+  }
+  return brought
+}
+
 /** With nothing in progress: what the tool in use would do where the pointer is, shown before any click. */
 export const toolHover: Move<'idle'> = (c, _g, e, _at, world, out) => {
   const s = get()
@@ -75,11 +90,13 @@ export const toolHover: Move<'idle'> = (c, _g, e, _at, world, out) => {
         ? snapOpeningToWall(s.base ?? s.doc, s.scope, registry, { kind: s.placing.kind, props: {} }, world, 10 / s.view.zoom, gridStep(s.view.zoom))
         : null
     if (onWall) out.marker = null
+    // A library's component comes in with its first placement, in the same step.
+    const library = s.placing.type === 'library' ? fromLibrary(s.base ?? s.doc, s.placing) : null
     const node: NodeInput =
-      s.placing.type === 'instance'
-        ? { ...common, type: 'instance', component: s.placing.component }
-        : { ...common, ...onWall, type: 'parametric', kind: s.placing.kind, props: {} }
-    out.previewed = preview([{ op: 'add_node', node }])
+      s.placing.type === 'parametric'
+        ? { ...common, ...onWall, type: 'parametric', kind: s.placing.kind, props: {} }
+        : { ...common, type: 'instance', component: library ? library.id : s.placing.component }
+    out.previewed = preview([...(library?.ops ?? []), { op: 'add_node', node }])
   } else if (TWO_POINT.includes(s.tool) || s.tool === 'measure' || s.tool === 'angle' || (s.tool === 'rotate' && s.selection.length > 0)) {
     out.marker = snap(c, world, e, []).marker
   } else if (s.tool === 'split') {

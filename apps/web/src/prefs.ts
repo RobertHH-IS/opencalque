@@ -26,6 +26,8 @@ export interface Prefs {
   showGrid: boolean
   snapToGrid: boolean
   snapToObjects: boolean
+  /** How the Components panel shows them: one per line, or as pictures side by side. */
+  componentsView: 'list' | 'grid'
   extensions: {
     /** Declarative extensions the user installed, by id. They are data, so they are stored whole. */
     installed: Record<string, DeclarativeExtension>
@@ -77,6 +79,7 @@ const DEFAULTS: Prefs = {
   showGrid: true,
   snapToGrid: true,
   snapToObjects: true,
+  componentsView: 'list',
   extensions: { installed: {}, disabled: [] },
   catalogUrl: '',
   ai: {

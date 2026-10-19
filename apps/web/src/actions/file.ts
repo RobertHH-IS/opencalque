@@ -1,4 +1,4 @@
-import { applyOps, componentsOf, createDocument, dxfOps, importComponents, NewerFormatError, parseDocument, pdfFontCharacters, quantities, quantitiesCsv, readDocument, serializeDocument, toDXF, toPDF, toSVG, type Document, type QuantityLabels } from '@opencalque/core'
+import { applyOps, componentsOf, createDocument, dxfOps, importComponents, NewerFormatError, parseDocument, pdfFontCharacters, quantities, quantitiesCsv, readDocument, serializeDocument, toDXF, toPDF, toSVG, type Document, type Op, type QuantityLabels } from '@opencalque/core'
 import { abortable } from '../abortable'
 import { registry } from '../extensions'
 import { language, t, tn } from '../i18n'
@@ -260,6 +260,22 @@ export function importLibraryFrom(name: string, content: string): void {
   const count = componentsOf(get().doc).length - before
   if (count === 0) return toast(t('{file} has no components to import. To work on that drawing, open it instead (File → Open).', { file: name }))
   toast(tn(count, 'Imported {n} component from {file}', 'Imported {n} components from {file}', { file: name }))
+}
+
+/**
+ * The operations that copy components of a library into the drawing, as the library has them
+ * (`importComponents`), each named in the user's language as the library shows it (`names`, its
+ * translations), and the id each has in the drawing: for one brought in before and unchanged since,
+ * the copy already there, and no operation.
+ */
+export function libraryOps(doc: Document, library: Document, ids: string[], names: Record<string, string> = {}): { ops: Op[]; imported: Record<string, string> } {
+  const result = importComponents(doc, library, ids, { original: true })
+  const named = Object.values(result.imported).flatMap((id): Op[] => {
+    const name = result.doc.nodes[id]?.name
+    const shown = name && names[name]
+    return shown && shown !== name ? [{ op: 'update_node', id, patch: { name: shown } }] : []
+  })
+  return { ops: [...result.ops, ...named], imported: result.imported }
 }
 
 /** Any OpenCalque document can be used as a library: this copies all of its components in. */

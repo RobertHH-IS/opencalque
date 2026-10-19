@@ -9,7 +9,13 @@ heading per version, then `### New`, `### Improved` or `### Fixed` with one line
 A change of the format that breaks with 1.0 on one point: what a component holds is no longer on a layer, and a placed component no longer has a stroke or fill of its own. Drawings made before are brought up to date as they open and look as they did, but for the rare cases listed under Improved. Scripts that set either are refused with a message saying what to do instead, and drawings saved by this version do not open in 1.0 and 1.1.
 
 ### New
-- A Components panel, a tab beside Layers and Pages, lists the components of the drawing, with a picture of each and how many times it is placed. Click one and then click on the drawing to place it, or drag it there; double-click its name to rename it; its buttons open it to be edited or delete it with its placements, and its + makes a component of the selection. Selecting a placement highlights its component.
+- A Components panel, a tab beside Layers and Pages, lists the components of the drawing, one per line or as pictures side by side, with how many times each is placed. Click one and then click on the drawing to place it, or drag it there; double-click its name to rename it; its + makes a component of the selection. Selecting a placement highlights its component.
+- A component placed nowhere is shown faint, and those can all be deleted at once, from under the list or with Delete unused components (Ctrl+K).
+- Deleting a component asks first, saying how many placements go with it.
+
+### Fixed
+- A component picked in the object library and not put down (Esc) no longer stays in the drawing: it comes in with its first placement, which one Ctrl+Z takes back whole.
+- A component opened to be edited from the Components panel or the object library fills the view, in its middle, and leaving it brings back the drawing as it was on screen, as what is on every sheet already did.
 
 ### Improved
 - Words that keep things apart. The window that lists everything that can be placed is the Object library: it holds components, which you draw and edit from inside, and parametric objects, drawn from their sizes and options, which the properties now call so. Object › Create component is Object › Make into a component, since the selection is replaced by a placement of the new component.

@@ -14,16 +14,32 @@ interface Windows {
   aboutOpen: boolean
   /** Whether the object library is open. */
   warehouse: 'components' | null
+  /** What is asked before it is done (`ask`), while its window is open. */
+  question: Question | null
   toast: string | null
 }
 
-const CLOSED: Windows = { welcomeOpen: false, preferencesOpen: false, preferencesPage: null, exportOpen: false, aboutOpen: false, warehouse: null, toast: null }
+/** Something to be done once the user says yes: what the window says, and the button that does it. */
+export interface Question {
+  title: string
+  message: string
+  /** The words on the button that does it, such as "Delete". */
+  action: string
+  run: () => void
+}
+
+const CLOSED: Windows = { welcomeOpen: false, preferencesOpen: false, preferencesPage: null, exportOpen: false, aboutOpen: false, warehouse: null, question: null, toast: null }
 
 export const useWindows = create<Windows>(() => CLOSED)
 
 /** Closes every window and lets the message go. */
 export function closeWindows(): void {
   useWindows.setState(CLOSED)
+}
+
+/** Asks before doing something that takes more away than it seems (`QuestionWindow`): it is done only on yes. */
+export function ask(question: Question): void {
+  useWindows.setState({ question })
 }
 
 /** Shows a message at the foot of the editor for a few seconds. */

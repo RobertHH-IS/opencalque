@@ -59,6 +59,43 @@ export function createComponent(
 }
 
 /**
+ * How many placements each component has where the drawing shows them: on a page, or inside a
+ * component that is itself placed so (what is on every sheet counting as shown). Each placement
+ * counts once: placed twice in a table, a chair counts two however many tables there are. A
+ * component placed only inside unused ones counts none: deleting those would leave it unused too.
+ */
+export function componentPlacements(doc: Document): Map<string, number> {
+  const inside = new Map<string, string[]>()
+  for (const node of Object.values(doc.nodes)) {
+    if (node.type !== 'instance') continue
+    const root = rootOf(doc, node.parent)
+    if (root) inside.set(root.id, [...(inside.get(root.id) ?? []), node.component])
+  }
+  const counts = new Map<string, number>()
+  const shown = Object.values(doc.nodes).filter((n) => n.parent === null && (n.type === 'page' || (n.type === 'component' && n.sheet !== undefined))).map((n) => n.id)
+  // Each root once: a component reached again only adds to its count, not to what it reaches.
+  const seen = new Set(shown)
+  for (let i = 0; i < shown.length; i++) {
+    for (const component of inside.get(shown[i]) ?? []) {
+      counts.set(component, (counts.get(component) ?? 0) + 1)
+      if (!seen.has(component)) {
+        seen.add(component)
+        shown.push(component)
+      }
+    }
+  }
+  return counts
+}
+
+/** The components the drawing does not show anywhere (`componentPlacements`), what is on every sheet aside. */
+export function unusedComponents(doc: Document): string[] {
+  const counts = componentPlacements(doc)
+  return componentsOf(doc)
+    .filter((c) => c.sheet === undefined && !counts.get(c.id))
+    .map((c) => c.id)
+}
+
+/**
  * Puts copies of what a component holds in the place of one of its instances, where the instance
  * drew them: they become objects of the drawing, which editing the component no longer changes.
  * They take the instance's place in the stacking order and its layer, whose colour they were drawn

@@ -9,8 +9,17 @@ import { closeWindows, toast } from './windows'
 export type { Tool } from './tools'
 export type { View } from './view'
 
-/** What the place tool puts down; `carried` while it is being dragged from the object library, to be put down where the button is let go. */
-export type Placing = ({ type: 'instance'; component: string } | { type: 'parametric'; kind: string }) & { carried?: boolean }
+/**
+ * What the place tool puts down; `carried` while it is being dragged from the object library, to be
+ * put down where the button is let go. A component of a library comes into the drawing with its
+ * first placement, in the same step, so that none is left behind when the placing is given up;
+ * `names` are the library's translations, in the language in use.
+ */
+export type Placing = (
+  | { type: 'instance'; component: string }
+  | { type: 'parametric'; kind: string }
+  | { type: 'library'; library: Document; component: string; names: Record<string, string> }
+) & { carried?: boolean }
 
 /**
  * One undoable step. In `past`, `doc` is the drawing before the step; in `future`, the drawing after

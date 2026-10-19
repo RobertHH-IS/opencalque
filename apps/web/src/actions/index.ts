@@ -6,7 +6,7 @@
  *   clipboard  cut, copy, paste
  *   edit       the selection and pages: delete, duplicate, transform, group, components, order, align, style
  *   walls      the selected walls: dimension, split, extend, trim
- *   view       zoom, and the view kept while what is on every sheet is edited
+ *   view       zoom, and the view kept while a component opened from a list is edited
  */
 export * from './clipboard'
 export { guarded } from './common'

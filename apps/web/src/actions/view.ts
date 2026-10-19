@@ -3,27 +3,30 @@ import { registry } from '../extensions'
 import { editComponent } from '../navigation'
 import { useStore } from '../store'
 
-/* Where the drawing is looked at: zooming, and coming back to the view left when going inside what is on every sheet. */
+/* Where the drawing is looked at: zooming, and coming back to the view left when going inside a component from a list. */
 
 const get = useStore.getState
 
-/** Where the view was when what is on every sheet was opened to be edited, to come back to. */
-let before: { template: string; view: { zoom: number; x: number; y: number }; selection: string[] } | null = null
+/** Where the view was when a component was opened from a list, to come back to. */
+let before: { component: string; view: { zoom: number; x: number; y: number }; selection: string[] } | null = null
 
 /**
- * Goes inside what is on every sheet to draw it, its sheet filling the view. Leaving it, by
- * whatever way, brings back the view the drawing was looked at with, and the paper that was selected.
+ * Goes inside a component opened from a list rather than through a placement of it (the Components
+ * panel, the object library, what is on every sheet from a paper's properties): what it holds fills
+ * the view, in its middle. Leaving it, by whatever way, brings back the view the drawing was looked
+ * at with, and what was selected.
  */
-export function editSheetContent(id: string): void {
+export function openComponent(id: string): void {
   const { view, scope, doc, selection } = get()
-  if (rootOf(doc, scope)?.id !== id) before = { template: id, view, selection }
+  // Opened from inside another one opened so: leaving still comes back to where it all started.
+  if (rootOf(doc, scope)?.id !== id) before = { component: id, view: before?.view ?? view, selection: before?.selection ?? selection }
   editComponent(id)
   zoomToFit()
 }
 
 useStore.subscribe((state) => {
   // Still inside it while a group of it is being edited.
-  if (!before || rootOf(state.doc, state.scope)?.id === before.template) return
+  if (!before || rootOf(state.doc, state.scope)?.id === before.component) return
   const { view, selection } = before
   before = null
   useStore.setState({ view, selection: selection.filter((id) => state.doc.nodes[id]?.parent === state.scope) })

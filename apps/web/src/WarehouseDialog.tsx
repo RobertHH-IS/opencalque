@@ -1,13 +1,12 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { applyOps, componentsOf, createDocument, declarativeExtension, importComponents, toSVG, type DeclarativeExtension, type Document, type Op, type ParametricKind } from '@opencalque/core'
+import { applyOps, componentsOf, createDocument, declarativeExtension, toSVG, type DeclarativeExtension, type Document, type Op, type ParametricKind } from '@opencalque/core'
 import { Globe, HardDrive, Pencil, SlidersHorizontal, TextCursorInput, Trash2, X } from 'lucide-react'
-import { DRAWING_EXTENSIONS, guarded, importLibraryFrom } from './actions'
+import { deleteComponent, DRAWING_EXTENSIONS, guarded, importLibraryFrom, libraryOps, openComponent } from './actions'
 import { carry, svgUrl } from './carry'
 import { language, msg, t, tn } from './i18n'
 import { platform } from './platform'
 import { setPrefs, usePrefs } from './prefs'
 import { BUILT_IN_EXTENSION, loadExtensions, registry, useExtensions } from './extensions'
-import { editComponent } from './navigation'
 import { apply, applyOrThrow, setTool, useStore } from './store'
 import { toast, useWindows } from './windows'
 import { IconButton } from './ui'
@@ -131,23 +130,19 @@ function Components({ libraries }: { libraries: Library[] }) {
   }, [libraries])
 
   /**
-   * Copies components of a library into the drawing; with one, goes straight to placing it. What
-   * comes in is the library's: a copy brought in before is reused only while nothing in it has
-   * been changed, and one that was is left as another component of the drawing's own.
+   * Copies components of a library into the drawing. One alone is put on the pointer instead, and
+   * comes into the drawing with its first placement: nothing is left when the placing is given up.
+   * What comes in is the library's: a copy brought in before is reused only while nothing in it
+   * has been changed, and one that was is left as another component of the drawing's own. It is
+   * named in the user's language, like what the library showed.
    */
   const add = (library: Document, ids: string[], from?: Library, carried?: boolean) =>
     guarded(() => {
-      const result = importComponents(useStore.getState().doc, library, ids, { original: true })
-      // What arrives in the drawing is named in the user's language, like what the library showed.
-      const names = Object.values(result.imported).flatMap((id): Op[] => {
-        const name = result.doc.nodes[id]?.name
-        const shown = name && from ? own(from, name) : name
-        return shown && shown !== name ? [{ op: 'update_node', id, patch: { name: shown } }] : []
-      })
-      applyOrThrow([...result.ops, ...names])
+      const names = from?.translations?.[language()] ?? {}
       close()
-      if (ids.length === 1) setTool('place', { type: 'instance', component: result.imported[ids[0]], carried })
-      else toast(tn(ids.length, '{n} component added. It is in the object library, under “In this drawing”.', '{n} components added. They are in the object library, under “In this drawing”.'))
+      if (ids.length === 1) return setTool('place', { type: 'library', library, component: ids[0], names, carried })
+      applyOrThrow(libraryOps(useStore.getState().doc, library, ids, names).ops)
+      toast(tn(ids.length, '{n} component added. It is in the object library, under “In this drawing”.', '{n} components added. They are in the object library, under “In this drawing”.'))
     })
 
   // The sections: the drawing's own components first; then each library, split into the rooms its
@@ -393,10 +388,10 @@ function Components({ libraries }: { libraries: Library[] }) {
                       <IconButton title={t('Rename')} onClick={() => setRenaming(card.key)}>
                         <TextCursorInput size={13} />
                       </IconButton>
-                      <IconButton title={t('Edit component')} onClick={() => (close(), editComponent(card.own!))}>
+                      <IconButton title={t('Edit component')} onClick={() => (close(), openComponent(card.own!))}>
                         <Pencil size={13} />
                       </IconButton>
-                      <IconButton title={t('Delete component and its instances')} onClick={() => apply([{ op: 'remove_node', id: card.own! }])}>
+                      <IconButton title={t('Delete component and its instances')} onClick={() => deleteComponent(card.own!)}>
                         <Trash2 size={13} />
                       </IconButton>
                     </span>
