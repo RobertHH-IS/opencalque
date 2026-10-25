@@ -1,0 +1,17 @@
+{
+  "name": "@opencalque/codex-mcp",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "opencalque-codex-mcp": "./src/server.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@opencalque/core": "workspace:*",
+    "@opencalque/warehouse": "workspace:*"
+  }
+}

@@ -131,6 +131,15 @@ importers:
         specifier: workspace:*
         version: link:../core
 
+  packages/mcp:
+    dependencies:
+      '@opencalque/core':
+        specifier: workspace:*
+        version: link:../core
+      '@opencalque/warehouse':
+        specifier: workspace:*
+        version: link:../warehouse
+
   packages/warehouse:
     dependencies:
       '@opencalque/core':
