@@ -232,6 +232,10 @@ function renderPng(svgPath: string): string | undefined {
   const pngPath = svgPath.replace(/\.svg$/i, '.png')
   try {
     execFileSync('sips', ['-s', 'format', 'png', svgPath, '--out', pngPath], { stdio: 'ignore' })
+    // The drawing is in millimetres, so a true-size raster can become tens of
+    // thousands of pixels wide. Keep the on-disk SVG at full precision, but
+    // cap the MCP image payload to a vision-friendly preview size.
+    execFileSync('sips', ['-Z', '1600', pngPath], { stdio: 'ignore' })
     return existsSync(pngPath) ? pngPath : undefined
   } catch {
     return undefined
