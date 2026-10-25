@@ -295,7 +295,10 @@ function applyOperations(args: Json): Json {
   current.sidecar.history.push(record)
   if (args.metadata && isRecord(args.metadata)) current.sidecar.calibration = { ...(current.sidecar.calibration ?? {}), ...args.metadata }
   saveSidecar(current.file, current.sidecar)
-  return { batchId, revision, operationCount: ops.length, diff: record.diff, document: describeDocument(after, current.sidecar, current.file, false) }
+  const preview = args.render_preview === false || !current.sidecar.source?.image || !current.sidecar.source.rect
+    ? undefined
+    : renderSvg({ opacity: 0.35 }, true)
+  return { batchId, revision, operationCount: ops.length, diff: record.diff, preview, document: describeDocument(after, current.sidecar, current.file, false) }
 }
 
 function validateDocument(): Json {
@@ -361,7 +364,7 @@ function undoLastBatch(): Json {
 const tools = [
   { name: 'open_document', description: 'Open a workspace-scoped .opencalque document and optionally register its source image and calibration.', inputSchema: { type: 'object', properties: { path: { type: 'string' }, source_image: { type: 'string' }, source_label: { type: 'string' }, source_rect: { type: 'object', properties: { x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' } }, required: ['x', 'y', 'width', 'height'] } }, required: ['path'] } },
   { name: 'describe_document', description: 'Return document metadata, semantic node coordinates, computed room areas, source context, revision and history length.', inputSchema: { type: 'object', properties: { include_nodes: { type: 'boolean' } } } },
-  { name: 'apply_operations', description: 'Validate and apply one all-or-nothing OpenCalque operation batch, write a snapshot, and return a coordinate-level diff.', inputSchema: { type: 'object', properties: { operations: { type: 'array' }, reason: { type: 'string' }, metadata: { type: 'object' } }, required: ['operations'] } },
+  { name: 'apply_operations', description: 'Validate and apply one all-or-nothing OpenCalque operation batch, write a snapshot, return a coordinate-level diff, and render a fresh source overlay when source context is registered.', inputSchema: { type: 'object', properties: { operations: { type: 'array' }, reason: { type: 'string' }, metadata: { type: 'object' }, render_preview: { type: 'boolean', description: 'Set false to skip automatic overlay rendering.' } }, required: ['operations'] } },
   { name: 'validate_document', description: 'Validate the open document and report repairs or structural integrity errors.', inputSchema: { type: 'object', properties: {} } },
   { name: 'render_svg', description: 'Render the current page to SVG and a PNG preview when the host provides sips.', inputSchema: { type: 'object', properties: { page: { type: 'string' }, out: { type: 'string' } } } },
   { name: 'render_overlay', description: 'Render the current drawing over the registered source image using the source rectangle in drawing coordinates.', inputSchema: { type: 'object', properties: { page: { type: 'string' }, out: { type: 'string' }, opacity: { type: 'number' } } } },
@@ -378,7 +381,11 @@ async function callTool(name: string, args: Json): Promise<Json> {
       const current = requireSession()
       return textResult(describeDocument(current.doc, current.sidecar, current.file, args.include_nodes !== false))
     }
-    case 'apply_operations': return textResult(applyOperations(args))
+    case 'apply_operations': {
+      const result = applyOperations(args)
+      const preview = isRecord(result.preview) && typeof result.preview.png === 'string' ? result.preview.png : undefined
+      return textResult(result, preview)
+    }
     case 'validate_document': return textResult(validateDocument())
     case 'render_svg': {
       const result = renderSvg(args)
