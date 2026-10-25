@@ -36,6 +36,7 @@ A change of the format that breaks with 1.0 on two points: what a component hold
 - Dissociating a component, ungrouping, and bringing forward or sending backward no longer fail where objects side by side in the stacking order share a place in it, which drawings can hold (objects placed one after the other, an older file).
 - A component picked in the object library and not put down (Esc) no longer stays in the drawing: it comes in with its first placement, which one Ctrl+Z takes back whole.
 - A component opened to be edited from the Components panel or the object library fills the view, in its middle, and leaving it brings back the drawing as it was on screen, as what is on every sheet already did.
+- The left column opens wide enough for its three tabs, Layers, Pages and Components, in every language: Components was left behind the ··· in German, Spanish and Japanese, and on Linux.
 - Panels keep their width and the drawing takes the difference: the line between two columns side by side resizes the outer one without widening the other, and a panel closed leaves its room to the drawing rather than making every column as wide as the others.
 
 ### Improved

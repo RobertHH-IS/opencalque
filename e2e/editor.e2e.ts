@@ -1536,7 +1536,7 @@ test('leaves out whole the tabs a narrow column has no room for, lists them behi
   const shown = row.locator('.dv-tab:visible')
   const more = header.getByRole('button', { name: 'More tabs' })
   await expect(row.locator('.dv-tab')).toHaveText(all)
-  // In a column of about 250 px, some of the five tabs are left out; those shown are whole.
+  // In a column of about 300 px, some of the five tabs are left out; those shown are whole.
   await expect(more).toBeVisible()
   const names = await shown.allInnerTexts()
   expect(names.length).toBeLessThan(all.length)

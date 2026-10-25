@@ -113,11 +113,11 @@ test('draws a rectangle by dragging and an ellipse by two clicks', async ({ page
   await page.keyboard.press('r')
   await drag(page, at(0, 0), at(2000, 1000))
   await page.keyboard.press('o')
-  await click(page, at(3000, 0))
-  await click(page, at(5000, 1000))
+  await click(page, at(2500, 0))
+  await click(page, at(4500, 1000))
   const nodes = await saved(page)
   expect(nodes.find((n) => n.type === 'rect')).toMatchObject({ x: 0, y: 0, width: 2000, height: 1000 })
-  expect(nodes.find((n) => n.type === 'ellipse')).toMatchObject({ cx: 4000, cy: 500, rx: 1000, ry: 500 })
+  expect(nodes.find((n) => n.type === 'ellipse')).toMatchObject({ cx: 3500, cy: 500, rx: 1000, ry: 500 })
 })
 
 test('writes a text where it is clicked, and a note with a leader to what it is about', async ({ page }) => {

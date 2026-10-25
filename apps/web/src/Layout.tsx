@@ -194,7 +194,9 @@ function arrange(api: DockviewApi): void {
   api.addPanel({ id: CANVAS, component: CANVAS, title: '' })
   const add = (id: PanelId, position: { referencePanel: string; direction: 'left' | 'right' | 'below' | 'within' }, initialWidth?: number) =>
     api.addPanel({ id, component: id, title: title(id), position, initialWidth })
-  add('layers', { referencePanel: CANVAS, direction: 'left' }, 250)
+  // Wide enough for Layers, Pages and Components side by side in every language (Japanese is the
+  // widest), with room for fonts drawn wider than on Windows, as on Linux.
+  add('layers', { referencePanel: CANVAS, direction: 'left' }, 300)
   add('pages', { referencePanel: 'layers', direction: 'within' })
   add('components', { referencePanel: 'layers', direction: 'within' })
   add('objects', { referencePanel: 'layers', direction: 'below' })
