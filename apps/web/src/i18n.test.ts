@@ -31,8 +31,8 @@ function usedTexts(): Set<string> {
   return found
 }
 
-/** Symbols and unit names ("X1", "mm") are the same in every language and need no entry. */
-const needsTranslation = (text: string) => text.length > 2 && /[a-z]/.test(text)
+/** Symbols and unit names ("X1", "mm") are the same in every language and need no entry; a short word ("No") does. */
+const needsTranslation = (text: string) => (text.length > 2 ? /[a-z]/.test(text) : /^[A-Z][a-z]$/.test(text))
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort()
 
 describe('translations', () => {

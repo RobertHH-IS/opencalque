@@ -1,4 +1,4 @@
-import { type Document, drawnSolid, type Node, OBJECT_FILL, TEXT_FIELDS, type Pattern } from '@opencalque/core'
+import { DEFAULT_MATERIAL, type Document, drawnSolid, type Node, OBJECT_FILL, TEXT_FIELDS, type Pattern } from '@opencalque/core'
 import { msg, t } from '../../i18n'
 import { registry } from '../../extensions'
 
@@ -34,7 +34,7 @@ export interface FieldSpec {
   unset?: string
   /** Shown only for objects this is true of: a polygon has no ends, a line no fill. */
   when?: (node: Node) => boolean
-  /** For a fill: the colour and pattern it takes from elsewhere (its wall type) when it has none of its own. */
+  /** For a fill: the colour and pattern it takes from elsewhere (a room's floor, from its material) when it has none of its own. */
   inherited?: { fill?: string; pattern?: Pattern }
   /** For a fill: no fill at all may not be chosen. */
   filled?: boolean
@@ -42,6 +42,8 @@ export interface FieldSpec {
   ends?: 'start' | 'end'
   /** Set for one object at a time only, as a name: several are not given the same one at once. */
   single?: boolean
+  /** The choice is of one of the drawing's materials, picked from a list showing each with its swatch (`MaterialChoice`). */
+  material?: boolean
 }
 
 export const GEOMETRY = msg('Geometry')
@@ -84,7 +86,7 @@ const fill = (fallback: string, unset: string, more: Partial<FieldSpec> = {}): F
 /** A plain shape is filled with nothing until it is given a fill. */
 const SHAPE_STYLE: FieldSpec[] = [...stroke(STROKE), fill('none', msg('none'))]
 
-/** An object or a component draws its own fills; a wall is always filled, white unless its type or its style says. */
+/** A parametric object draws its own fills, white unless its style says. */
 const STYLE: FieldSpec[] = [...stroke(STROKE), fill('#ffffff', msg('default'))]
 
 /** A room in two parts: the name written in it (with its area), and its floor. */
@@ -142,6 +144,16 @@ export const ANNOTATION: FieldSpec[] = [
   { path: 'font', label: msg('Font'), type: 'string', section: msg('Text'), options: FONTS },
 ]
 
+/** A grid line: what its bubble says and where it is, and its line, usually dashed. */
+export const GRIDLINE: FieldSpec[] = [
+  { path: 'label', label: msg('Label'), type: 'string', section: msg('Bubble') },
+  { path: 'bubbles', label: msg('At'), type: 'string', section: msg('Bubble'), fallback: 'start', options: options(['start', msg('Start')], ['end', msg('End')], ['both', msg('Both ends')], ['none', msg('None')]) },
+  len('size', msg('Size'), 800, msg('Bubble')),
+  { path: 'font', label: msg('Font'), type: 'string', section: msg('Bubble'), options: FONTS },
+  ...AB,
+  ...stroke(msg('Line')),
+]
+
 /** The symbols at the ends of a plain line, which has none unless asked. */
 const LINE_ENDS: FieldSpec[] = [
   { path: 'startMarker', label: msg('Start'), type: 'string', section: msg('Ends'), fallback: 'none', options: TIPS, ends: 'start' },
@@ -151,9 +163,11 @@ const LINE_ENDS: FieldSpec[] = [
 
 const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
   line: [...AB, ...LINE_ENDS, ...stroke(STROKE)],
-  wall: [...AB, len('bulge', msg('Curve'), 0), len('thickness', msg('Thickness')), { ...len('height', msg('Height')), optional: true }, ...stroke(STROKE), fill('#ffffff', msg('default'), { filled: true })],
+  // A wall's fill is its material's: it has none of its own to set.
+  wall: [...AB, len('bulge', msg('Curve'), 0), len('thickness', msg('Thickness')), { ...len('height', msg('Height')), optional: true }, ...stroke(STROKE)],
   dimension: DIMENSION,
   annotation: ANNOTATION,
+  gridline: GRIDLINE,
   rect: [len('x', msg('X')), len('y', msg('Y')), len('width', msg('W')), len('height', msg('H')), num('rotation', msg('Rotation'), 0), ...SHAPE_STYLE],
   // A paper's size is its format and scale, and where it lies is typed at the top of its panel: it has no geometry section.
   paper: [],
@@ -170,6 +184,19 @@ const FIELDS: Partial<Record<Node['type'], FieldSpec[]>> = {
     fill('#dfe6f0', msg('default'), { section: FLOOR }),
   ],
   divider: AB,
+  // What it counts, and its columns, are set above (`TableSettings`); here, how it is written.
+  table: [
+    { path: 'title', label: msg('Title'), type: 'string', optional: true },
+    len('x', msg('X')),
+    len('y', msg('Y')),
+    len('size', msg('Text size'), 200),
+    { path: 'totals', label: msg('Total row'), type: 'boolean', fallback: true },
+    // Past this many, its rows go on in a block beside it: a long legend stays on the sheet.
+    { ...num('rowsPerBlock', msg('Rows per block')), optional: true },
+    { path: 'decimal', label: msg('Decimals'), type: 'string', fallback: '.', options: options(['.', msg('With a point: 1.5')], [',', msg('With a comma: 1,5')]) },
+    ...stroke(STROKE),
+    fill('#ffffff', msg('default'), { filled: true }),
+  ],
   ellipse: [
     len('cx', msg('X')),
     len('cy', msg('Y')),
@@ -227,6 +254,20 @@ export const FIELD_NAMES: Record<(typeof TEXT_FIELDS)[number], string> = {
   format: msg('Format of the sheet'),
 }
 
+/**
+ * A room's fields, with what its floor is made of among the drawing's materials: a floor of a
+ * material takes its colour and pattern unless it is given its own.
+ */
+function roomFields(node: Extract<Node, { type: 'room' }>, doc: Document): FieldSpec[] {
+  // The default material is what walls are made of, not floors.
+  const materials = Object.values(doc.materials ?? {}).filter((m) => m.id !== DEFAULT_MATERIAL)
+  const material = node.material ? doc.materials?.[node.material] : undefined
+  const choice: FieldSpec = { path: 'material', label: msg('Material'), type: 'string', section: FLOOR, material: true, options: [{ value: '', label: msg('None') }, ...materials.map((m) => ({ value: m.id, label: m.name }))] }
+  return (FIELDS.room ?? []).flatMap((field) =>
+    field.type !== 'fill' ? [field] : [choice, material ? { ...field, inherited: { fill: material.fill, pattern: material.pattern }, unset: msg('from its material') } : field],
+  )
+}
+
 /** The properties several objects all have, to be set on all of them at once. */
 export function commonFields(nodes: Node[], doc: Document): FieldSpec[] {
   const [first, ...rest] = nodes.map((node) => fieldsOf(node, doc))
@@ -240,7 +281,7 @@ export function commonFields(nodes: Node[], doc: Document): FieldSpec[] {
 const placedFill = (field: FieldSpec): FieldSpec => (field.type === 'fill' && field.fallback === 'none' ? { ...field, fallback: OBJECT_FILL, unset: msg('default') } : field)
 
 export function fieldsOf(node: Node, doc: Document): FieldSpec[] {
-  const fields = FIELDS[node.type] ?? []
+  const fields = node.type === 'room' ? roomFields(node, doc) : (FIELDS[node.type] ?? [])
   // A placement looks as its component is drawn: it has no look of its own to set.
   if (node.type === 'instance') return fields
   if (node.type !== 'parametric') return drawnSolid(doc, node.parent) ? fields.map(placedFill) : fields

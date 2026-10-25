@@ -1,7 +1,8 @@
+import { parametricPicture } from './pictures'
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { applyOps, componentsOf, createDocument, declarativeExtension, toSVG, type DeclarativeExtension, type Document, type Op, type ParametricKind } from '@opencalque/core'
+import { applyOps, componentsOf, createDocument, declarativeExtension, SCHEDULES, toSVG, type DeclarativeExtension, type Document, type Op, type ParametricKind, type Schedule } from '@opencalque/core'
 import { Globe, HardDrive, SlidersHorizontal, X } from 'lucide-react'
-import { DRAWING_EXTENSIONS, guarded, importLibraryFrom, libraryOps } from './actions'
+import { DRAWING_EXTENSIONS, guarded, importLibraryFrom, libraryOps, newTable, SCHEDULE_ABOUT, SCHEDULE_NAMES } from './actions'
 import { showPanel } from './dock'
 import { carry, svgUrl } from './carry'
 import { language, msg, t, tn } from './i18n'
@@ -19,13 +20,43 @@ const close = () => useWindows.setState({ warehouse: null })
 /** A text of an extension that is not installed yet, in the user's language when the extension provides it. */
 const own = (extension: { translations?: Record<string, Record<string, string>> }, text: string) => extension.translations?.[language()]?.[text] ?? text
 
-/** A drawing of a parametric object with its default sizes; a door or window is shown in a piece of wall. */
-function objectPicture(kind: ParametricKind): string {
+/**
+ * A small house to picture tables of quantities with: two rooms of oak and of tiles between
+ * brick walls 2.5 m high, a partition of blocks, and a few chairs. Made once, when first asked for.
+ */
+let sampleHouse: Document | null = null
+function sample(): Document {
+  if (sampleHouse) return sampleHouse
+  const wall = (id: string, a: [number, number], b: [number, number], thickness: number, material: string): Op => ({ op: 'add_node', node: { type: 'wall', id, parent: 'page_1', layer: 'layer_1', a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] }, thickness, material } })
+  const ops: Op[] = [
+    { op: 'update_node', id: 'page_1', patch: { wallHeight: 2500 } },
+    { op: 'add_material', material: { id: 'brick', name: t('Brick') } },
+    { op: 'add_material', material: { id: 'block', name: t('Concrete block') } },
+    { op: 'add_material', material: { id: 'oak', name: t('Oak parquet') } },
+    { op: 'add_material', material: { id: 'tiles', name: t('Tiles') } },
+    wall('n', [0, 0], [6000, 0], 300, 'brick'),
+    wall('e', [6000, 0], [6000, 4000], 300, 'brick'),
+    wall('s', [6000, 4000], [0, 4000], 300, 'brick'),
+    wall('w', [0, 4000], [0, 0], 300, 'brick'),
+    wall('p', [3500, 0], [3500, 4000], 100, 'block'),
+    { op: 'add_node', node: { type: 'room', parent: 'page_1', layer: 'layer_1', name: t('Living room'), x: 1700, y: 2000, material: 'oak' } },
+    { op: 'add_node', node: { type: 'room', parent: 'page_1', layer: 'layer_1', name: t('Kitchen'), x: 4700, y: 2000, material: 'tiles' } },
+    { op: 'add_node', node: { type: 'component', id: 'chair', name: t('Chair') } },
+    { op: 'add_node', node: { type: 'rect', parent: 'chair', x: 0, y: 0, width: 450, height: 450 } },
+    ...[0, 1, 2].map((i): Op => ({ op: 'add_node', node: { type: 'instance', parent: 'page_1', layer: 'layer_1', component: 'chair', x: 600 + i * 600, y: 800 } })),
+    { op: 'add_node', node: { type: 'page', id: 'sheet', name: 'Sheet' } },
+  ]
+  // A door and windows, when the extension that draws them is in use.
+  if (registry.parametric.has('arch.door')) ops.push({ op: 'add_node', node: { type: 'parametric', parent: 'page_1', layer: 'layer_1', kind: 'arch.door', props: {}, x: 3500, y: 1500, rotation: 90 } })
+  if (registry.parametric.has('arch.window')) for (const x of [1000, 4300]) ops.push({ op: 'add_node', node: { type: 'parametric', parent: 'page_1', layer: 'layer_1', kind: 'arch.window', props: {}, x, y: 0 } })
+  return (sampleHouse = applyOps(createDocument(), ops))
+}
+
+/** A table of one kind as it would count the sample house, to show on its card: all at one scale, from their top-left corner. */
+function tablePicture(schedule: Schedule): string {
   try {
-    const hole = kind.opening?.(registry.resolveProps(kind, {}))
-    const ops: Op[] = [{ op: 'add_node', node: { type: 'parametric', parent: 'page_1', layer: 'layer_1', kind: kind.kind, x: 0, y: 0, rotation: 0, props: {} } }]
-    if (hole) ops.unshift({ op: 'add_node', node: { type: 'wall', parent: 'page_1', layer: 'layer_1', a: { x: hole.from - 350, y: 0 }, b: { x: hole.to + 350, y: 0 }, thickness: 200 } })
-    return svgUrl(toSVG(applyOps(createDocument(), ops), 'page_1', registry))
+    const doc = applyOps(sample(), [{ op: 'add_node', node: { ...newTable(schedule), size: 200, parent: 'sheet', layer: 'layer_1', x: 0, y: 0, source: 'page_1' } }])
+    return svgUrl(toSVG(doc, 'sheet', registry).replace(/viewBox="[^"]*"/, 'viewBox="-300 -300 7600 5000"'))
   } catch {
     return ''
   }
@@ -55,10 +86,12 @@ const OBJECTS = 'objects'
 const CATEGORIES: Record<string, string> = {
   architecture: msg('Architecture'),
   annotation: msg('Annotation'),
+  tables: msg('Tables of quantities'),
   living: msg('Living room'),
   dining: msg('Dining room'),
   bedroom: msg('Bedroom'),
   office: msg('Office'),
+  heating: msg('Heating'),
 }
 /**
  * The headings of the list of sections, each with the sections the app knows under it, in the
@@ -68,8 +101,8 @@ const CATEGORIES: Record<string, string> = {
  */
 const HEADINGS: [heading: string, sections: string[]][] = [
   [msg('Rooms'), ['living', 'dining', 'bedroom', 'kitchen', 'bathroom', 'office']],
-  [msg('Building'), ['architecture', 'electrical']],
-  [msg('Drawing'), ['annotation']],
+  [msg('Building'), ['architecture', 'electrical', 'heating']],
+  [msg('Drawing'), ['annotation', 'tables']],
 ]
 const SECTION_KEY = 'opencalque.librarySection'
 
@@ -152,7 +185,7 @@ function Components({ libraries }: { libraries: Library[] }) {
     const all = library.components !== undefined && rooms.length >= library.components
     return [...new Set(rooms), ...(all ? [] : [library.id])]
   }
-  const present = new Set([...libraries.flatMap(sectionsOf), ...kinds.map((kind) => kind.category ?? OBJECTS)])
+  const present = new Set([...libraries.flatMap(sectionsOf), ...kinds.map((kind) => kind.category ?? OBJECTS), 'tables'])
   const known = HEADINGS.flatMap(([, ids]) => ids)
   const rest = [...present].filter((id) => !known.includes(id)).sort((a, b) => Number(a === OBJECTS) - Number(b === OBJECTS))
   const lists = [...HEADINGS.map(([heading, ids]) => ({ heading, ids: ids.filter((id) => present.has(id)) })), { heading: msg('Others'), ids: rest }].filter((list) => list.ids.length > 0)
@@ -174,8 +207,22 @@ function Components({ libraries }: { libraries: Library[] }) {
         // The size it comes at; how it is placed and changed is said by its tooltip.
         description: defaultSize(kind),
         about: kind.description ? t(kind.description) : undefined,
-        picture: objectPicture(kind),
+        picture: parametricPicture(kind),
         place: (carried) => (close(), setTool('place', { type: 'parametric', kind: kind.kind, carried })),
+      })),
+    [version, lengthUnit],
+  )
+  // Tables of quantities, which count what the drawing holds and stay up to date.
+  const tableCards = useMemo(
+    () =>
+      SCHEDULES.map((schedule): Card => ({
+        key: `table ${schedule}`,
+        group: 'tables',
+        name: t(SCHEDULE_NAMES[schedule]),
+        description: t(SCHEDULE_ABOUT[schedule]),
+        about: t('Counts what the page it is put on holds, and keeps up to date as the drawing changes.'),
+        picture: tablePicture(schedule),
+        place: (carried) => (close(), setTool('place', { type: 'table', table: newTable(schedule), carried })),
       })),
     [version, lengthUnit],
   )
@@ -223,7 +270,7 @@ function Components({ libraries }: { libraries: Library[] }) {
   // Every section with what it holds that matches the search, which the list of sections counts.
   const found = groups.map((group) => ({
     ...group,
-    cards: [...objectCards, ...libraryCards].filter((card) => card.group === group.id && words.every((word) => `${card.name} ${card.description} ${group.name}`.toLowerCase().includes(word))),
+    cards: [...objectCards, ...tableCards, ...libraryCards].filter((card) => card.group === group.id && words.every((word) => `${card.name} ${card.description} ${group.name}`.toLowerCase().includes(word))),
   }))
   const counts: Record<string, number> = { all: 0 }
   for (const group of found) {

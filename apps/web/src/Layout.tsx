@@ -7,7 +7,7 @@ import { MoreTabs } from './MoreTabs'
 import { t } from './i18n'
 import { AssistantPanel } from './panels/AssistantPanel'
 import { Colors, Components, Layers, Objects, Pages } from './panels/LeftPanel'
-import { WallTypes } from './panels/WallTypesPanel'
+import { Materials } from './panels/MaterialsPanel'
 import { DimensionStyles } from './panels/DimensionStylesPanel'
 import { Properties } from './panels/properties/Properties'
 import { Stage } from './Stage'
@@ -55,16 +55,16 @@ const COMPONENTS: Record<PanelId | typeof CANVAS, FunctionComponent> = {
   components: scrolling('components', Components),
   objects: scrolling('objects', Objects),
   colors: scrolling('colors', Colors),
-  wallTypes: scrolling('wallTypes', WallTypes),
+  materials: scrolling('materials', Materials),
   dimensionStyles: scrolling('dimensionStyles', DimensionStyles),
   properties: scrolling('properties', Properties),
   assistant: guarded(() => title('assistant'), AssistantPanel),
 }
 
 /** Where a panel goes when it is opened and its usual neighbours are closed too. */
-const SIDE: Record<PanelId, 'left' | 'right'> = { pages: 'left', layers: 'left', components: 'left', objects: 'left', colors: 'left', wallTypes: 'left', dimensionStyles: 'left', properties: 'right', assistant: 'right' }
+const SIDE: Record<PanelId, 'left' | 'right'> = { pages: 'left', layers: 'left', components: 'left', objects: 'left', colors: 'left', materials: 'left', dimensionStyles: 'left', properties: 'right', assistant: 'right' }
 /** The panel each one shares tabs with by default. */
-const PARTNER: Record<PanelId, PanelId> = { pages: 'layers', layers: 'pages', components: 'layers', objects: 'colors', colors: 'objects', wallTypes: 'colors', dimensionStyles: 'wallTypes', properties: 'assistant', assistant: 'properties' }
+const PARTNER: Record<PanelId, PanelId> = { pages: 'layers', layers: 'pages', components: 'layers', objects: 'colors', colors: 'objects', materials: 'colors', dimensionStyles: 'materials', properties: 'assistant', assistant: 'properties' }
 
 const title = (id: PanelId) => t(PANELS[id])
 
@@ -115,6 +115,58 @@ function leavesInPlace(event: DockviewWillShowOverlayLocationEvent, group: Dockv
   return to === from || to === from + 1
 }
 
+/** The parts of the library's grid that `drawingTakesTheDifference` reaches into; none is public. */
+type Sizing = number | { type: string; index?: number }
+interface Splitview {
+  resize: (index: number, delta: number, sizes?: number[], low?: number[], high?: number[], ...rest: unknown[]) => number
+  addView: (view: unknown, size?: Sizing, index?: number, skipLayout?: boolean) => void
+  removeView: (index: number, sizing?: Sizing, skipLayout?: boolean) => unknown
+  viewItems: { view: { element?: HTMLElement } }[]
+}
+interface GridNode { splitview?: Splitview; children?: GridNode[] }
+const favouring = new WeakSet<Splitview>()
+const evensOut = (sizing: Sizing | undefined) => typeof sizing === 'object' && sizing.type === 'distribute'
+
+/**
+ * Columns keep their width and the drawing takes the difference. Dragging the line between two
+ * columns resizes the one on its side away from the drawing, those between it and the drawing
+ * keeping theirs; a column closed leaves its room to the drawing (a panel closed in a column of
+ * them, to the last one there), the others keeping their sizes; one opened without a width of its
+ * own takes half of the drawing, as a drop beside it does. The library gives a drag's change
+ * to the nearest view, makes every view of a row as wide as the others when one is closed, and
+ * offers no say in either: a group's `priority` cannot be set, and a drag passes none. So every
+ * splitview of the grid has its `resize` put the view that holds the drawing first, as the library
+ * does with views of high priority, and its `addView` and `removeView` not even out the sizes.
+ * This reaches into the library's internals; should they change, it does nothing and the library's
+ * own way comes back. Called again on every change of layout, for the splitviews made since.
+ */
+function drawingTakesTheDifference(api: DockviewApi): void {
+  const visit = (node: GridNode | undefined) => {
+    const splitview = node?.splitview
+    if (!splitview || !Array.isArray(splitview.viewItems) || ![splitview.resize, splitview.addView, splitview.removeView].every((f) => typeof f === 'function')) return
+    if (!favouring.has(splitview)) {
+      favouring.add(splitview)
+      const { resize, addView, removeView } = splitview
+      const drawingSide = () => {
+        const drawing = api.getPanel(CANVAS)?.group.element
+        return drawing ? splitview.viewItems.findIndex((item) => item.view.element?.contains(drawing)) : -1
+      }
+      splitview.resize = (index, delta, sizes, low, high, ...rest) => {
+        const side = drawingSide()
+        return resize.call(splitview, index, delta, sizes, low, side < 0 ? high : [...(high ?? []), side], ...rest)
+      }
+      splitview.addView = (view, size, index, skipLayout) => {
+        const side = drawingSide()
+        addView.call(splitview, view, side >= 0 && (size === undefined || evensOut(size)) ? { type: 'split', index: side } : size, index, skipLayout)
+      }
+      // Wherever it is: the drawing may be on its way from a column that is going.
+      splitview.removeView = (index, sizing, skipLayout) => removeView.call(splitview, index, evensOut(sizing) ? undefined : sizing, skipLayout)
+    }
+    for (const child of node?.children ?? []) visit(child)
+  }
+  visit((api as unknown as { component?: { gridview?: { root?: GridNode } } }).component?.gridview?.root)
+}
+
 /**
  * Panels are dragged with pointer events (`dndStrategy="pointer"`) rather than the browser's drag
  * and drop, whose cursor on Windows said "not allowed" as a drag began and at every edge between
@@ -147,7 +199,7 @@ function arrange(api: DockviewApi): void {
   add('components', { referencePanel: 'layers', direction: 'within' })
   add('objects', { referencePanel: 'layers', direction: 'below' })
   add('colors', { referencePanel: 'objects', direction: 'within' })
-  add('wallTypes', { referencePanel: 'objects', direction: 'within' })
+  add('materials', { referencePanel: 'objects', direction: 'within' })
   add('dimensionStyles', { referencePanel: 'objects', direction: 'within' })
   add('properties', { referencePanel: CANVAS, direction: 'right' }, 290)
   add('assistant', { referencePanel: 'properties', direction: 'within' })
@@ -208,6 +260,8 @@ export function Layout() {
   const onReady = ({ api }: DockviewReadyEvent) => {
     restore(api)
     limitDropZones(api)
+    drawingTakesTheDifference(api)
+    api.onDidLayoutChange(() => drawingTakesTheDifference(api))
     const remember = () => {
       useDock.setState({ open: api.panels.map((p) => p.id) })
       try {

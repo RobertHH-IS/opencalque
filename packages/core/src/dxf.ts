@@ -1,4 +1,5 @@
-import { arcPoints, distToSegment, pointInPolygon, type Vec2 } from './geometry'
+import { arcPoints, pointInPolygon, type Vec2 } from './geometry'
+import { outsideMass, unionMass } from './merge'
 import { segmentsInside } from './modifiers'
 import type { Registry } from './registry'
 import { buildScene } from './scene'
@@ -36,47 +37,11 @@ export function toDXF(doc: Document, containerId: string, registry: Registry): s
   // Walls are drawn as polygons that touch or overlap, and read as one shape: the parts of an
   // outline that lie inside another wall, or along its edge, are inside the wall and must not
   // appear. That covers a corner, where two walls share an edge, and a wall ending against the
-  // middle of another, whose end is hidden and which opens the side it meets.
+  // middle of another, whose end is hidden and which opens the side it meets. Where one material
+  // meets another, the line is a line of its own, drawn over the walls; a wall stacked over one of
+  // another material shows its outline across it (`outsideMass`).
   const scene = buildScene(doc, containerId, registry)
-  const walls = scene.flatMap((item) => item.prims.flatMap((prim) => (prim.kind === 'path' && prim.union && prim.closed && prim.points.length > 2 ? [prim.points] : [])))
-  const NEAR = 0.01
-  const onEdge = (p: Vec2, polygon: Vec2[]) => polygon.some((q, i) => distToSegment(p, q, polygon[(i + 1) % polygon.length]) < NEAR)
-  const outside = (a: Vec2, b: Vec2): [Vec2, Vec2][] => {
-    const d = { x: b.x - a.x, y: b.y - a.y }
-    const length = Math.hypot(d.x, d.y)
-    if (length < 1e-9) return []
-    // Every place along the edge where another wall's outline crosses it or has a corner on it.
-    const cuts = [0, 1]
-    for (const other of walls) {
-      other.forEach((c, i) => {
-        const e = other[(i + 1) % other.length]
-        const along = ((c.x - a.x) * d.x + (c.y - a.y) * d.y) / (length * length)
-        if (along > 0 && along < 1 && distToSegment(c, a, b) < NEAR) cuts.push(along)
-        const cross = d.x * (e.y - c.y) - d.y * (e.x - c.x)
-        if (Math.abs(cross) < 1e-9) return
-        const t = ((c.x - a.x) * (e.y - c.y) - (c.y - a.y) * (e.x - c.x)) / cross
-        const u = ((c.x - a.x) * d.y - (c.y - a.y) * d.x) / cross
-        if (t > 0 && t < 1 && u >= 0 && u <= 1) cuts.push(t)
-      })
-    }
-    cuts.sort((x, y) => x - y)
-    const at = (t: number) => ({ x: a.x + d.x * t, y: a.y + d.y * t })
-    const parts: [Vec2, Vec2][] = []
-    for (let i = 0; i + 1 < cuts.length; i++) {
-      if ((cuts[i + 1] - cuts[i]) * length < NEAR) continue
-      const middle = at((cuts[i] + cuts[i + 1]) / 2)
-      // Inside the mass of the walls: there is wall just to either side of this stretch. That holds
-      // for an edge two walls share and for one that lies within another wall, whichever wall it is the edge of.
-      const aside = { x: (-d.y / length) * 0.05, y: (d.x / length) * 0.05 }
-      const walled = (q: Vec2) => walls.some((other) => pointInPolygon(q, other))
-      if (walled({ x: middle.x + aside.x, y: middle.y + aside.y }) && walled({ x: middle.x - aside.x, y: middle.y - aside.y })) continue
-      // Stretches that follow one another are one line.
-      const last = parts[parts.length - 1]
-      if (last && Math.hypot(last[1].x - at(cuts[i]).x, last[1].y - at(cuts[i]).y) < NEAR) last[1] = at(cuts[i + 1])
-      else parts.push([at(cuts[i]), at(cuts[i + 1])])
-    }
-    return parts
-  }
+  const { mass, of } = unionMass(scene.flatMap((item) => item.prims))
 
   for (const item of scene) {
     const layer = layerName(item.node.layer ? doc.layers[item.node.layer]?.name : undefined)
@@ -87,7 +52,7 @@ export function toDXF(doc: Document, containerId: string, registry: Registry): s
         for (let i = 0; i < count; i++) {
           const a = prim.points[i]
           const b = prim.points[(i + 1) % prim.points.length]
-          if (prim.union) for (const [from, to] of outside(a, b)) line(layer, from, to, prim.clip)
+          if (prim.union) for (const [from, to] of outsideMass(mass, a, b, of.get(prim))) line(layer, from, to, prim.clip)
           else line(layer, a, b, prim.clip)
         }
       } else if (prim.kind === 'ellipse') {

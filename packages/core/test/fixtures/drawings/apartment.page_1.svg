@@ -322,22 +322,6 @@
 <text x="12250" y="10000" font-size="175" fill="#1f1f1f">15/10/2026</text>
 <path d="M13700 9700 L13700 10150" fill="none" stroke="#1f1f1f" stroke-width="0.6" vector-effect="non-scaling-stroke"/>
 <text x="13850" y="10000" font-size="175" fill="#1f1f1f">1 / 1</text>
-<path d="M-125 -125 L0 0 L125 125 L1400 125 L1400 -125 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M3600 -125 L3600 125 L7200 125 L7200 -125 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M8800 -125 L8800 125 L9875 125 L10000 0 L10125 -125 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M10125 -125 L10000 0 L9875 125 L9875 5000 L10125 5000 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M10125 5800 L9875 5800 L9875 6875 L10000 7000 L10125 7125 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M10125 7125 L10000 7000 L9875 6875 L7300 6875 L7300 7125 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M6350 7125 L6350 6875 L2600 6875 L2600 7125 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M1200 7125 L1200 6875 L125 6875 L0 7000 L-125 7125 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M-125 7125 L0 7000 L125 6875 L125 3100 L-125 3100 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M-125 1600 L125 1600 L125 125 L0 0 L-125 -125 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M6050 0 L5950 0 L5950 4350 L6050 4350 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M6050 5200 L5950 5200 L5950 7000 L6050 7000 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M6000 3750 L6000 3850 L6350 3850 L6350 3750 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M7200 3750 L7200 3850 L10000 3850 L10000 3750 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M7650 3800 L7550 3800 L7550 4900 L7650 4900 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
-<path d="M7650 5650 L7550 5650 L7550 7000 L7650 7000 Z" fill="none" stroke="#1f1f1f" stroke-width="2.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
 <path d="M-125 -125 L0 0 L125 125 L1400 125 L1400 -125 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
 <path d="M3600 -125 L3600 125 L7200 125 L7200 -125 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
 <path d="M8800 -125 L8800 125 L9875 125 L10000 0 L10125 -125 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
@@ -348,12 +332,32 @@
 <path d="M1200 7125 L1200 6875 L125 6875 L0 7000 L-125 7125 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
 <path d="M-125 7125 L0 7000 L125 6875 L125 3100 L-125 3100 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
 <path d="M-125 1600 L125 1600 L125 125 L0 0 L-125 -125 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
-<path d="M6050 0 L5950 0 L5950 4350 L6050 4350 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
-<path d="M6050 5200 L5950 5200 L5950 7000 L6050 7000 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
-<path d="M6000 3750 L6000 3850 L6350 3850 L6350 3750 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
-<path d="M7200 3750 L7200 3850 L10000 3850 L10000 3750 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
-<path d="M7650 3800 L7550 3800 L7550 4900 L7650 4900 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
-<path d="M7650 5650 L7550 5650 L7550 7000 L7650 7000 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M6050 125 L5950 125 L5950 4350 L6050 4350 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M6050 5200 L5950 5200 L5950 6875 L6050 6875 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M6050 3750 L6050 3850 L6350 3850 L6350 3750 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M7200 3750 L7200 3850 L9875 3850 L9875 3750 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M7650 3850 L7550 3850 L7550 4900 L7650 4900 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M7650 5650 L7550 5650 L7550 6875 L7650 6875 Z" fill="#ffffff" stroke="#ffffff" stroke-width="0.8" vector-effect="non-scaling-stroke"/>
+<path d="M125 125 L1400 125 L1400 -125 L-125 -125" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M6050 125 L7200 125 L7200 -125 L3600 -125 L3600 125 L5950 125" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M10125 -125 L8800 -125 L8800 125 L9875 125" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M9875 125 L9875 3750" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M9875 3850 L9875 5000 L10125 5000 L10125 -125" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M10125 7125 L10125 5800 L9875 5800 L9875 6875" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M9875 6875 L7650 6875" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M7550 6875 L7300 6875 L7300 7125 L10125 7125" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M5950 6875 L2600 6875 L2600 7125 L6350 7125 L6350 6875 L6050 6875" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M-125 7125 L1200 7125 L1200 6875 L125 6875" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M125 6875 L125 3100 L-125 3100 L-125 7125" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M-125 -125 L-125 1600 L125 1600 L125 125" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M5950 125 L5950 4350 L6050 4350 L6050 3850" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M6050 3750 L6050 125" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M6050 6875 L6050 5200 L5950 5200 L5950 6875" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M6050 3850 L6350 3850 L6350 3750 L6050 3750" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M9875 3750 L7200 3750 L7200 3850 L7550 3850" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M7650 3850 L9875 3850" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M7550 3850 L7550 4900 L7650 4900 L7650 3850" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
+<path d="M7650 6875 L7650 5650 L7550 5650 L7550 6875" fill="none" stroke="#1f1f1f" stroke-width="1" vector-effect="non-scaling-stroke"/>
 <path d="M0 4300 L3700 4300" fill="none" stroke="#8b9099" stroke-width="1" stroke-dasharray="8 6" vector-effect="non-scaling-stroke"/>
 <path d="M3700 4300 L3700 7000" fill="none" stroke="#8b9099" stroke-width="1" stroke-dasharray="8 6" vector-effect="non-scaling-stroke"/>
 <path d="M6350 7125 L7300 7125" fill="none" stroke="#1f1f1f" stroke-width="0.5" vector-effect="non-scaling-stroke"/>

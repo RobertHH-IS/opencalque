@@ -1,4 +1,4 @@
-import { dist, len, newId, norm, paperSize, perp, sub, type NodeInput, type Vec2 } from '@opencalque/core'
+import { dist, len, newId, nextGridLabel, norm, paperSize, perp, sub, type NodeInput, type Vec2 } from '@opencalque/core'
 import { t } from '../../i18n'
 import { apply, cancel, commit, layerHere, preview, useStore } from '../../store'
 import { formatLength, formatNumber } from '../../units'
@@ -18,7 +18,7 @@ import { axisOf, constrain, currentStyle, paperFormats, polyline, shape, sizes, 
 export function aim(c: Canvas, g: GestureOf<'draw'>, world: Vec2, e: Keys): Target {
   const { tool } = get()
   if (CHAINED.includes(tool)) return lineEnd(c, world, e, [g.id], g.start)
-  return snap(c, world, e, [g.id], tool === 'dimension' ? g.start : undefined)
+  return snap(c, world, e, [g.id], tool === 'dimension' || tool === 'gridline' ? g.start : undefined)
 }
 
 /** Completes the shape being drawn at `p`. Chained tools then start the next one from there. */
@@ -53,8 +53,11 @@ export function finishShape(c: Canvas, g: GestureOf<'draw'>, end: Vec2, chain: b
     c.setOverlay({})
     return
   }
-  if (preview(tool === 'wall' ? wallOps(g.id, g.start, p) : [{ op: 'add_node', node: shape(tool, g.id, g.start, p) }])) commit()
-  else cancel()
+  if (preview(tool === 'wall' ? wallOps(g.id, g.start, p) : [{ op: 'add_node', node: shape(tool, g.id, g.start, p) }])) {
+    commit()
+    // The grid line drawn next is labelled after this one: B after A, 2 after 1.
+    if (tool === 'gridline') useStore.setState((s) => ({ gridlineTemplate: { ...s.gridlineTemplate, label: nextGridLabel(String(s.gridlineTemplate.label ?? '')) } }))
+  } else cancel()
   // A run that arrives back at its first point is complete.
   const continues = chain && CHAINED.includes(tool) && !(g.segments >= 1 && dist(p, g.origin) < 1e-6)
   c.gesture = continues ? { kind: 'draw', id: newId(), start: p, press: null, origin: g.origin, segments: g.segments + 1, since: performance.now() } : { kind: 'idle' }
@@ -154,7 +157,7 @@ export const drawDown: Press = (c, e, at, world) => {
 
 export const drawMove: Move<'draw'> = (c, g, e, _at, world, out) => {
   const s = get()
-  const constrained = CHAINED.includes(s.tool) || s.tool === 'dimension'
+  const constrained = CHAINED.includes(s.tool) || s.tool === 'dimension' || s.tool === 'gridline'
   const target = aim(c, g, world, e)
   out.marker = target.marker
   out.link = target.link

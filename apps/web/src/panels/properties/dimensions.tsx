@@ -5,7 +5,7 @@ import { apply, useStore } from '../../store'
 import { Section } from '../../ui'
 import { unit } from '../../units'
 import { Sections, type Update } from './FieldRow'
-import { ANNOTATION, DIMENSION } from './fields'
+import { ANNOTATION, DIMENSION, GRIDLINE } from './fields'
 
 /* Dimension styles in the Properties panel, and the settings of the dimension and annotation tools. */
 
@@ -90,6 +90,30 @@ export function DimensionTool() {
         <DimensionStyleChoice value={style} label={t('Dimension style')} onChange={give} />
       </Section>
       <Sections node={node} fields={DIMENSION.filter((f) => f.section)} update={update} />
+    </>
+  )
+}
+
+/** The grid lines drawn next: the label of the next one, its bubble and its line. */
+export function GridlineTool() {
+  const template = useStore((s) => s.gridlineTemplate)
+  const zero = { x: 0, y: 0 }
+  const node = { id: '', parent: null, order: '', a: zero, b: zero, label: '', ...template, type: 'gridline' } as Node
+  const update: Update = (patch) => {
+    const next = { ...template }
+    for (const [key, value] of Object.entries(patch(node))) {
+      if (value === null) delete next[key]
+      else next[key] = value
+    }
+    useStore.setState({ gridlineTemplate: next })
+  }
+  return (
+    <>
+      <Section title={t('Grid line tool')}>
+        <p className="hint">{t('Click where the grid line starts, then where it ends. Each one drawn takes the next letter or number: B after A, 2 after 1. These settings apply to the grid lines you draw next.')}</p>
+        <p className="hint">{t('Afterwards, double-click a bubble to change its label.')}</p>
+      </Section>
+      <Sections node={node} fields={GRIDLINE.filter((f) => f.section)} update={update} />
     </>
   )
 }

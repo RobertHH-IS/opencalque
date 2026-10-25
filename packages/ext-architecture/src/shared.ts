@@ -33,12 +33,12 @@ export const HEIGHT = (mm: number): ParamDef => ({ key: 'height', label: 'Height
 export const OTHER_SIDE: ParamDef = { key: 'flip', label: 'Other side', type: 'boolean', default: false }
 export const DEPTH = (mm: number): ParamDef => ({ key: 'depth', label: 'Depth', type: 'number', default: mm, unit: 'length' })
 
-/** A box resized by its sides: `x` and `y` the keys of its width and its depth, neither made less than `min`. */
-export const sizedBox = (x: string, y: string, min: number): NonNullable<ParametricKind['box']> => ({
+/** A box resized by its sides: `x` and `y` the keys of its width and its depth, the width made no less than `min` and the depth no less than `minDepth` (`min` unless said). */
+export const sizedBox = (x: string, y: string, min: number, minDepth = min): NonNullable<ParametricKind['box']> => ({
   bounds: (props) => ({ left: 0, top: 0, right: atLeast(1, props[x]), bottom: atLeast(1, props[y]) }),
   resize: (_, size) => ({
     ...(size.width === undefined ? {} : { [x]: Math.round(atLeast(min, size.width)) }),
-    ...(size.height === undefined ? {} : { [y]: Math.round(atLeast(min, size.height)) }),
+    ...(size.height === undefined ? {} : { [y]: Math.round(atLeast(minDepth, size.height)) }),
   }),
 })
 /** A rectangle from (x0, y0) to (x1, y1) with its corners rounded, one radius for all or one for each, clockwise from the top left. */

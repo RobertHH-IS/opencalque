@@ -49,6 +49,8 @@ export interface PrimStyle {
    * something. They are drawn like any other line, but nothing snaps to them.
    */
   texture?: boolean
+  /** Set on the strokes of a pattern laid on a merged shape (a wall): painted with the merged fills, under their outline, which they would otherwise cross. */
+  merged?: boolean
   /**
    * How much the see-through groups it is in let through, multiplied; set only where there is no
    * fill to fade. The white an object backs such a shape with (`objectBacking`) is faded as much.
@@ -60,7 +62,12 @@ export interface PathPrim extends PrimStyle {
   kind: 'path'
   points: Vec2[]
   closed?: boolean
-  /** Paths sharing a union key are painted as one merged shape (outlines first, fills on top). */
+  /**
+   * Paths with a union key are painted together (`paintOrder`): their fills, then the outline of
+   * the whole, centred on its edges, with what lies inside it left out (`mergedOutlines`). Those
+   * sharing a key are one shape; one of another key stacked over them shows its outline and its
+   * pattern over them (for walls, the key is the material).
+   */
   union?: string
 }
 

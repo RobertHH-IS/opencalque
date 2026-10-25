@@ -1,13 +1,62 @@
+import { applyTransform, type Vec2 } from './geometry'
 import type { Registry } from './registry'
 import { roomAt } from './rooms'
-import type { Document, NodeOf } from './schema'
-import { leavesOf } from './document'
+import type { Document, Node, NodeOf } from './schema'
+import { childrenOf, isVisible, leavesOf } from './document'
+import { listedAsModel, variantLabel, variantsOf, type VariantDetail } from './variants'
 import { wallLength, wallOpenings } from './walls'
 
-/** One room of the plan: its name and the floor inside its walls, in m². */
+/** One room of the plan: its name and the floor inside its walls, in m², and the material of that floor ('' for none). */
 export interface RoomQuantity {
+  /** The room's id: a room placed several times, in a component, is listed once for each placement under the same id. */
+  id: string
   name: string
   area: number
+  material: string
+  /** The id of that material, or '' for none. */
+  materialId: string
+}
+
+/** The floors of one material, added up over the rooms: '' for the floors of no material. */
+export interface FloorQuantity {
+  /** The material's id, or '' for none. */
+  id: string
+  material: string
+  rooms: number
+  area: number
+}
+
+/**
+ * The walls of one material and one thickness: how long they run (m), their face (m², the net
+ * face of the walls) and their volume (m³). What needs a height is null when one of them has
+ * none. The material is '' for walls of the default material.
+ */
+export interface MaterialQuantity {
+  material: string
+  /** In mm. */
+  thickness: number
+  length: number
+  area: number | null
+  volume: number | null
+}
+
+/** A thing placed on the plan, and how many times: each component, and each kind of parametric object. */
+export interface ObjectQuantity {
+  kind: 'component' | 'parametric'
+  /** The component's id, or the key of the parametric object's model: its kind and parameters (`variantKey`). */
+  id: string
+  /** The component's name, or the parametric kind's label, in English. */
+  name: string
+  count: number
+  /** For a parametric object: its kind, its parameters, and those that tell it apart from the other models of its kind counted. */
+  of?: string
+  props?: Record<string, unknown>
+  detail?: VariantDetail[]
+}
+
+/** What a thing counted is called: a component by its name, a parametric object by its kind and what tells its model apart (`variantLabel`), in the words `translate` gives. */
+export function objectLabel(o: ObjectQuantity, translate: (text: string) => string = (text) => text): string {
+  return o.kind === 'parametric' ? variantLabel(o.name, o.detail ?? [], translate) : o.name
 }
 
 /**
@@ -18,8 +67,10 @@ export interface RoomQuantity {
 export interface WallQuantity {
   id: string
   name: string
-  /** The name of its wall type, or '' for a wall of no type. */
-  type: string
+  /** The name of its material, or '' for the default one. */
+  material: string
+  /** The id of its material, or '' for the default one. */
+  materialId: string
   length: number
   thickness: number
   height: number | null
@@ -44,24 +95,17 @@ export interface OpeningQuantity {
   count: number
 }
 
-/** What a wall type adds up to over the plan, and each layer of its build-up with it. */
-export interface WallTypeQuantity {
-  name: string
-  /** What the type says, or null when it leaves the thickness to each wall. */
-  thickness: number | null
-  length: number
-  net: number | null
-  /** Of its walls as they are, exceptions included. */
-  volume: number | null
-  layers: { name: string; thickness: number | null; area: number | null; volume: number | null }[]
-}
-
 export interface Quantities {
   rooms: RoomQuantity[]
   walls: WallQuantity[]
   openings: OpeningQuantity[]
-  types: WallTypeQuantity[]
+  floors: FloorQuantity[]
+  materials: MaterialQuantity[]
+  objects: ObjectQuantity[]
 }
+
+/** How deep placements of components inside components are counted, as they are drawn. */
+const MAX_DEPTH = 8
 
 const round = (value: number, digits = 3) => Math.round(value * 10 ** digits) / 10 ** digits
 const sum = (values: (number | null)[]): number | null => (values.some((v) => v === null) ? null : round((values as number[]).reduce((a, b) => a + b, 0)))
@@ -69,37 +113,60 @@ const sum = (values: (number | null)[]): number | null => (values.some((v) => v 
 /**
  * What a page holds, counted and measured: the rooms with their floor area, the walls with their
  * length and, when a height is known, the area of their face less the doors and windows in them,
- * the doors and windows by kind and size, and the wall types with their layers. It is the first
- * step from a drawing to a budget.
+ * the doors and windows by kind and size, the floors and the walls by material, and the
+ * objects placed. It is the first step from a drawing to a budget.
  *
- * A wall's height is its own, or else its type's, or else the page's `wallHeight`. A wall is measured along its
- * middle line from end to end, so where two walls meet at a corner each counts to the corner's
+ * What the components placed on the page hold counts too, once for each placement and at the size
+ * it is drawn: a floor of a building drawn as a component and placed on the page is measured with
+ * the page. A wall's height is its own, or else the page's `wallHeight`. A wall is measured along
+ * its middle line from end to end, so where two walls meet at a corner each counts to the corner's
  * middle point.
  */
 export function quantities(doc: Document, pageId: string, registry: Registry): Quantities {
   const page = doc.nodes[pageId]
   const storey = page?.type === 'page' ? (page.wallHeight ?? null) : null
   const nodes = leavesOf(doc, pageId)
+  const all = placedOn(doc, nodes)
 
-  const rooms = nodes
-    .filter((node): node is NodeOf<'room'> => node.type === 'room')
-    .map((room) => ({ name: room.name ?? '', area: round((roomAt(doc, room.parent, room)?.area ?? 0) / 1e6, 2) }))
+  // A material is told by its id: two of one name are counted apart.
+  const materialId = (id: string | undefined) => (id !== undefined && doc.materials?.[id] ? id : '')
+  const materialName = (id: string | undefined) => (id === undefined ? '' : (doc.materials?.[id]?.name ?? ''))
+  const rooms = all.flatMap(({ node: room, map }): RoomQuantity[] =>
+    room.type === 'room'
+      ? [{ id: room.id, name: room.name ?? '', area: round(((roomAt(doc, room.parent, room)?.area ?? 0) * Math.abs(det(map))) / 1e6, 2), material: materialName(room.material), materialId: materialId(room.material) }]
+      : [],
+  )
+  const floors = new Map<string, FloorQuantity>()
+  for (const room of rooms) {
+    const seen = floors.get(room.materialId)
+    if (seen) {
+      seen.rooms++
+      seen.area = round(seen.area + room.area, 2)
+    } else floors.set(room.materialId, { id: room.materialId, material: room.material, rooms: 1, area: room.area })
+  }
 
   const kinds = new Map<string, OpeningQuantity>()
-  const walls = nodes
-    .filter((node): node is NodeOf<'wall'> => node.type === 'wall')
-    .map((wall): WallQuantity => {
+  const made = new Map<string, MaterialQuantity & { unknown: boolean }>()
+  const walls = all
+    .filter((one): one is { node: NodeOf<'wall'>; map: Linear } => one.node.type === 'wall')
+    .map(({ node: wall, map }): WallQuantity => {
+      // How much longer it is drawn than it is, where a component holding it is stretched (along its
+      // chord, for a curved wall); its thickness is what keeps the area of its footprint as drawn.
+      const along = { x: wall.b.x - wall.a.x, y: wall.b.y - wall.a.y }
+      const chord = Math.hypot(along.x, along.y)
+      const drawn = apply(map, along)
+      const stretch = chord < 1e-9 ? Math.sqrt(Math.abs(det(map))) : Math.hypot(drawn.x, drawn.y) / chord
+      const thick = stretch > 0 ? (wall.thickness * Math.abs(det(map))) / stretch : wall.thickness
       // Round the curve, for a curved wall.
-      const length = wallLength(wall) / 1000
-      const type = wall.wallType ? doc.wallTypes?.[wall.wallType] : undefined
-      const height = wall.height ?? type?.height ?? storey
+      const length = (wallLength(wall) * stretch) / 1000
+      const height = wall.height ?? storey
       const openings = wallOpenings(doc, wall, registry)
       let cut = 0
       for (const { node, from, to } of openings) {
         const kind = registry.parametric.get(node.kind)
         const props = kind ? registry.resolveProps(kind, node.props) : node.props
         const own = typeof props.height === 'number' && props.height > 0 ? props.height / 1000 : null
-        const width = (to - from) / 1000
+        const width = ((to - from) * stretch) / 1000
         // An opening taller than its wall takes no more than the wall has.
         if (height !== null) cut += width * Math.min(own ?? height / 1000, height / 1000)
         const key = `${node.kind} ${round(width)} ${own ?? ''}`
@@ -109,55 +176,122 @@ export function quantities(doc: Document, pageId: string, registry: Registry): Q
       }
       const gross = height === null ? null : (length * height) / 1000
       const net = gross === null ? null : Math.max(0, gross - cut)
+      // What it is made of, at its thickness, over its face.
+      const material = materialName(wall.material)
+      const thickness = round(thick, 1)
+      const key = `${materialId(wall.material)} ${thickness}`
+      const seen = made.get(key) ?? { material, thickness, length: 0, area: 0, volume: 0, unknown: false }
+      seen.length += length
+      if (net === null) seen.unknown = true
+      else {
+        seen.area! += net
+        seen.volume! += (net * thick) / 1000
+      }
+      made.set(key, seen)
       return {
         id: wall.id,
         name: wall.name ?? '',
-        type: type?.name ?? '',
+        material,
+        materialId: materialId(wall.material),
         length: round(length),
-        thickness: wall.thickness,
+        thickness: round(thick, 1),
         height: height === null ? null : round(height / 1000),
-        footprint: round((length * wall.thickness) / 1000),
+        footprint: round((length * thick) / 1000),
         openings: openings.length,
         gross: gross === null ? null : round(gross),
         cut: gross === null ? null : round(cut),
         net: net === null ? null : round(net),
-        volume: net === null ? null : round((net * wall.thickness) / 1000),
+        volume: net === null ? null : round((net * thick) / 1000),
       }
     })
 
-  const types = Object.values(doc.wallTypes ?? {}).flatMap((type): WallTypeQuantity[] => {
-    const of = walls.filter((wall) => wall.type === type.name)
-    if (of.length === 0) return []
-    const net = sum(of.map((wall) => wall.net))
-    return [
-      {
-        name: type.name,
-        thickness: type.thickness ?? null,
-        length: round(of.reduce((total, wall) => total + wall.length, 0)),
-        net,
-        volume: sum(of.map((wall) => wall.volume)),
-        layers: (type.layers ?? []).map((layer) => ({
-          name: layer.name,
-          thickness: layer.thickness ?? null,
-          area: net,
-          volume: net === null || layer.thickness === undefined ? null : round((net * layer.thickness) / 1000),
-        })),
-      },
-    ]
-  })
+  const materials = [...made.values()]
+    .map(({ unknown, ...layer }): MaterialQuantity => ({ ...layer, length: round(layer.length), area: unknown ? null : round(layer.area!), volume: unknown ? null : round(layer.volume!) }))
+    .sort((a, b) => a.material.localeCompare(b.material) || a.thickness - b.thickness)
 
-  return { rooms, walls, openings: [...kinds.values()].sort((a, b) => a.label.localeCompare(b.label) || a.width - b.width), types }
+  return {
+    rooms,
+    walls,
+    openings: [...kinds.values()].sort((a, b) => a.label.localeCompare(b.label) || a.width - b.width),
+    floors: [...floors.values()].sort((a, b) => a.material.localeCompare(b.material)),
+    materials,
+    objects: objectsOn(doc, nodes, registry),
+  }
 }
+
+/**
+ * The components and parametric objects placed among `nodes`, with how many times each is: a
+ * component placed inside another counts once for each placement of that other, as it is drawn.
+ * Parametric objects count by model (`variantsOf`): a radiator of 80 cm apart from one of 1.20 m;
+ * doors, windows, stairs and what is written on the plan are not counted here (`listedAsModel`).
+ * What is hidden is not counted.
+ */
+function objectsOn(doc: Document, nodes: Node[], registry: Registry): ObjectQuantity[] {
+  const found = new Map<string, ObjectQuantity>()
+  const objects: NodeOf<'parametric'>[] = []
+  const visit = (list: Node[], depth: number) => {
+    for (const node of list) {
+      if (!isVisible(doc, node)) continue
+      if (node.type === 'parametric' && listedAsModel(node.kind, registry)) objects.push(node)
+      if (node.type !== 'instance') continue
+      const component = doc.nodes[node.component]
+      if (component?.type !== 'component') continue
+      const seen = found.get(component.id)
+      if (seen) seen.count++
+      else found.set(component.id, { kind: 'component', id: component.id, name: component.name ?? '', count: 1 })
+      if (depth < MAX_DEPTH) visit(inside(doc, component.id), depth + 1)
+    }
+  }
+  visit(nodes, 1)
+  const models = variantsOf(objects, registry).map((v): ObjectQuantity => ({ kind: 'parametric', id: v.key, name: v.label, count: v.count, of: v.kind, props: v.props, detail: v.detail }))
+  // By name, numbers by their value: a radiator of 800 before one of 1200.
+  return [...found.values(), ...models].sort((a, b) => objectLabel(a).localeCompare(objectLabel(b), undefined, { numeric: true }))
+}
+
+/** A linear map of the plane, by the columns of its matrix: how what a component holds is turned, mirrored and stretched where it is placed. */
+type Linear = [number, number, number, number]
+const IDENTITY: Linear = [1, 0, 0, 1]
+const apply = (m: Linear, v: Vec2): Vec2 => ({ x: m[0] * v.x + m[2] * v.y, y: m[1] * v.x + m[3] * v.y })
+const det = (m: Linear) => m[0] * m[3] - m[2] * m[1]
+
+/**
+ * What lies among `nodes`, and what the components placed there hold, however deep, each with how
+ * it is drawn there: once for each placement of the component that holds it. What a placement
+ * hides is not counted.
+ */
+function placedOn(doc: Document, nodes: Node[]): { node: Node; map: Linear }[] {
+  const out: { node: Node; map: Linear }[] = []
+  const visit = (list: Node[], map: Linear, depth: number) => {
+    for (const node of list) {
+      if (depth > 1 && !isVisible(doc, node)) continue
+      out.push({ node, map })
+      if (node.type !== 'instance' || depth >= MAX_DEPTH || !isVisible(doc, node)) continue
+      const component = doc.nodes[node.component]
+      if (component?.type !== 'component') continue
+      const placing = { x: 0, y: 0, rotation: node.rotation, flipX: node.flipX, scale: node.scale, scaleX: node.scaleX, scaleY: node.scaleY }
+      const [u, v] = [apply(map, applyTransform({ x: 1, y: 0 }, placing)), apply(map, applyTransform({ x: 0, y: 1 }, placing))]
+      visit(inside(doc, component.id), [u.x, u.y, v.x, v.y], depth + 1)
+    }
+  }
+  visit(nodes, IDENTITY, 1)
+  return out
+}
+
+/** What a component holds, with groups opened up. */
+const inside = (doc: Document, id: string): Node[] => childrenOf(doc, id).flatMap((node) => (node.type === 'group' ? inside(doc, node.id) : [node]))
 
 /** The words a quantities table is written with; an app passes them in the user's language. */
 export interface QuantityLabels {
   rooms: string
   walls: string
   openings: string
-  types: string
-  layer: string
+  floors: string
+  materials: string
+  objects: string
+  material: string
+  /** What stands for no material. */
+  none: string
   name: string
-  type: string
   kind: string
   count: string
   total: string
@@ -177,10 +311,12 @@ export const QUANTITY_LABELS: QuantityLabels = {
   rooms: 'Rooms',
   walls: 'Walls',
   openings: 'Doors and windows',
-  types: 'Wall types',
-  layer: 'Layer',
+  floors: 'Floors',
+  materials: 'Walls by material',
+  objects: 'Objects',
+  material: 'Material',
+  none: '—',
   name: 'Name',
-  type: 'Type',
   kind: 'Kind',
   count: 'Count',
   total: 'Total',
@@ -211,6 +347,9 @@ export const IMPERIAL_QUANTITY_LABELS: QuantityLabels = {
   volume: 'Volume (ft³)',
 }
 
+/** Quantities as `quantities` measures them, or turned to feet, square feet, cubic feet and inches. */
+export const quantitiesIn = (q: Quantities, system: 'metric' | 'imperial'): Quantities => (system === 'imperial' ? imperial(q) : q)
+
 /** Quantities measured in metres, square metres, cubic metres and millimetres, turned to feet, square feet, cubic feet and inches. */
 function imperial(q: Quantities): Quantities {
   const scaled = (factor: number, digits: number) => (value: number) => round(value * factor, digits)
@@ -223,14 +362,9 @@ function imperial(q: Quantities): Quantities {
     rooms: q.rooms.map((room) => ({ ...room, area: ft2(room.area) })),
     walls: q.walls.map((w) => ({ ...w, length: ft(w.length), thickness: inches(w.thickness), height: maybe(ft)(w.height), footprint: ft2(w.footprint), gross: maybe(ft2)(w.gross), cut: maybe(ft2)(w.cut), net: maybe(ft2)(w.net), volume: maybe(ft3)(w.volume) })),
     openings: q.openings.map((o) => ({ ...o, width: ft(o.width), height: maybe(ft)(o.height) })),
-    types: q.types.map((type) => ({
-      ...type,
-      thickness: maybe(inches)(type.thickness),
-      length: ft(type.length),
-      net: maybe(ft2)(type.net),
-      volume: maybe(ft3)(type.volume),
-      layers: type.layers.map((layer) => ({ ...layer, thickness: maybe(inches)(layer.thickness), area: maybe(ft2)(layer.area), volume: maybe(ft3)(layer.volume) })),
-    })),
+    floors: q.floors.map((floor) => ({ ...floor, area: ft2(floor.area) })),
+    materials: q.materials.map((m) => ({ ...m, thickness: inches(m.thickness), length: ft(m.length), area: maybe(ft2)(m.area), volume: maybe(ft3)(m.volume) })),
+    objects: q.objects,
   }
 }
 
@@ -261,9 +395,9 @@ export function quantitiesCsv(
   table(l.rooms, [l.name, l.area], [...q.rooms.map((room) => [room.name, room.area]), [l.total, round(q.rooms.reduce((total, room) => total + room.area, 0), 2)]])
   table(
     l.walls,
-    [l.name, l.type, l.length, l.thickness, l.height, l.footprint, l.count, l.gross, l.cut, l.net, l.volume],
+    [l.name, l.material, l.length, l.thickness, l.height, l.footprint, l.count, l.gross, l.cut, l.net, l.volume],
     [
-      ...q.walls.map((w) => [w.name, w.type, w.length, w.thickness, w.height, w.footprint, w.openings, w.gross, w.cut, w.net, w.volume]),
+      ...q.walls.map((w) => [w.name, w.material, w.length, w.thickness, w.height, w.footprint, w.openings, w.gross, w.cut, w.net, w.volume]),
       [
         l.total,
         '',
@@ -280,16 +414,11 @@ export function quantitiesCsv(
     ],
   )
   table(l.openings, [l.kind, l.width, l.height, l.count], [...q.openings.map((o) => [name(o.label), o.width, o.height, o.count]), [l.total, '', '', q.openings.reduce((total, o) => total + o.count, 0)]])
-  if (q.types.length > 0) {
-    table(
-      l.types,
-      [l.type, l.layer, l.thickness, l.length, l.net, l.volume],
-      q.types.flatMap((type) => [
-        [type.name, '', type.thickness, type.length, type.net, type.volume],
-        ...type.layers.map((layer) => [type.name, layer.name, layer.thickness, '', layer.area, layer.volume]),
-      ]),
-    )
+  if (q.floors.some((floor) => floor.material !== '')) {
+    table(l.floors, [l.material, l.rooms, l.area], [...q.floors.map((f) => [f.material || l.none, f.rooms, f.area]), [l.total, q.floors.reduce((total, f) => total + f.rooms, 0), round(q.floors.reduce((total, f) => total + f.area, 0), 2)]])
   }
+  if (q.materials.length > 0) table(l.materials, [l.material, l.thickness, l.length, l.net, l.volume], q.materials.map((m) => [m.material || l.none, m.thickness, m.length, m.area, m.volume]))
+  if (q.objects.length > 0) table(l.objects, [l.name, l.count], [...q.objects.map((o) => [objectLabel(o, name), o.count]), [l.total, q.objects.reduce((total, o) => total + o.count, 0)]])
   // The mark at the start tells a spreadsheet the file is in UTF-8, so accents and "²" come out right.
   return '﻿' + lines.join('\r\n') + '\r\n'
 }

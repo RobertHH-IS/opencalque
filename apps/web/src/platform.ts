@@ -83,6 +83,23 @@ function pickFile(extensions: string[]): Promise<File | null> {
   })
 }
 
+/** What files are saved as, by extension: the save dialog shows it, and adds the extension to a name typed without one. */
+const SAVED_TYPES: Record<string, { description: string; mime: string }> = {
+  opencalque: { description: 'OpenCalque', mime: 'application/json' },
+  opencad: { description: 'OpenCalque', mime: 'application/json' },
+  json: { description: 'JSON', mime: 'application/json' },
+  pdf: { description: 'PDF', mime: 'application/pdf' },
+  svg: { description: 'SVG', mime: 'image/svg+xml' },
+  dxf: { description: 'DXF', mime: 'image/vnd.dxf' },
+  csv: { description: 'CSV', mime: 'text/csv' },
+}
+
+function savedTypes(name: string) {
+  const extension = name.match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase()
+  const type = extension && SAVED_TYPES[extension]
+  return type ? [{ description: type.description, accept: { [type.mime]: [`.${extension}`] } }] : undefined
+}
+
 function createBrowserPlatform(): Platform {
   let dirty = false
   window.addEventListener('beforeunload', (e) => {
@@ -105,7 +122,7 @@ function createBrowserPlatform(): Platform {
       const picker = (window as any).showSaveFilePicker
       if (picker) {
         try {
-          const handle = token ?? (await picker({ suggestedName }))
+          const handle = token ?? (await picker({ suggestedName, types: savedTypes(suggestedName) }))
           const writable = await handle.createWritable()
           await writable.write(content)
           await writable.close()

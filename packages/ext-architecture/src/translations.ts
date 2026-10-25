@@ -80,6 +80,9 @@ export const translations: Record<string, Record<string, string>> = {
     Left: 'Gauche',
     Right: 'Droite',
     'Insert 4 × 3 m room': 'Insérer une pièce de 4 × 3 m',
+    Radiator: 'Radiateur',
+    'Against the wall by its back. Pull its sides to make it longer: its sections keep their width. Its valve is at one end.': 'Contre le mur par son dos. Tirez ses côtés pour l’allonger : ses éléments gardent leur largeur. Son robinet est à un bout.',
+    Valve: 'Robinet',
   },
   es: {
     Hob: 'Placa de cocción',
@@ -156,6 +159,9 @@ export const translations: Record<string, Record<string, string>> = {
     Left: 'Izquierda',
     Right: 'Derecha',
     'Insert 4 × 3 m room': 'Insertar una habitación de 4 × 3 m',
+    Radiator: 'Radiador',
+    'Against the wall by its back. Pull its sides to make it longer: its sections keep their width. Its valve is at one end.': 'Contra la pared por su parte trasera. Tire de sus lados para alargarlo: sus elementos conservan su anchura. Su llave está en un extremo.',
+    Valve: 'Llave',
   },
   de: {
     Hob: 'Kochfeld',
@@ -232,6 +238,9 @@ export const translations: Record<string, Record<string, string>> = {
     Left: 'Links',
     Right: 'Rechts',
     'Insert 4 × 3 m room': 'Raum 4 × 3 m einfügen',
+    Radiator: 'Heizkörper',
+    'Against the wall by its back. Pull its sides to make it longer: its sections keep their width. Its valve is at one end.': 'Mit der Rückseite an der Wand. Ziehen Sie an den Seiten, um ihn zu verlängern: Seine Glieder behalten ihre Breite. Das Ventil sitzt an einem Ende.',
+    Valve: 'Ventil',
   },
   zh: {
     Hob: '灶台',
@@ -306,6 +315,9 @@ export const translations: Record<string, Record<string, string>> = {
     Left: '左',
     Right: '右',
     'Insert 4 × 3 m room': '插入 4 × 3 米的房间',
+    Radiator: '暖气片',
+    'Against the wall by its back. Pull its sides to make it longer: its sections keep their width. Its valve is at one end.': '背面靠墙。拖动两侧可将其加长，各片宽度不变。阀门在一端。',
+    Valve: '阀门',
   },
   ja: {
     Hob: 'コンロ',
@@ -379,6 +391,9 @@ export const translations: Record<string, Record<string, string>> = {
     Left: '左',
     Right: '右',
     'Insert 4 × 3 m room': '4 × 3 m の部屋を挿入',
+    Radiator: 'ラジエーター',
+    'Against the wall by its back. Pull its sides to make it longer: its sections keep their width. Its valve is at one end.': '背面を壁に付けて置きます。側面を引くと長くなり、各セクションの幅は変わりません。バルブは一方の端にあります。',
+    Valve: 'バルブ',
   },
   ko: {
     Hob: '쿡탑',
@@ -452,5 +467,8 @@ export const translations: Record<string, Record<string, string>> = {
     Left: '왼쪽',
     Right: '오른쪽',
     'Insert 4 × 3 m room': '4 × 3 m 방 삽입',
+    Radiator: '라디에이터',
+    'Against the wall by its back. Pull its sides to make it longer: its sections keep their width. Its valve is at one end.': '뒷면을 벽에 붙입니다. 옆면을 당기면 길어지며 각 섹션의 폭은 그대로입니다. 밸브는 한쪽 끝에 있습니다.',
+    Valve: '밸브',
   },
 }

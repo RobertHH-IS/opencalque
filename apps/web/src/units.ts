@@ -42,9 +42,9 @@ export function formatNumber(mm: number, decimals = DECIMALS[unit()]): string {
   return new Intl.NumberFormat(language(), { maximumFractionDigits: decimals, useGrouping: false }).format(fromMm(mm))
 }
 
-/** An angle in degrees, to a hundredth, as the language writes numbers: never a length, whatever the unit. */
-export function formatAngle(degrees: number): string {
-  return new Intl.NumberFormat(language(), { maximumFractionDigits: 2, useGrouping: false }).format(degrees)
+/** An angle in degrees, to a hundredth (or to `decimals` places), as the language writes numbers: never a length, whatever the unit. */
+export function formatAngle(degrees: number, decimals = 2): string {
+  return new Intl.NumberFormat(language(), { maximumFractionDigits: decimals, useGrouping: false }).format(degrees)
 }
 
 /** A length with its unit, e.g. "5.02 m". */

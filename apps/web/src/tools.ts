@@ -5,14 +5,14 @@ import { t } from './i18n'
  * each step of using one (`hintsFor`). What a tool does on the drawing is in `canvas/gestures/`
  * (`PRESSES`, and the gestures it starts); its command and shortcut are in `commands.ts` (`tool(…)`).
  */
-export type Tool = 'select' | 'hand' | 'line' | 'rect' | 'ellipse' | 'wall' | 'dimension' | 'measure' | 'angle' | 'split' | 'rotate' | 'calibrate' | 'eyedropper' | 'text' | 'annotation' | 'paper' | 'room' | 'divider' | 'place'
+export type Tool = 'select' | 'hand' | 'line' | 'rect' | 'ellipse' | 'wall' | 'dimension' | 'measure' | 'angle' | 'split' | 'rotate' | 'calibrate' | 'eyedropper' | 'text' | 'annotation' | 'gridline' | 'paper' | 'room' | 'divider' | 'place'
 
 /** The plain shapes, which share one toolbar button. */
 export const SHAPE_TOOLS: Tool[] = ['line', 'rect', 'ellipse']
 /** The tools for naming spaces, which share another. */
 export const ROOM_TOOLS: Tool[] = ['room', 'divider']
 /** The tools for writing on the drawing, which share a third. */
-export const TEXT_TOOLS: Tool[] = ['text', 'annotation', 'dimension']
+export const TEXT_TOOLS: Tool[] = ['text', 'annotation', 'dimension', 'gridline']
 /** The tools that read something off the drawing without adding to it. */
 export const MEASURE_TOOLS: Tool[] = ['measure', 'angle']
 
@@ -33,9 +33,10 @@ export function hintsFor(tool: Tool, step: number, opening: boolean, selected = 
   const angles: Hint = ['Shift', t('keeps to 45° steps')]
   const typed: Hint = ['0-9', t('type an exact length')]
   const held: Hint = ['↑ ←', t('holds it upright or level')]
+  const rested: Hint = ['', t('rest on a point to line up with it')]
   switch (tool) {
     case 'wall':
-      if (step === 0) return [['', t('Click where the wall starts')]]
+      if (step === 0) return [['', t('Click where the wall starts')], rested]
       // A loop needs at least two walls drawn before a third can close it.
       return [['', t('Click the next corner')], typed, angles, held, free, ...(step >= 3 ? [['', t('Double-click closes the loop')] as Hint] : []), ['Esc', t('finishes')]]
     case 'room':
@@ -44,7 +45,7 @@ export function hintsFor(tool: Tool, step: number, opening: boolean, selected = 
       return step === 0 ? [['', t('Click where the divider starts, on a wall')]] : [['', t('Click where it ends, on the wall opposite')], angles, held, free, ['Esc', t('finishes')]]
     case 'line':
       // One segment is a line, several a polyline; closed, a shape that can be filled.
-      if (step === 0) return [['', t('Click where the line starts')]]
+      if (step === 0) return [['', t('Click where the line starts')], rested]
       return [['', step === 1 ? t('Click where it ends') : t('Click the next point')], typed, angles, held, free, ...(step >= 3 ? [['', t('Double-click, or click the first point, to close the shape')] as Hint] : []), ['Esc', t('finishes')]]
     case 'rect':
     case 'ellipse':
@@ -68,6 +69,8 @@ export function hintsFor(tool: Tool, step: number, opening: boolean, selected = 
       return [['', t('Click where the text starts, then type')]]
     case 'annotation':
       return step === 0 ? [['', t('Click what the note is about')]] : [['', t('Click where the note goes, then type it')], free]
+    case 'gridline':
+      return step === 0 ? [['', t('Click where the grid line starts, at its bubble')], rested] : [['', t('Click where it ends')], typed, angles, free, ['', t('the next one takes the next letter or number')]]
     case 'place':
       return opening ? [['', t('Click a wall to place it')], ['R', t('rotates')], ['Alt', t('places it freely, off walls and grid')]] : [['', t('Click to place it')], ['R', t('rotates')], free]
     default:

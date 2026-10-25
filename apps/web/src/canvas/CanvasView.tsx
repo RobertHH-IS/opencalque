@@ -1,5 +1,7 @@
+import { useWindows } from '../windows'
+import { stopBrowsing } from '../actions/instances'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { boundsFrame, buildScene, connectedWalls, frameContains, frameGrips, hitTest, kindOf, modifierKind, modifierParams, newId, placedScene, resizeFrame, rotate, sceneBounds, turnedBox, wallEdgeLines, wallLength, wallMiddle } from '@opencalque/core'
+import { type NodeOf, type Primitive, dist, gridlineBubbles, wallEndState, boundsFrame, buildScene, connectedWalls, frameContains, frameGrips, hitTest, kindOf, modifierKind, modifierParams, newId, placedScene, resizeFrame, rotate, sceneBounds, turnedBox, wallEdgeLines, wallLength, wallMiddle } from '@opencalque/core'
 import { finishTextEdit, zoomToFit } from '../actions'
 import { onCommand } from '../commands'
 import { registry, useExtensions } from '../extensions'
@@ -9,7 +11,8 @@ import { apply, commit, preview, select, setTool, useStore } from '../store'
 import { useTheme } from '../theme'
 import { formatLength, formatNumber, unitSuffix } from '../units'
 import { toWorld } from '../view'
-import { DARK_AROUND_CANVAS, DARK_CANVAS, drawScene, LIGHT_CANVAS, onPictureReady, type Overlay, type SizeLabel } from './draw'
+import { trackedPoints } from './aim'
+import { DARK_AROUND_CANVAS, DARK_CANVAS, drawScene, LIGHT_CANVAS, MAX_LINKED_WALLS, onPictureReady, type Overlay, type SizeLabel, type WallLinks } from './draw'
 import { drawing } from './drawing'
 import { TURNING, type Gesture, type PointerAt } from './gesture'
 import { DRAW_PRESS, MOVES, PRESSES, RELEASES } from './gestures'
@@ -23,6 +26,15 @@ import { boxLabels, paperLabel, polyline, roomsOnly, sizes, snapName, wallOps } 
  * The drawing area. It works out what to show from the store, paints it (`draw.ts`), and hands
  * the pointer to the gesture of the tool in use (`gestures/`), through the `Canvas` they share.
  */
+/**
+ * What is drawn of a node whose words are being typed: all but its text, which the box shows; of a
+ * grid line, all but the label of the bubble being typed in (its labels are drawn bubble by bubble).
+ */
+function withoutTyped(prims: Primitive[], bubble: number | undefined): Primitive[] {
+  let label = -1
+  return prims.filter((p) => p.kind !== 'text' || (bubble !== undefined && ++label !== bubble))
+}
+
 export function CanvasView() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const doc = useStore((s) => s.doc)
@@ -38,6 +50,7 @@ export function CanvasView() {
   const showGrid = usePrefs((p) => p.showGrid)
   const palette = useTheme((s) => (s.darkCanvas ? DARK_CANVAS : s.dark ? DARK_AROUND_CANVAS : LIGHT_CANVAS))
   const editingId = useStore((s) => s.editingText?.id)
+  const editingBubble = useStore((s) => s.editingText?.bubble)
   const corner = useStore((s) => s.corner)
   // The line of a wall pointed at in the properties panel, shown on the drawing so it is known which one it is.
   const edgeHover = useStore((s) => s.edgeHover)
@@ -60,6 +73,28 @@ export function CanvasView() {
     const node = selection.length === 1 ? doc.nodes[selection[0]] : undefined
     return node ? (kindOf(node).handles?.(node, registry) ?? []) : []
   }, [doc, selection])
+
+  /**
+   * What the ends of the selected walls are joined to, shown on them: a corner is a place where
+   * wall ends meet, not a thing, and nothing else tells which ends hold together, which were set
+   * loose, and which only nearly meet another. The walls joined to them are lit up faintly.
+   */
+  const wallLinks = useMemo((): WallLinks | null => {
+    if (tool !== 'select') return null
+    const walls = selection.flatMap((id) => (doc.nodes[id]?.type === 'wall' ? [doc.nodes[id] as NodeOf<'wall'>] : []))
+    if (walls.length === 0 || walls.length > MAX_LINKED_WALLS) return null
+    const ends: WallLinks['ends'] = []
+    const joined = new Set<string>()
+    for (const wall of walls) {
+      for (const end of ['a', 'b'] as const) {
+        const state = wallEndState(doc, wall, end)
+        for (const other of state.joined) if (!selection.includes(other.id)) joined.add(other.id)
+        const kind = state.joined.length > 0 ? 'joined' : state.touching.length > 0 ? 'apart' : state.near ? 'near' : 'free'
+        ends.push({ at: wall[end], kind, ...(state.near && kind === 'near' ? { near: state.near.at } : {}) })
+      }
+    }
+    return { ends, joined: [...joined] }
+  }, [doc, selection, tool])
 
   /**
    * The frame a single box-shaped object (a rectangle, an ellipse) is resized by, turning with it:
@@ -133,6 +168,7 @@ export function CanvasView() {
     lastClick: null,
     endedLine: null,
     placed: newId(),
+    tracked: { tool: 'select', points: [], resting: null },
     scene: [],
     titles: [],
     frames: [],
@@ -178,8 +214,8 @@ export function CanvasView() {
       canvas.height = viewport.height * dpr
     }
     // The words being typed are shown by their editor instead; the rest of the object stays drawn.
-    drawScene(canvas.getContext('2d')!, { ...viewport, dpr }, view, editingId ? shown.map((item) => (item.id === editingId ? { ...item, prims: item.prims.filter((p) => p.kind !== 'text') } : item)) : shown, selection, handles, { ...overlay, labels: overlay.labels ?? selectionLabels, titles, frames, corner, grips: tool === 'select' && !roomsOnly(doc, selection), boxless: roomsOnly(doc, selection), frame: frame && { grips: frame.grips, up: frame.up }, box: overlay.box ?? ownBox, edgeHover: edgeLines }, showGrid, palette)
-  }, [shown, view, viewport, selection, handles, frame, ownBox, selectionLabels, titles, frames, corner, overlay, showGrid, palette, pictures, editingId, tool, edgeLines])
+    drawScene(canvas.getContext('2d')!, { ...viewport, dpr }, view, editingId ? shown.map((item) => (item.id === editingId ? { ...item, prims: withoutTyped(item.prims, editingBubble) } : item)) : shown, selection, handles, { ...overlay, labels: overlay.labels ?? selectionLabels, titles, frames, corner, grips: tool === 'select' && !roomsOnly(doc, selection), boxless: roomsOnly(doc, selection), frame: frame && { grips: frame.grips, up: frame.up }, box: overlay.box ?? ownBox, edgeHover: edgeLines, wallLinks }, showGrid, palette)
+  }, [shown, view, viewport, selection, handles, frame, ownBox, selectionLabels, titles, frames, corner, overlay, showGrid, palette, pictures, editingId, editingBubble, tool, edgeLines, wallLinks])
 
   // Lets the quick bar finish the shape in progress with the sizes typed there.
   useEffect(() => {
@@ -248,7 +284,8 @@ export function CanvasView() {
     ;(MOVES[g.kind] as Move<Gesture['kind']>)(c, g, e, at, world, out)
     // A finished measurement stays on screen until the next one starts.
     const { marker } = out
-    setOverlay((o) => ({ cut: out.cut, face: out.face, box: out.turning, marker: marker && { ...marker, label: snapName(marker.kind) }, smart: out.smart, link: out.link, labels: out.labels, angle: out.angle, axis: out.axis, guide: out.guide, ghosts: out.ghosts, marquee: out.marquee, measure: out.measure ?? o.measure, angleReading: out.angleReading ?? o.angleReading }))
+    const tracked = trackedPoints(c)
+    setOverlay((o) => ({ tracked: tracked.length > 0 ? tracked : undefined, cut: out.cut, face: out.face, box: out.turning, marker: marker && { ...marker, label: snapName(marker.kind) }, smart: out.smart ?? (marker?.guides ? { lines: marker.guides, gaps: [] } : undefined), link: out.link, labels: out.labels, angle: out.angle, axis: out.axis, guide: out.guide, ghosts: out.ghosts, marquee: out.marquee, measure: out.measure ?? o.measure, angleReading: out.angleReading ?? o.angleReading }))
     // A failed preview has put its reason in the status bar; keep it there.
     if (out.previewed) useStore.setState({ status: out.status, drawLive: out.live })
   }
@@ -302,6 +339,13 @@ export function CanvasView() {
     } else if (hit?.node.type === 'instance') editComponent(hit.node.component, hit.node)
     else if (hit?.node.type === 'group') editComponent(hit.id)
     else if (hit?.node.type === 'text' || hit?.node.type === 'annotation') useStore.setState({ editingText: { id: hit.id } })
+    else if (hit?.node.type === 'gridline') {
+      // Its label is typed in the bubble nearest where it was double-clicked; with no bubble it has nowhere to be typed.
+      const at = toWorld(local(c, e), s.view)
+      const bubbles = gridlineBubbles(hit.node)
+      const nearest = bubbles.reduce((best, b, i) => (dist(b.centre, at) < dist(bubbles[best].centre, at) ? i : best), 0)
+      if (bubbles.length > 0) useStore.setState({ editingText: { id: hit.id, bubble: nearest } })
+    }
   }
 
   useEffect(() => {
@@ -342,6 +386,8 @@ export function CanvasView() {
       } else if (e.key === 'Escape') {
         if (c.gesture.kind !== 'idle') reset(c)
         else if (s.tool !== 'select') setTool('select')
+        // Going through the placements of a component: Escape stops, leaving the one shown selected.
+        else if (useWindows.getState().browsing) stopBrowsing()
         else if (s.selection.length > 0 || s.corner) select([])
         else if (s.scope !== s.page) editComponent(null)
         // Out on the page with nothing to let go of but the places just left.

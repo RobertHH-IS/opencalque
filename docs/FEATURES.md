@@ -2,7 +2,7 @@
 
 What the app does today, the ten big features chosen to do next and where each stands, and the longer backlog. For how things are built, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Last updated: 2026-10-18 (1.1.0).
+Last updated: 2026-10-19 (1.2.0, in progress).
 
 ## 1. What exists today
 
@@ -15,7 +15,7 @@ Last updated: 2026-10-18 (1.1.0).
 - Doors and windows that snap onto a wall, cut the opening, adapt to the wall's thickness and slide along it, and are made wider or narrower by dragging either end. Door type, hinge side, angle; window panes, glazing, sill.
 - Stairs: straight, L-shaped, U-shaped, spiral, each with its own parameters, and resized on the plan by their sides in whole steps: pull the top of a straight stair and it gains steps, its side and it widens. A compass rose for north.
 - Washbasins with one bowl or two, whose counter is made longer or deeper by pulling its sides while the bowls and taps keep their size; and a bathtub made longer or wider the same way, its rim keeping its thickness and its drain its size.
-- In the kitchen, a hob, a sink and a fridge made wider by their sides: the hob keeps the size of its zones (five from 75 cm, for hobs of 80 and 90), the sink its bowls, with a draining board on either side or none, and an American fridge with two doors stands beside the plain one. In the living room, a corner sofa, its corner on the left or the right, taking a seat for about every 65 cm of each side.
+- In the kitchen, a hob, a sink and a fridge made wider by their sides: the hob keeps the size of its zones (five from 75 cm, for hobs of 80 and 90), the sink its bowls, with a draining board on either side or none, and an American fridge with two doors stands beside the plain one. In the living room, a corner sofa, its corner on the left or the right, taking a seat for about every 65 cm of each side. Under Heating, a radiator made longer by its sides, its sections keeping their width, its valve at either end.
 - Dimensions with configurable line, end markers, extension lines, text, font, unit and decimals, and vertical text that reads from bottom to top or from top to bottom; and a separate measure tool that only reads a distance.
 - **Dimension styles**: whichever of those settings a style defines, shared by the dimensions drawn in it, each of which may still differ from it.
 - Text typed directly on the drawing, on several lines; double-click a text to change it. **Fields** (`{date}`, `{page}`, `{page-number}`, `{pages}`, `{document}`) are filled in when drawn and exported.
@@ -29,13 +29,15 @@ Last updated: 2026-10-18 (1.1.0).
 - Numbers in the panels change by holding Alt and dragging sideways.
 - **Transforming** any selection: turn about a clicked point with the Rotate tool (by a base line, or a typed angle), mirror horizontally or vertically, scale and nudge, by dragging the grips of the selection box, from the menus or the keyboard. A rectangle or an ellipse is resized like a box, by its corners and the middles of its sides, turned or not, Shift keeping its proportions.
 - **Annotations**: a note with a curved, straight or elbowed leader to what it is about, typed in place, with a choice of symbol at each end.
-- **Corners**: a wall end is a selectable corner shared by the walls that meet there; drag it and they all follow. A corner of two walls can be mitred, rounded, cut off, or have one wall run through. Each line of a wall (its faces, its ends) can have its own look. A wall is cut in two with the Split tool; the two halves show the line between them.
+- **Grid lines**: the axes of a building, drawn by two clicks from the text button (G), each with its letter or number in a bubble at one end or both, labelled one after the other (A, B, C or 1, 2, 3) and relabelled by double-clicking a bubble, in dash and dot or any other line. Other lines snap onto them.
+- **Corners**: a wall end is a selectable corner shared by the walls that meet there; drag it and they all follow. A corner of two walls can be mitred, rounded, cut off, or have one wall run through. Each line of a wall (its faces, its ends) can have its own look. A wall is cut in two with the Split tool; the two halves show the line between them. A selected wall shows which of its ends are joined, touch a wall without being joined, or nearly meet another; an end can be detached (joined to nothing) or brought onto the end it nearly meets.
 - **Rooms**: click inside closed walls to name a space; its floor, outline and area follow the walls. **Dividers** split an open space into rooms without a wall.
-- **Fills**: no fill, a solid colour, or a hatch (lines, cross-hatch, planks, tiles, concrete, insulation) over a background colour, chosen in one fill window with a tab for each and a preview of the hatch, whose colour, opacity, weight, spacing and angle are set there. The same window serves shapes, walls, wall types, the floors of rooms and the bar above the tools; the Hatch modifier does the same as a modifier.
+- **Fills**: no fill, a solid colour, or a hatch (lines, cross-hatch, planks, tiles, concrete, insulation) over a background colour, chosen in one fill window with a tab for each and a preview of the hatch, whose colour, opacity, weight, spacing and angle are set there. The same window serves shapes, walls, materials, the floors of rooms and the bar above the tools; the Hatch modifier does the same as a modifier.
 - **Shared colours**: named colours that objects and layers link to; change one and everything linked follows. Any colour may be see-through (an opacity in the colour window), and may follow the colour of the object's layer.
-- **Wall types**: a thickness, a fill and layers, shared by the walls built as them and drawn as lines inside the wall.
+- **Materials**: the drawing's materials (concrete, brick, insulation, plaster, floor finishes), each with a fill and a hatch, and a default one for walls of no material that cannot be deleted. A wall is of one material, drawn in its look; walls of one material are drawn as one, with a line between walls of different materials; a wall of several materials is several walls side by side, a door or window going through them all. A room's floor may be of a material.
+- **Tables of quantities** placed on the drawing, kept up to date: the objects placed, floor areas by material, rooms, walls by material and thickness, doors and windows; columns and their words chosen per table.
 - **Dimension chains** along a wall through its doors and windows, made on demand.
-- **Quantities** exported as CSV: room areas, wall lengths, faces less openings and volumes, doors and windows by kind, wall types by layer.
+- **Quantities** exported as CSV: room areas, wall lengths, faces less openings and volumes, doors and windows by kind, floors and walls by material, the objects placed.
 - **Modifiers**: non-destructive changes to how an object is drawn, stacked and applied in order, that can be switched off or removed at any time: crop, hatch, and repeat (copies in rows and columns); extensions can add more.
 - Text can be bold and aligned left, centred or right.
 - Hints and size fields that follow what you are doing: only the next step and the keys usable right now are shown.
@@ -96,8 +98,8 @@ Ranked by how much each one moves the app from "promising" to "usable for real w
 | 5 | **DXF export** | **Done** (lines, circles, text, layers), and DXF import: geometry, blocks (as groups), hatches, dimensions, leaders, and sheets laid out in paper space. Blocks do not become components yet. |
 | 6 | **Sheets and printing**: paper size, drawing scale, title block, PDF export to scale | **Done**: papers with format, direction, scale and a title block; vector PDF export at true scale, one page per paper. Views of the plan at another scale on a sheet are in the ideas below. |
 | 7 | **More drawing tools**: polyline and polygon tool, arcs and curves, typed lengths while drawing, room areas | **Mostly done**: one line tool for lines, polylines and polygons (a double-click closes the shape), typed sizes, room areas, arcs (by angles) and curved polylines, snapping to middles, crossings, perpendiculars and lines. A tool to draw an arc directly is not started. |
-| 8 | **Transforming**: rotate and scale handles, align and distribute, mirror, array | **Mostly done**: rotate (a tool, about a clicked point), mirror, uniform scale and nudge for any selection, from grips on the selection box, menus and shortcuts. Align, distribute, a repeat (array) modifier and smart guides while moving are done. One object is made wider or taller by the sides of its frame (a rectangle, an ellipse, a placed component, a stair, a washbasin, a bathtub, a hob, a sink, a fridge, a corner sofa, the adjustable furniture); several selected together are only scaled evenly. |
-| 9 | **Walls as a system**: openings that follow their wall, walls trimmed where they meet mid-span, moving a wall drags its neighbours, rooms detected from walls | **Done**, with selectable corners, joint types, wall types and curved walls. |
+| 8 | **Transforming**: rotate and scale handles, align and distribute, mirror, array | **Mostly done**: rotate (a tool, about a clicked point), mirror, uniform scale and nudge for any selection, from grips on the selection box, menus and shortcuts. Align, distribute, a repeat (array) modifier and smart guides while moving are done. One object is made wider or taller by the sides of its frame (a rectangle, an ellipse, a placed component, a stair, a washbasin, a bathtub, a hob, a sink, a fridge, a corner sofa, a radiator, the adjustable furniture); several selected together are only scaled evenly. |
+| 9 | **Walls as a system**: openings that follow their wall, walls trimmed where they meet mid-span, moving a wall drags its neighbours, rooms detected from walls | **Done**, with selectable corners, joint types, walls of layers and curved walls. |
 | 10 | **Hosted version**: accounts, cloud storage, sharing by link, realtime collaboration | Not started. The data model is prepared for it (see ARCHITECTURE §10). |
 
 ## Ideas, in the order they seem worth doing
@@ -106,7 +108,7 @@ Agreed with the owner in October 2026. The first was built straight away.
 
 **Walls and structure**
 - ~~Corners as selectable nodes, joint types~~ (done)
-- ~~Reusable wall types with thickness, fill and layers~~ (done)
+- ~~Reusable wall types with thickness, fill and layers~~ (done, then taken out in 1.2: each wall carries its own material); ~~walls of materials~~ (done; layers inside a wall were tried and taken out for walls side by side, each of one material)
 - ~~Curved walls~~ (done: bent from a straight wall; not yet drawn as an arc with the wall tool, extended or trimmed, or given a dimension chain)
 - ~~Automatic dimensions for a run of walls~~ (done, not live); dimensions that follow the wall
 - IFC export (walls, slabs from rooms, openings), now that walls have heights and types
@@ -114,7 +116,7 @@ Agreed with the owner in October 2026. The first was built straight away.
 **Sheets and output**
 - ~~PDF export to scale, with a title block~~ (done)
 - Views on a paper: part of the plan, cropped and at another scale (details)
-- ~~Quantities as CSV~~ (done); the same tables placed on a sheet
+- ~~Quantities as CSV~~ (done); ~~the same tables placed on a sheet~~ (done: tables of quantities, kept up to date)
 - Levels (storeys), with the one below shown faintly
 
 **Drawing comfort**
@@ -149,7 +151,8 @@ Not ranked within an area.
 **Architecture**
 - Columns, beams, slabs, roofs in plan; curtain walls.
 - Curved walls drawn directly with the wall tool, extended and trimmed, and dimensioned along their curve.
-- Schedules of doors, windows and rooms placed on a sheet (they are exported as CSV today).
+- ~~Schedules of doors, windows and rooms placed on a sheet~~ (done, with floors, walls and materials); a table of each wall or each door one by one, with a mark drawn beside each on the plan.
+- Walls of materials: a command that lays a lining against a face of the selected wall; walls laid against one another moved together.
 - Sections and elevations linked to the plan.
 - More stairs: winders, landings of any shape, handrails, break line.
 

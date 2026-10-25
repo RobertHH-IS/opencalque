@@ -57,6 +57,15 @@ export function zoomToSelection(): void {
   showBounds({ minX: b.minX - room, minY: b.minY - room, maxX: b.maxX + room, maxY: b.maxY + room })
 }
 
+/** Brings a rectangle of the drawing into the middle of the view: at the same zoom where it fits there, so that going from one thing to the next does not jump; else zoomed out to fit it. */
+export function bringIntoView(b: Bounds): void {
+  const { view, viewport } = get()
+  if (viewport.width === 0) return
+  const margin = 80
+  if ((b.maxX - b.minX) * view.zoom > viewport.width - 2 * margin || (b.maxY - b.minY) * view.zoom > viewport.height - 2 * margin) return showBounds(b)
+  useStore.setState({ view: { ...view, x: viewport.width / 2 - ((b.minX + b.maxX) / 2) * view.zoom, y: viewport.height / 2 - ((b.minY + b.maxY) / 2) * view.zoom } })
+}
+
 /** Fits a rectangle of the drawing in the view, with a margin, zooming in no further than 2 px a millimetre. */
 function showBounds(b: Bounds | null): void {
   const { viewport } = get()

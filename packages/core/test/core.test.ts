@@ -14,6 +14,8 @@ import {
   importComponents,
   moveOps,
   ungroupNode,
+  ordersAt,
+  replaceWithOps,
   cloneOps,
   compileExpression,
   copyNodes,
@@ -223,6 +225,26 @@ describe('groups', () => {
     const back = ungroupNode(doc, groupId)
     expect(ids(back.doc)).toEqual(['w1', 'w2', 'w3'])
     expect(back.doc.nodes[groupId]).toBeUndefined()
+  })
+
+  it('ungroups, detaches and moves up or down among siblings that share an order key', () => {
+    // Siblings may share a key (two people adding at once, an older drawing): nothing goes between two that do.
+    const tied = applyOps(createDocument(), [
+      { op: 'add_node', node: { type: 'rect', id: 'r1', parent: 'page_1', order: 'a1', x: 0, y: 0, width: 10, height: 10 } },
+      { op: 'add_node', node: { type: 'group', id: 'g', parent: 'page_1', order: 'a1' } },
+      { op: 'add_node', node: { type: 'rect', id: 'in', parent: 'g', x: 0, y: 0, width: 10, height: 10 } },
+      { op: 'add_node', node: { type: 'rect', id: 'r2', parent: 'page_1', order: 'a1', x: 0, y: 0, width: 10, height: 10 } },
+    ])
+    const back = ungroupNode(tied, 'g')
+    expect(back.doc.nodes.in.parent).toBe('page_1')
+    const { doc: placed, instanceId } = createComponent(tied, registry, ['r1'], 'Box')
+    const moved = applyOps(placed, [{ op: 'update_node', id: instanceId, patch: { order: 'a1' } }])
+    expect(() => detachInstance(moved, instanceId, registry)).not.toThrow()
+    // Put just above a neighbour it shares its key with, and just under one.
+    const siblings = childrenOf(tied, 'page_1')
+    const [up] = ordersAt(siblings, 1, 1)
+    const [down] = ordersAt(siblings, 1, 1, 'above')
+    expect(up > 'a1' && down < 'a1').toBe(true)
   })
 
   it('keeps walls joined across a group boundary', () => {
@@ -501,6 +523,36 @@ describe('components', () => {
       { op: 'add_node', node: { type: 'rect', id: 'r', parent: 'page_1', x: 100, y: 200, width: 50, height: 50 } },
       { op: 'add_node', node: { type: 'line', id: 'l', parent: 'page_1', a: { x: 100, y: 200 }, b: { x: 300, y: 400 } } },
     ])
+
+  it('makes the placements of one component placements of another, where they are and as they are placed, but not inside that other', () => {
+    const doc = applyOps(createDocument(), [
+      { op: 'add_node', node: { type: 'component', id: 'socket', parent: null, name: 'Socket' } },
+      { op: 'add_node', node: { type: 'rect', parent: 'socket', x: 0, y: 0, width: 100, height: 100 } },
+      { op: 'add_node', node: { type: 'component', id: 'twin', parent: null, name: 'Socket 2' } },
+      { op: 'add_node', node: { type: 'rect', parent: 'twin', x: 0, y: 0, width: 100, height: 100 } },
+      // A double socket made of two of the first.
+      { op: 'add_node', node: { type: 'component', id: 'double', parent: null, name: 'Double' } },
+      { op: 'add_node', node: { type: 'instance', id: 'left', parent: 'double', component: 'twin', x: 0, y: 0 } },
+      { op: 'add_node', node: { type: 'instance', id: 'a', parent: 'page_1', component: 'twin', x: 100, y: 200, rotation: 90, scale: 2, flipX: true } },
+      { op: 'add_node', node: { type: 'instance', id: 'b', parent: 'page_1', component: 'twin', x: 900, y: 200 } },
+      { op: 'add_node', node: { type: 'instance', id: 'c', parent: 'page_1', component: 'socket', x: 500, y: 500 } },
+      { op: 'add_node', node: { type: 'instance', id: 'd', parent: 'page_1', component: 'double', x: 0, y: 900 } },
+    ] as Op[])
+    const twins = Object.values(doc.nodes).flatMap((node) => (node.type === 'instance' && node.component === 'twin' ? [node.id] : []))
+    const replaced = replaceWithOps(doc, twins, { kind: 'component', id: 'socket' })
+    expect(replaced.skipped).toBe(0)
+    const merged = applyOps(doc, replaced.ops)
+    expect(merged.nodes.a).toMatchObject({ component: 'socket', x: 100, y: 200, rotation: 90, scale: 2, flipX: true })
+    expect(merged.nodes.b).toMatchObject({ component: 'socket' })
+    expect(merged.nodes.left).toMatchObject({ component: 'socket' })
+    // Placed nowhere now, the twin is still there.
+    expect(componentPlacements(merged).get('twin')).toBeUndefined()
+    expect(merged.nodes.twin).toBeDefined()
+    // The double cannot be put inside itself: the placement of the socket inside it stays a socket.
+    const into = replaceWithOps(merged, ['left', 'c'], { kind: 'component', id: 'double' })
+    expect(into.skipped).toBe(1)
+    expect(applyOps(merged, into.ops).nodes.c).toMatchObject({ component: 'double' })
+  })
 
   it('replaces the nodes with an instance that draws the same thing', () => {
     const before = buildScene(drawn(), 'page_1', registry)

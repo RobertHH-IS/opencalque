@@ -17,6 +17,8 @@ interface Windows {
   /** What is asked before it is done (`ask`), while its window is open. */
   question: Question | null
   toast: string | null
+  /** The placements of an entry of the Components panel (a component, or a model of parametric objects: `entries.ts`) being gone through one by one (`InstanceBar`), and the one shown. */
+  browsing: { entry: string; current: string } | null
 }
 
 /** Something to be done once the user says yes: what the window says, and the button that does it. */
@@ -28,7 +30,7 @@ export interface Question {
   run: () => void
 }
 
-const CLOSED: Windows = { welcomeOpen: false, preferencesOpen: false, preferencesPage: null, exportOpen: false, aboutOpen: false, warehouse: null, question: null, toast: null }
+const CLOSED: Windows = { welcomeOpen: false, preferencesOpen: false, preferencesPage: null, exportOpen: false, aboutOpen: false, warehouse: null, question: null, toast: null, browsing: null }
 
 export const useWindows = create<Windows>(() => CLOSED)
 

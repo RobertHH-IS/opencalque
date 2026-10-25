@@ -7,7 +7,7 @@ const byOrder = <T extends { id: string; order: string }>(a: T, b: T) => (a.orde
 /**
  * Puts right what would otherwise make a drawing impossible to open or to edit, and says what it
  * changed, one line each. A drawing written by hand, by a script or by another program can refer
- * to a layer, a wall type or a parent that is not there, or give an order that cannot be sorted
+ * to a layer, a material or a parent that is not there, or give an order that cannot be sorted
  * between; refusing it would lose the whole drawing for one slip, and opening it as it is would
  * make every later edit fail. What can be kept is kept: a node whose parent is missing goes onto
  * the first page, a reference to a missing type or style is dropped. Only what cannot be drawn at
@@ -25,7 +25,7 @@ export function repairDocument(input: Document): { doc: Document; repairs: strin
     doc.layers[key] = { ...layer, id: key }
     repairs.push(`Layer "${key}" gave "${layer.id}" as its id; it now has its key as id.`)
   }
-  for (const map of ['colors', 'wallTypes', 'dimensionStyles', 'assets'] as const) {
+  for (const map of ['colors', 'dimensionStyles', 'materials', 'assets'] as const) {
     const entries = doc[map]
     if (!entries || Object.entries(entries).every(([key, entry]) => entry.id === key)) continue
     doc[map] = Object.fromEntries(Object.entries(entries).map(([key, entry]) => [key, { ...entry, id: key }])) as never
@@ -124,18 +124,15 @@ export function repairDocument(input: Document): { doc: Document; repairs: strin
   }
 
   for (const node of Object.values(nodes)) {
-    if (node.type === 'wall') {
-      if (node.wallType !== undefined && !doc.wallTypes?.[node.wallType]) {
-        const { wallType: _, overrides: __, ...rest } = node
-        set(rest)
-        repairs.push(`Wall "${node.id}" was of wall type "${node.wallType}", which does not exist; it keeps its thickness, of no type.`)
-        continue
-      }
-      const type = node.wallType === undefined ? undefined : doc.wallTypes?.[node.wallType]
-      if (type?.thickness !== undefined && !node.overrides?.includes('thickness') && node.thickness !== type.thickness) {
-        set({ ...node, thickness: type.thickness })
-        repairs.push(`Wall "${node.id}" was not as thick as its wall type says; it now is.`)
-      }
+    if (node.type === 'room' && node.material !== undefined && !doc.materials?.[node.material]) {
+      const { material: _, ...rest } = node
+      set(rest)
+      repairs.push(`Room "${node.id}" had a floor of material "${node.material}", which does not exist; it keeps the look it gives itself.`)
+    }
+    if (node.type === 'wall' && node.material !== undefined && !doc.materials?.[node.material]) {
+      const { material: _, ...rest } = node
+      set(rest)
+      repairs.push(`Wall "${node.id}" was of material "${node.material}", which does not exist; it is of the default material.`)
     }
     if (node.type === 'dimension' && node.dimensionStyle !== undefined && !doc.dimensionStyles?.[node.dimensionStyle]) {
       const { dimensionStyle: _, ...rest } = node

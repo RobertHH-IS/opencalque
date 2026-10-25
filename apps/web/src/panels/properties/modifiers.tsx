@@ -4,7 +4,7 @@ import { addModifier } from '../../actions'
 import { msg, t } from '../../i18n'
 import { registry, useExtensions } from '../../extensions'
 import { apply } from '../../store'
-import { Field, IconButton, Section } from '../../ui'
+import { Field, IconButton, Section, YesNo } from '../../ui'
 
 /* The Modifiers section: the modifiers of the selected object, in order, each with its parameters. */
 
@@ -106,10 +106,10 @@ export function ModifierStack({ node }: { node: Node }) {
                       </select>
                     </label>
                   ) : p.type === 'boolean' ? (
-                    <label key={p.key} className="field">
+                    <div key={p.key} className="field">
                       <span>{t(p.label)}</span>
-                      <input type="checkbox" checked={params[p.key]} onChange={(e) => change(index, { params: { ...modifier.params, [p.key]: e.target.checked } })} />
-                    </label>
+                      <YesNo value={params[p.key] === true} label={t(p.label)} onChange={(on) => change(index, { params: { ...modifier.params, [p.key]: on } })} />
+                    </div>
                   ) : null,
                 )}
               </>

@@ -154,7 +154,8 @@ describe('assistant', () => {
 
   it('explains every operation and that groups hold nodes too', () => {
     const prompt = systemPrompt(registry)
-    for (const option of OpSchema.options) expect(prompt).toContain(option.shape.op.value)
+    // Those refused since a version of the format took them out are not offered.
+    for (const option of OpSchema.options) if (!option.description?.startsWith('Refused')) expect(prompt).toContain(option.shape.op.value)
     expect(prompt).toContain('or in a group')
     expect(prompt).toContain('never invent one such as "top"')
     expect(prompt).toContain('<selection>')

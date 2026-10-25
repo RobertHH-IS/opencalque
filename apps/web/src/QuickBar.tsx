@@ -34,6 +34,7 @@ const SIZES: Partial<Record<Tool, Size[]>> = {
   line: run,
   wall: run,
   divider: run,
+  gridline: run,
   rotate: [{ which: 'b', label: msg('Angle'), kind: 'angle' }],
 }
 /**
@@ -41,7 +42,7 @@ const SIZES: Partial<Record<Tool, Size[]>> = {
  * make closed shapes, which take its fill too (the line tool closes a polygon). Line weights and
  * kinds of line are set afterwards, in the properties.
  */
-const INKED: Tool[] = ['rect', 'ellipse', 'line', 'wall']
+const INKED: Tool[] = ['rect', 'ellipse', 'line', 'wall', 'gridline']
 const FILLED: Tool[] = ['rect', 'ellipse', 'line']
 
 /**
@@ -117,8 +118,6 @@ export function QuickBar() {
   const layerInk = useStore((s) => resolveColor(s.doc, s.doc.layers[s.activeLayer]?.color) ?? DEFAULT_INK)
   const wallThickness = useStore((s) => s.wallThickness)
   const wallJustify = useStore((s) => s.wallJustify)
-  const wallType = useStore((s) => s.wallType)
-  const wallTypes = useStore((s) => s.doc.wallTypes)
   const paperScale = useStore((s) => s.paperScale)
   // The rotate tool takes an angle once its base line is set, at its second step.
   const started = useStore((s) => s.drawStep > (s.tool === 'rotate' ? 1 : 0))
@@ -129,8 +128,7 @@ export function QuickBar() {
   const measurable = sizes === box || started
   const setThickness = (text: string) => {
     const mm = parseLength(text)
-    // A thickness typed by hand is a wall of no type.
-    if (mm !== null && mm > 0) useStore.setState({ wallThickness: mm, wallType: null })
+    if (mm !== null && mm > 0) useStore.setState({ wallThickness: mm })
   }
   return (
     <div className="quickbar">
@@ -150,22 +148,6 @@ export function QuickBar() {
             />
             <em>{unitSuffix()}</em>
           </label>
-        )}
-        {tool === 'wall' && Object.keys(wallTypes ?? {}).length > 0 && (
-          <select
-            className="quick-select"
-            title={t('Wall type of the next walls')}
-            aria-label={t('Wall type of the next walls')}
-            value={wallType && wallTypes?.[wallType] ? wallType : ''}
-            onChange={(e) => useStore.setState(e.target.value ? { wallType: e.target.value, wallThickness: wallTypes![e.target.value].thickness ?? useStore.getState().wallThickness } : { wallType: null })}
-          >
-            <option value="">{t('No type')}</option>
-            {Object.values(wallTypes ?? {}).map((type) => (
-              <option key={type.id} value={type.id}>
-                {type.name}
-              </option>
-            ))}
-          </select>
         )}
         {tool === 'wall' && (
           <JustifyPicker

@@ -1,6 +1,7 @@
 import { generateKeyBetween } from 'fractional-indexing'
 import { LAYER_COLOR } from './colors'
 import { isOrderKey, newId } from './document'
+import { DEFAULT_MATERIAL } from './schema'
 
 /** A drawing, or a part of one, as JSON read from a file: nothing about it is known yet. */
 type Raw = Record<string, unknown>
@@ -15,11 +16,20 @@ const MAX_STYLED = 100_000
 
 /**
  * Inside a component, the kinds of node that draw lines in their layer's colour where they give
- * none themselves, and that a stroke in their style colours the same way. A wall (whose type may
- * give a stroke that its own style would override), a dimension in a dimension style, a room and
- * a parametric object are left to follow the layer of their placement.
+ * none themselves, and that a stroke in their style colours the same way: a wall (its wall type
+ * taken out first, what it gave being the wall's own by then), a room (the colour of its name), and
+ * a dimension whose dimension style gives no stroke. A parametric object is left to follow the
+ * layer of its placement: a stroke in its style would also colour the lines it draws in a colour
+ * of their own.
  */
-const STROKED = new Set(['line', 'polyline', 'rect', 'ellipse', 'text', 'annotation', 'divider'])
+const STROKED = new Set(['line', 'polyline', 'rect', 'ellipse', 'text', 'annotation', 'divider', 'wall', 'room'])
+
+/** Whether a dimension's style gives it a stroke, which a stroke of its own would override. */
+const styledStroke = (doc: Raw, node: Raw): boolean => {
+  const styles = isPlain(doc.dimensionStyles) ? doc.dimensionStyles : {}
+  const found = typeof node.dimensionStyle === 'string' ? styles[node.dimensionStyle] : undefined
+  return isPlain(found) && isPlain(found.style) && found.style.stroke !== undefined
+}
 
 /** `value` with every "var(--layer)" in it replaced by `color`, however deeply it is held. */
 function withLayerColor(value: unknown, color: string): unknown {
@@ -165,14 +175,80 @@ function toVersion2(doc: Raw): Raw {
     }
     const own = withLayerColor(next, color) as Raw
     const style = isPlain(own.style) ? own.style : {}
-    const stroked = STROKED.has(node.type as string) || (node.type === 'dimension' && node.dimensionStyle === undefined)
+    const stroked = STROKED.has(node.type as string) || (node.type === 'dimension' && !styledStroke(doc, node))
     put(stroked && style.stroke === undefined ? { ...own, style: { ...style, stroke: color } } : own)
   }
   return { ...doc, nodes }
+}
+
+/** What a wall type could give its walls of their outline, under the same names as in a style. */
+const TYPE_OUTLINE = ['stroke', 'strokeWidth', 'dash'] as const
+
+/**
+ * Version 1 to 2, too: wall types are taken out, a wall carrying what it is made of itself. Each
+ * type that walls were of becomes a material of the drawing, of the same name, with its fill and
+ * pattern: its walls are made of it, look as they did and are counted under its name. Each wall is
+ * given as its own the rest of what its type gave it: its thickness (unless it kept its own), and
+ * its height and its outline where it had none, so that it measures as it did. A wall that already
+ * names a material (written by a development build) keeps it. The layers of a type, which were
+ * drawn as lines inside its walls, go: a wall is of one material, and one of several is drawn as
+ * several walls. So do types no wall was of.
+ */
+export function withoutWallTypes(doc: Raw): Raw {
+  const { wallTypes, ...rest } = doc
+  if (!isPlain(doc.nodes)) return rest
+  const types = isPlain(wallTypes) ? wallTypes : {}
+  const materials: Raw = isPlain(doc.materials) ? { ...doc.materials } : {}
+  // The material each type became, made when a wall of it is first met.
+  const made = new Map<string, string>()
+  const materialOf = (typeId: string, type: Raw): string => {
+    const known = made.get(typeId)
+    if (known) return known
+    let id = typeId
+    for (let n = 2; id in materials || id === DEFAULT_MATERIAL; n++) id = `${typeId}_${n}`
+    materials[id] = {
+      id,
+      name: typeof type.name === 'string' && type.name.trim() ? type.name : 'Wall type',
+      ...(typeof type.fill === 'string' ? { fill: type.fill } : {}),
+      ...(isPlain(type.pattern) ? { pattern: type.pattern } : {}),
+    }
+    made.set(typeId, id)
+    return id
+  }
+  const nodes: Raw = {}
+  for (const [id, node] of Object.entries(doc.nodes)) {
+    if (!isPlain(node) || node.type !== 'wall' || !('wallType' in node || 'overrides' in node)) {
+      nodes[id] = node
+      continue
+    }
+    const { wallType, overrides, ...wall } = node
+    const type = typeof wallType === 'string' && isPlain(types[wallType]) ? types[wallType] : undefined
+    nodes[id] = wall
+    if (!type) continue
+    const kept = Array.isArray(overrides) && overrides.includes('thickness')
+    if (!kept && typeof type.thickness === 'number' && type.thickness > 0) wall.thickness = type.thickness
+    if (wall.height === undefined && typeof type.height === 'number') wall.height = type.height
+    if (wall.material === undefined) wall.material = materialOf(wallType as string, type)
+    const style = isPlain(wall.style) ? wall.style : {}
+    const look = Object.fromEntries(TYPE_OUTLINE.filter((key) => type[key] !== undefined && style[key] === undefined).map((key) => [key, type[key]]))
+    if (Object.keys(look).length > 0) wall.style = { ...look, ...style }
+  }
+  return { ...rest, ...(Object.keys(materials).length > 0 ? { materials } : {}), nodes }
+}
+
+/**
+ * Whether a drawing still carries wall types: one of version 2 saved by a development build of
+ * OpenCalque 1.2, before they were taken out, which `readDocument` puts right with `withoutWallTypes`.
+ */
+export function carriesWallTypes(doc: Raw): boolean {
+  if ('wallTypes' in doc) return true
+  return isPlain(doc.nodes) && Object.values(doc.nodes).some((node) => isPlain(node) && node.type === 'wall' && ('wallType' in node || 'overrides' in node))
 }
 
 /**
  * The steps that bring a drawing from one version of the format to the next, as plain JSON: the
  * one at index 0 turns version 1 into version 2, and so on.
  */
-export const MIGRATIONS: ((doc: Raw) => Raw)[] = [toVersion2]
+// Wall types go first: what one gave a wall inside a component is then the wall's own, and the
+// colour of the wall's layer can be given to it as to any other line.
+export const MIGRATIONS: ((doc: Raw) => Raw)[] = [(doc) => toVersion2(withoutWallTypes(doc))]

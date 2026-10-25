@@ -15,7 +15,7 @@ export const round = (n: number) => Math.round(n * 1000) / 1000
 
 /** What a snap is called beside its mark. A point of an object needs no name. */
 export const snapName = (kind: SnapKind): string | undefined =>
-  kind === 'middle' ? t('Middle') : kind === 'crossing' ? t('Crossing') : kind === 'perpendicular' ? t('Perpendicular') : kind === 'edge' ? t('On the line') : undefined
+  kind === 'middle' ? t('Middle') : kind === 'crossing' ? t('Crossing') : kind === 'perpendicular' ? t('Perpendicular') : kind === 'edge' ? t('On the line') : kind === 'aligned' ? t('Lined up') : undefined
 
 /**
  * Applies the sizes typed in the quick bar to where a shape would end: a typed size wins over
@@ -166,7 +166,7 @@ export function wallOps(id: string, a: Vec2, b: Vec2): Op[] {
 
 /** The node a two-point tool makes from its two points. */
 export function shape(tool: Tool, id: string, a: Vec2, b: Vec2, offset = 0): NodeInput {
-  const { scope, wallThickness, wallType, annotationTemplate, paperScale, base, doc } = get()
+  const { scope, wallThickness, annotationTemplate, gridlineTemplate, paperScale, base, doc } = get()
   const common = { id, parent: scope, ...layerHere(), ...(tool !== 'dimension' && tool !== 'paper' ? currentStyle(tool === 'rect' || tool === 'ellipse') : {}) }
   switch (tool) {
     case 'paper': {
@@ -176,13 +176,17 @@ export function shape(tool: Tool, id: string, a: Vec2, b: Vec2, offset = 0): Nod
       return { ...common, type: 'paper', name, scale: paperScale, titleBlock: {}, x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) }
     }
     case 'wall':
-      // A type that is still in the drawing: one chosen in another drawing is not.
-      return { ...common, type: 'wall', a, b, thickness: wallThickness, ...(wallType && doc.wallTypes?.[wallType] ? { wallType } : {}) }
+      return { ...common, type: 'wall', a, b, thickness: wallThickness }
     case 'divider':
       return { id, parent: scope, ...layerHere(), type: 'divider', a, b }
     case 'annotation':
       // The tip is the first point clicked, the text goes at the second; the words are typed afterwards.
       return { ...annotationTemplate, ...common, type: 'annotation', a, b, text: '' } as NodeInput
+    case 'gridline': {
+      // The colour chosen in the bar goes with the template's dash.
+      const style = { ...(gridlineTemplate.style as Style | undefined), ...common.style }
+      return { label: '', ...gridlineTemplate, ...common, ...(Object.keys(style).length > 0 ? { style } : {}), type: 'gridline', a, b } as NodeInput
+    }
     case 'dimension': {
       const look = dimensionToolLook()
       const style = typeof look.dimensionStyle === 'string' ? doc.dimensionStyles?.[look.dimensionStyle] : undefined

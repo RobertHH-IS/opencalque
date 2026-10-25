@@ -3,7 +3,22 @@ import * as z from 'zod'
 import { withoutColorRef } from './colors'
 import { withDimensionStyle } from './dimensions'
 import { componentUses, holdsChildren, isContainer, isOrderKey, layersOf, newId, orderAfter, rootOf } from './document'
-import { AssetSchema, DimensionStyleSchema, type DimensionStyle, LayerSchema, NodeSchema, type Asset, type ContainerNode, type Document, type Node, SharedColorSchema, type SharedColor, WallTypeSchema, type WallType } from './schema'
+import {
+  AssetSchema,
+  DEFAULT_MATERIAL,
+  DimensionStyleSchema,
+  type DimensionStyle,
+  LayerSchema,
+  MaterialSchema,
+  type Material,
+  NodeSchema,
+  type Asset,
+  type ContainerNode,
+  type Document,
+  type Node,
+  SharedColorSchema,
+  type SharedColor,
+} from './schema'
 import { keepUnknown, unknownKeys } from './unknown'
 
 /**
@@ -37,12 +52,14 @@ export type Op =
   | { op: 'add_color'; color: Omit<SharedColor, 'id'> & { id?: string } }
   | { op: 'update_color'; id: string; patch: Record<string, unknown> }
   | { op: 'remove_color'; id: string }
-  | { op: 'add_wall_type'; wallType: Omit<WallType, 'id'> & { id?: string } }
-  | { op: 'update_wall_type'; id: string; patch: Record<string, unknown> }
-  | { op: 'remove_wall_type'; id: string }
+  /** Taken out with wall types in format 2: refused, saying what to do instead. */
+  | { op: 'add_wall_type' | 'update_wall_type' | 'remove_wall_type'; [key: string]: unknown }
   | { op: 'add_dimension_style'; dimensionStyle: Omit<DimensionStyle, 'id'> & { id?: string } }
   | { op: 'update_dimension_style'; id: string; patch: Record<string, unknown> }
   | { op: 'remove_dimension_style'; id: string }
+  | { op: 'add_material'; material: Omit<Material, 'id'> & { id?: string } }
+  | { op: 'update_material'; id: string; patch: Record<string, unknown> }
+  | { op: 'remove_material'; id: string }
   | { op: 'add_asset'; asset: Omit<Asset, 'id'> & { id?: string } }
   | { op: 'set_document'; name?: string; info?: Record<string, string | null> }
 
@@ -71,16 +88,19 @@ export const OpSchema = z.discriminatedUnion('op', [
   z
     .object({ op: z.literal('add_color'), color: z.looseObject({ name: z.string(), value: z.string() }) })
     .describe('Adds a shared colour. Use it by setting a colour property (style.stroke, style.fill, a layer color) to "var(--<id>)".'),
-  z
-    .object({ op: z.literal('add_wall_type'), wallType: z.looseObject({ name: z.string() }) })
-    .describe('Adds a wall type: a name and whichever of thickness, height, fill, stroke, strokeWidth, dash and layers it defines. Walls take it with "wallType": "<id>".'),
-  z.object({ op: z.literal('update_wall_type'), id: z.string(), patch }).describe('Changes a wall type; every wall of that type follows, except where it has a value of its own. A null in the patch makes the type stop defining that property.'),
-  z.object({ op: z.literal('remove_wall_type'), id: z.string() }).describe('Removes a wall type. Its walls stay as they are, of no type.'),
+  ...(['add_wall_type', 'update_wall_type', 'remove_wall_type'] as const).map((op) =>
+    z.looseObject({ op: z.literal(op) }).describe('Refused since format 2, which took wall types out: a wall carries what it is made of itself.'),
+  ),
   z
     .object({ op: z.literal('add_dimension_style'), dimensionStyle: z.looseObject({ name: z.string() }) })
     .describe('Adds a dimension style: a name and whichever properties of a dimension it defines, under the same names (style, startMarker, size, unit…). Dimensions take it with "dimensionStyle": "<id>".'),
   z.object({ op: z.literal('update_dimension_style'), id: z.string(), patch }).describe('Changes a dimension style; every dimension in it follows, except where it has a value of its own. A null in the patch makes the style stop defining that property.'),
   z.object({ op: z.literal('remove_dimension_style'), id: z.string() }).describe('Removes a dimension style. Its dimensions keep how they look: what the style gave them becomes their own.'),
+  z
+    .object({ op: z.literal('add_material'), material: z.looseObject({ name: z.string() }) })
+    .describe('Adds a material: a name, and the fill and pattern it is drawn with. Walls and the floors of rooms take it with "material": "<id>".'),
+  z.object({ op: z.literal('update_material'), id: z.string(), patch }).describe('Changes a material; every wall and floor made of it follows. A null in the patch removes that property.'),
+  z.object({ op: z.literal('remove_material'), id: z.string() }).describe('Removes a material. Walls made of it are of the default material after; floors made of it keep its colour and pattern as their own. The default material cannot be removed.'),
   z.object({ op: z.literal('update_color'), id: z.string(), patch }).describe('Changes a shared colour; everything that refers to it changes with it.'),
   z.object({ op: z.literal('remove_color'), id: z.string() }).describe('Removes a shared colour. What referred to it keeps the colour it had, as a plain colour.'),
   z
@@ -120,8 +140,8 @@ export function applyOps(doc: Document, ops: Op[]): Document {
   const next: Document = { ...doc, nodes: { ...doc.nodes }, layers: { ...doc.layers } }
   if (doc.assets) next.assets = { ...doc.assets }
   if (doc.colors) next.colors = { ...doc.colors }
-  if (doc.wallTypes) next.wallTypes = { ...doc.wallTypes }
   if (doc.dimensionStyles) next.dimensionStyles = { ...doc.dimensionStyles }
+  if (doc.materials) next.materials = { ...doc.materials }
   const batch: Batch = {}
   for (let i = 0; i < ops.length; ) {
     // Removals that follow one another are done together, finding what each takes along in one pass.
@@ -132,7 +152,6 @@ export function applyOps(doc: Document, ops: Op[]): Document {
       i = end
     } else applyOp(next, ops[i++], batch)
   }
-  followWallTypes(next)
   return next
 }
 
@@ -188,33 +207,13 @@ function removeNodes(d: Document, ids: string[]): void {
   for (const id of doomed) delete d.nodes[id]
 }
 
-/** A wall type as it is kept: when every one of its layers has a thickness, its own is theirs added up. */
-function wallType(value: unknown): WallType {
-  const type = parse(WallTypeSchema, value, 'wall type')
-  const layers = type.layers ?? []
-  if (layers.length === 0 || layers.some((layer) => layer.thickness === undefined)) return type
-  return { ...type, thickness: layers.reduce((total, layer) => total + layer.thickness!, 0) }
-}
+/** What a script that still uses wall types is told: format 2 took them out. */
+export const NO_WALL_TYPES =
+  'Wall types were taken out in format 2 (OpenCalque 1.2): a wall carries what it is made of itself. Give walls their "material" and "thickness", and a "height" or a "style" of their own; a wall of several materials is several walls side by side.'
 
-/**
- * Keeps every wall in step with its type: as thick as the type says, when the type defines a
- * thickness and the wall does not list it among its exceptions. A wall naming a type that does
- * not exist is refused; a list of exceptions on a wall of no type means nothing and is dropped.
- */
-function followWallTypes(d: Document): void {
-  for (const node of Object.values(d.nodes)) {
-    if (node.type !== 'wall') continue
-    if (node.wallType === undefined) {
-      if (node.overrides) {
-        const { overrides: _, ...plain } = node
-        d.nodes[node.id] = plain
-      }
-      continue
-    }
-    const type = d.wallTypes?.[node.wallType]
-    if (!type) throw new OpError(`Unknown wall type "${node.wallType}"`)
-    if (type.thickness !== undefined && !node.overrides?.includes('thickness') && node.thickness !== type.thickness) d.nodes[node.id] = { ...node, thickness: type.thickness }
-  }
+/** Refuses what a node or patch says of wall types; taking it away (null) is let through. */
+function typeless(input: Record<string, unknown>): void {
+  if ((input.wallType !== undefined && input.wallType !== null) || (input.overrides !== undefined && input.overrides !== null)) throw new OpError(NO_WALL_TYPES)
 }
 
 /** Validates what an operation makes, keeping the properties the format does not know (see unknown.ts). */
@@ -260,6 +259,8 @@ function checkNode(d: Document, node: Node): void {
   }
   if (node.type === 'image' && !d.assets?.[node.asset]) throw new OpError(`Unknown asset "${node.asset}"`)
   if (node.type === 'dimension' && node.dimensionStyle !== undefined && !d.dimensionStyles?.[node.dimensionStyle]) throw new OpError(`Unknown dimension style "${node.dimensionStyle}"`)
+  if (node.type === 'room' && node.material !== undefined && !d.materials?.[node.material]) throw new OpError(`Unknown material "${node.material}"`)
+  if (node.type === 'wall' && node.material !== undefined && !d.materials?.[node.material]) throw new OpError(`Wall ${node.id}: unknown material "${node.material}"`)
   if (node.type === 'instance') {
     if (d.nodes[node.component]?.type !== 'component') throw new OpError(`Unknown component "${node.component}"`)
     if (root.type === 'component' && componentUses(d, node.component, root.id)) {
@@ -277,6 +278,7 @@ function applyOp(d: Document, op: Op, batch: Batch): void {
       if (d.nodes[id]) throw new OpError(`Node "${id}" already exists`)
       const parent = container ? null : input.parent
       const order = input.order ?? generateKeyBetween(topOrder(d, batch, typeof parent === 'string' ? parent : null), null)
+      if (input.type === 'wall') typeless(input)
       const node = parse(NodeSchema, { ...input, id, parent, order }, 'node')
       checkNode(d, node)
       d.nodes[id] = node
@@ -286,18 +288,8 @@ function applyOp(d: Document, op: Op, batch: Batch): void {
     case 'update_node': {
       const node = d.nodes[op.id]
       if (!node) throw new OpError(`Unknown node "${op.id}"`)
-      let next = parse(NodeSchema, merge(node, op.patch, ['id', 'type']), 'node')
-      // A thickness given to a wall whose type defines one is an exception to its type, and is kept
-      // as such; a wall that changes type starts again from what the new type says.
-      if (next.type === 'wall' && node.type === 'wall') {
-        const defined = next.wallType ? d.wallTypes?.[next.wallType]?.thickness : undefined
-        if ('wallType' in op.patch && !('overrides' in op.patch) && next.overrides) {
-          const { overrides: _, ...fresh } = next
-          next = fresh
-        } else if (typeof op.patch.thickness === 'number' && defined !== undefined && op.patch.thickness !== defined && !('overrides' in op.patch)) {
-          next = { ...next, overrides: [...new Set([...(next.overrides ?? []), 'thickness' as const])] }
-        }
-      }
+      if (node.type === 'wall') typeless(op.patch)
+      const next = parse(NodeSchema, merge(node, op.patch, ['id', 'type']), 'node')
       checkNode(d, next)
       d.nodes[op.id] = next
       if (next.parent !== node.parent || next.order !== node.order) raise(batch, next.parent, next.order)
@@ -351,32 +343,15 @@ function applyOp(d: Document, op: Op, batch: Batch): void {
       // What used it keeps how it looks: the reference becomes the colour it stood for.
       for (const n of Object.values(d.nodes)) d.nodes[n.id] = withoutColorRef(n, op.id, color.value)
       for (const l of Object.values(d.layers)) d.layers[l.id] = withoutColorRef(l, op.id, color.value)
+      // So do the dimension styles and materials that gave it.
+      if (d.dimensionStyles) d.dimensionStyles = withoutColorRef(d.dimensionStyles, op.id, color.value)
+      if (d.materials) d.materials = withoutColorRef(d.materials, op.id, color.value)
       return
     }
-    case 'add_wall_type': {
-      const id = op.wallType.id ?? newId('walltype')
-      if (d.wallTypes?.[id]) throw new OpError(`Wall type "${id}" already exists`)
-      d.wallTypes = { ...d.wallTypes, [id]: wallType({ ...op.wallType, id }) }
-      return
-    }
-    case 'update_wall_type': {
-      const type = d.wallTypes?.[op.id]
-      if (!type) throw new OpError(`Unknown wall type "${op.id}"`)
-      d.wallTypes = { ...d.wallTypes, [op.id]: wallType(merge(type, op.patch, ['id'])) }
-      return
-    }
-    case 'remove_wall_type': {
-      if (!d.wallTypes?.[op.id]) throw new OpError(`Unknown wall type "${op.id}"`)
-      const { [op.id]: _, ...rest } = d.wallTypes
-      d.wallTypes = rest
-      // Its walls stay as thick as they were, of no type.
-      for (const n of Object.values(d.nodes)) {
-        if (n.type !== 'wall' || n.wallType !== op.id) continue
-        const { wallType: __, ...plain } = n
-        d.nodes[n.id] = plain
-      }
-      return
-    }
+    case 'add_wall_type':
+    case 'update_wall_type':
+    case 'remove_wall_type':
+      throw new OpError(NO_WALL_TYPES)
     case 'add_dimension_style': {
       const id = op.dimensionStyle.id ?? newId('dimstyle')
       if (d.dimensionStyles?.[id]) throw new OpError(`Dimension style "${id}" already exists`)
@@ -399,6 +374,37 @@ function applyOp(d: Document, op: Op, batch: Batch): void {
         if (n.type !== 'dimension' || n.dimensionStyle !== op.id) continue
         const { dimensionStyle: __, ...plain } = withDimensionStyle(n, style)
         d.nodes[n.id] = plain
+      }
+      return
+    }
+    case 'add_material': {
+      const id = op.material.id ?? newId('material')
+      if (d.materials?.[id]) throw new OpError(`Material "${id}" already exists`)
+      d.materials = { ...d.materials, [id]: parse(MaterialSchema, { ...op.material, id }, 'material') }
+      return
+    }
+    case 'update_material': {
+      const material = d.materials?.[op.id]
+      if (!material) throw new OpError(`Unknown material "${op.id}"`)
+      d.materials = { ...d.materials, [op.id]: parse(MaterialSchema, merge(material, op.patch, ['id']), 'material') }
+      return
+    }
+    case 'remove_material': {
+      const material = d.materials?.[op.id]
+      if (!material) throw new OpError(`Unknown material "${op.id}"`)
+      if (op.id === DEFAULT_MATERIAL) throw new OpError('The default material cannot be removed: it is what walls are made of until they are given another. Change its fill or pattern instead.')
+      const { [op.id]: _, ...rest } = d.materials!
+      d.materials = rest
+      // The walls made of it are of the default material after; a floor keeps how it looks: what the material gave it becomes its own.
+      for (const n of Object.values(d.nodes)) {
+        if (n.type === 'wall' && n.material === op.id) {
+          const { material: _, ...wall } = n
+          d.nodes[n.id] = wall
+        }
+        if (n.type !== 'room' || n.material !== op.id) continue
+        const { material: __, ...room } = n
+        const look = { ...(material.fill === undefined ? {} : { fill: material.fill }), ...(material.pattern === undefined ? {} : { pattern: material.pattern }) }
+        d.nodes[n.id] = Object.keys(look).length > 0 ? { ...room, style: { ...look, ...room.style } } : room
       }
       return
     }
@@ -472,17 +478,17 @@ export function unknownProperties(doc: Document, ops: Op[]): string[] {
       case 'update_color':
         if (doc.colors?.[op.id]) report(`colour "${op.id}"`, check(SharedColorSchema, patched(doc.colors[op.id], op.patch), Object.keys(op.patch)))
         break
-      case 'add_wall_type':
-        report(`new wall type "${op.wallType.name}"`, check(WallTypeSchema, { id: 'new', ...op.wallType }))
-        break
-      case 'update_wall_type':
-        if (doc.wallTypes?.[op.id]) report(`wall type "${op.id}"`, check(WallTypeSchema, patched(doc.wallTypes[op.id], op.patch), Object.keys(op.patch)))
-        break
       case 'add_dimension_style':
         report(`new dimension style "${op.dimensionStyle.name}"`, check(DimensionStyleSchema, { id: 'new', ...op.dimensionStyle }))
         break
       case 'update_dimension_style':
         if (doc.dimensionStyles?.[op.id]) report(`dimension style "${op.id}"`, check(DimensionStyleSchema, patched(doc.dimensionStyles[op.id], op.patch), Object.keys(op.patch)))
+        break
+      case 'add_material':
+        report(`new material "${op.material.name}"`, check(MaterialSchema, { id: 'new', ...op.material }))
+        break
+      case 'update_material':
+        if (doc.materials?.[op.id]) report(`material "${op.id}"`, check(MaterialSchema, patched(doc.materials[op.id], op.patch), Object.keys(op.patch)))
         break
     }
   }

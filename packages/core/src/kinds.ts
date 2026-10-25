@@ -4,16 +4,17 @@ import { fadeColor, resolveColor } from './colors'
 import { DIMENSION_MARKER_SIZE, DIMENSION_TEXT_SIZE, styledDimension } from './dimensions'
 import { fillFields } from './fields'
 import { formatFeetInches } from './imperial'
-import { applyModifiers, movedModifiers, segmentsInside, HATCH_INK, HATCH_WEIGHT, patternStrokes } from './modifiers'
+import { applyModifiers, movedModifiers, HATCH_INK, HATCH_WEIGHT, patternStrokes } from './modifiers'
 import { primitiveBounds, transformPrimitive, type Primitive } from './primitives'
 import { tidy, turned, type Placing } from './similarity'
 import { sheetContentOf } from './templates'
 import type { Op } from './ops'
 import type { Registry } from './registry'
-import type { Asset, Document, Node, NodeOf, NodeType, WallEdge } from './schema'
+import { DEFAULT_MATERIAL, type Asset, type Document, type Node, type NodeOf, type NodeType, type WallEdge } from './schema'
 import { DEFAULT_PAPER_SCALE, paperFormat, paperSheet } from './papers'
 import { roomAt } from './rooms'
-import { bulgeThrough, hostWall, wallMiddle, wallParallel, wallPoints, wallPolygons, wallSeams, wallOutlineRuns, wallSides } from './walls'
+import { tablePrimitives } from './tables'
+import { bulgeThrough, hostWall, materialSeams, wallMiddle, wallPoints, wallPolygons, wallSeams, wallOutlineRuns, wallSides } from './walls'
 
 export const DEFAULT_INK = '#1f1f1f'
 export const WALL_FILL = '#ffffff'
@@ -115,6 +116,18 @@ export function parametricPrimitives(node: NodeOf<'parametric'>, ctx: KindContex
     // A faulty extension must not take the whole drawing down with it.
     return placeholder(node.kind)
   }
+}
+
+/**
+ * How a component, or a parametric object of a kind and parameters (those it starts with when not
+ * given), is drawn on its own, from its origin: its symbol, as a legend shows it. Placed nowhere, a
+ * door stands in no wall.
+ */
+function symbolPrimitives(object: { kind: 'component' | 'parametric'; id: string; props?: Record<string, unknown> }, ctx: KindContext): Primitive[] {
+  if (ctx.depth >= MAX_INSTANCE_DEPTH) return []
+  const base = { id: '', parent: '', order: 'a0', x: 0, y: 0 }
+  const node = object.kind === 'component' ? { ...base, type: 'instance', component: object.id } : { ...base, type: 'parametric', kind: object.id, props: object.props ?? {} }
+  return nodePrimitives(node as Node, { ...ctx, depth: ctx.depth + 1 })
 }
 
 /** The text a dimension shows for a measured length in mm. */
@@ -369,6 +382,73 @@ function annotationPrimitives(node: NodeOf<'annotation'>, ctx: KindContext): Pri
   ]
 }
 
+/** The diameter of a grid line's bubble when it does not give one, in mm. */
+export const GRIDLINE_BUBBLE = 800
+
+/**
+ * Where the bubbles of a grid line are: past its ends, each touching the line. A bubble is a circle
+ * of radius `r`, its label `r` tall; a label too wide for it stretches it level into a pill, whose
+ * straight sides run `half` either side of its middle. Without the font's measures, a label is
+ * taken to be 0.55 of its height wide per character, as elsewhere, with a margin of 0.35 r each side.
+ */
+export function gridlineBubbles(node: Pick<NodeOf<'gridline'>, 'a' | 'b' | 'bubbles' | 'size' | 'label'>): { centre: Vec2; r: number; half: number }[] {
+  const r = (node.size ?? GRIDLINE_BUBBLE) / 2
+  const half = Math.max(0, r * (node.label.length * 0.275 + 0.35 - 1))
+  const along = dist(node.a, node.b) < 1e-6 ? { x: 0, y: 1 } : norm(sub(node.b, node.a))
+  const which = node.bubbles ?? 'start'
+  const ends = [
+    ...(which === 'start' || which === 'both' ? [{ at: node.a, out: scale(along, -1) }] : []),
+    ...(which === 'end' || which === 'both' ? [{ at: node.b, out: along }] : []),
+  ]
+  // The pill lies level whichever way the line runs, so it reaches further along a line that runs across it.
+  return ends.map(({ at, out }) => ({ centre: add(at, scale(out, r + Math.abs(out.x) * half)), r, half }))
+}
+
+/** A grid line's bubble: a circle, or a level pill when its label is too wide for one. */
+function gridlineBubble({ centre, r, half }: { centre: Vec2; r: number; half: number }, look: object): Primitive {
+  if (half < 1e-6) return { kind: 'ellipse', cx: centre.x, cy: centre.y, rx: r, ry: r, ...look }
+  const right = ellipseArc({ cx: centre.x + half, cy: centre.y, rx: r, ry: r, from: -90, to: 90 })
+  const left = ellipseArc({ cx: centre.x - half, cy: centre.y, rx: r, ry: r, from: 90, to: 270 })
+  return { kind: 'path', points: [...right, ...left], closed: true, ...look }
+}
+
+function gridlinePrimitives(node: NodeOf<'gridline'>): Primitive[] {
+  // The node's style is the line. The bubbles and their label take its colour and weight but are never dashed.
+  const look = { own: true, stroke: node.style?.stroke, strokeWidth: node.style?.strokeWidth }
+  const line: Primitive[] = dist(node.a, node.b) < 1e-6 ? [] : [{ kind: 'path', points: [node.a, node.b] }]
+  return [
+    ...line,
+    ...gridlineBubbles(node).flatMap(({ centre, r, half }): Primitive[] => [
+      gridlineBubble({ centre, r, half }, look),
+      // Upright whichever way the line runs, so that every label of a grid reads the same way.
+      ...(node.label === '' ? [] : [{ kind: 'text' as const, x: centre.x, y: centre.y + r * 0.35, text: node.label, size: r, align: 'center' as const, font: node.font, own: true, stroke: node.style?.stroke }]),
+    ]),
+  ]
+}
+
+/**
+ * The label of the grid line after one labelled `label`: the next letter (A, B … Z, AA), or the
+ * next number (1, 2 … 10), keeping what comes before, so "A1" is followed by "A2". A label that
+ * ends in neither is kept as it is.
+ */
+export function nextGridLabel(label: string): string {
+  const number = /^(.*?)(\d+)$/.exec(label)
+  if (number) {
+    const next = String(Number(number[2]) + 1).padStart(number[2].length, '0')
+    return number[1] + next
+  }
+  const letters = /^(.*?)([A-Z]+|[a-z]+)$/.exec(label)
+  if (!letters) return label
+  const first = letters[2] === letters[2].toUpperCase() ? 'A' : 'a'
+  const chars = letters[2].split('')
+  let i = chars.length - 1
+  // Z rolls over to A and carries, as on a counter: Z is followed by AA, AZ by BA.
+  while (i >= 0 && chars[i].toUpperCase() === 'Z') chars[i--] = first
+  if (i < 0) chars.unshift(first)
+  else chars[i] = String.fromCharCode(chars[i].charCodeAt(0) + 1)
+  return letters[1] + chars.join('')
+}
+
 function dimensionPrimitives(node: NodeOf<'dimension'>): Primitive[] {
   const length = dist(node.a, node.b)
   if (length < 1e-6) return []
@@ -524,6 +604,13 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
     snapLines: () => [],
     transform: (node, t) => ({ ...t.point(node), ...(node.size === undefined && t.scale === 1 ? {} : { size: t.length(node.size ?? 250) }) }),
   },
+  table: {
+    primitives: (node, ctx) => tablePrimitives(node, ctx.doc, ctx.registry, (object) => symbolPrimitives(object, ctx)),
+    move: moveXY,
+    snapPoints: (node) => [{ x: node.x, y: node.y }],
+    // A table stays upright and readable: it goes to where its corner is taken, its text scaled.
+    transform: (node, t) => ({ ...t.point(node), ...(node.size === undefined && t.scale === 1 ? {} : { size: t.length(node.size ?? 200) }) }),
+  },
   divider: {
     primitives: (node) => [{ kind: 'path', points: [node.a, node.b], stroke: DIVIDER_INK, dash: [8, 6], own: true }],
     move: moveAB,
@@ -606,21 +693,35 @@ const KINDS: { [T in NodeType]: NodeKind<NodeOf<T>> } = {
       ...(t.mirror ? { bend: -(node.bend ?? ANNOTATION_BEND) } : {}),
     }),
   },
+  gridline: {
+    primitives: gridlinePrimitives,
+    move: moveAB,
+    handles: handlesAB,
+    moveHandle: moveHandleAB,
+    snapPoints: (node) => [node.a, node.b],
+    // Things are drawn on the grid: its line is one to snap onto, its bubbles are not.
+    snapLines: (node) => [[node.a, node.b]],
+    // The label stays upright, whatever turns the line.
+    transform: (node, t) => ({ ...transformAB(node, t), ...(node.size === undefined && t.scale === 1 ? {} : { size: t.length(node.size ?? GRIDLINE_BUBBLE) }) }),
+  },
   wall: {
     primitives: (node, ctx) => {
-      const type = node.wallType ? ctx.doc.wallTypes?.[node.wallType] : undefined
       const pieces = wallPolygons(node, ctx.doc, ctx.registry)
       // With an edge hidden or given a look of its own, the wall is still filled whole, but its
       // outline is drawn edge by edge: runs of the edges shown, each with its look, as lines that
       // merge like the outline does.
       const runs = wallOutlineRuns(node, pieces)
       const look = (edge: WallEdge | undefined) => (edge ? { over: true, stroke: edge.stroke, strokeWidth: edge.strokeWidth, dash: edge.dash } : {})
+      // Walls are painted together, those of one material as one shape; where one material meets
+      // another, the line is drawn over them, and a wall over one of another material shows its
+      // outline and pattern over it, as stacked (`paintOrder`, `outsideMass`).
+      const union = `wall:${node.material && ctx.doc.materials?.[node.material] ? node.material : ''}`
       return [
-        ...pieces.map((points): Primitive => ({ kind: 'path', closed: true, union: 'wall', fill: type?.fill ?? WALL_FILL, points, ...(runs ? { stroke: 'none' } : {}) })),
-        ...(runs ?? []).map(({ points, edge }): Primitive => ({ kind: 'path', union: 'wall', fill: 'none', points, ...look(edge === 'opening' ? undefined : node.edges?.[edge]) })),
+        ...pieces.map((points): Primitive => ({ kind: 'path', closed: true, union, fill: WALL_FILL, points, ...(runs ? { stroke: 'none' } : {}) })),
+        ...(runs ?? []).map(({ points, edge }): Primitive => ({ kind: 'path', union, fill: 'none', points, ...look(edge === 'opening' ? undefined : node.edges?.[edge]) })),
         ...wallSeams(node, ctx.doc).map(({ points, end }): Primitive => ({ kind: 'path', points, ...look(node.edges?.[end]) })),
-        // Only a build-up measured through and through can be drawn to scale inside the wall.
-        ...wallLayerLines(node, (type?.layers ?? []).every((layer) => layer.thickness !== undefined) ? (type?.layers as { thickness: number }[] | undefined) ?? [] : [], pieces),
+        // Drawn over the wall, it takes the wall's line but not its fill.
+        ...materialSeams(ctx.doc, node, ctx.registry).map((points): Primitive => ({ kind: 'path', points, fill: 'none', over: true })),
       ]
     },
     move: moveAB,
@@ -746,40 +847,12 @@ export function kindOf(node: Node): NodeKind<any> {
   return KINDS[node.type]
 }
 
-/**
- * The lines between the layers of a wall's build-up: one along the wall at each place where a
- * layer ends and the next begins, counted from its left face. Each is drawn long and kept only
- * where it is inside the wall's own outline, so it stops at openings and meets the same line of
- * the next wall on the mitre of a corner.
- */
-function wallLayerLines(wall: NodeOf<'wall'>, layers: { thickness: number }[], pieces: Vec2[][]): Primitive[] {
-  if (layers.length < 2 || dist(wall.a, wall.b) < 1e-6) return []
-  const reach = wall.thickness * 4
-  const out: Primitive[] = []
-  // Counted in from the face at `right` across the wall's line, whichever line the wall is drawn by.
-  const face = wallSides(wall).right
-  let across = 0
-  for (const layer of layers.slice(0, -1)) {
-    across += layer.thickness
-    const line = wallParallel(wall, face - across, reach)
-    for (const piece of pieces) {
-      // Along a curved wall the line is many short stretches: those that follow on are drawn as one.
-      let run: Vec2[] = []
-      const flush = () => {
-        if (run.length > 1) out.push({ kind: 'path', points: run, strokeWidth: 0.5 })
-        run = []
-      }
-      for (let i = 0; i + 1 < line.length; i++) {
-        for (const [from, to] of segmentsInside(line[i], line[i + 1], piece)) {
-          if (run.length === 0 || dist(run[run.length - 1], from) > 1e-6) flush()
-          if (run.length === 0) run.push(from)
-          run.push(to)
-        }
-      }
-      flush()
-    }
-  }
-  return out
+/** Where a straight wall's left face starts, and the way it runs: what an insulation's zigzag is laid from. */
+function wallFrame(wall: NodeOf<'wall'>): { x: number; y: number; rotation: number } {
+  const along = Math.atan2(wall.b.y - wall.a.y, wall.b.x - wall.a.x)
+  const right = { x: -Math.sin(along), y: Math.cos(along) }
+  const left = -wallSides(wall).left
+  return { x: wall.a.x + right.x * left, y: wall.a.y + right.y * left, rotation: (along * 180) / Math.PI }
 }
 
 /** What backs the closed shapes of a component or an object that have no fill: the white of the paper. */
@@ -818,15 +891,14 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
   // so is "the layer's colour", which is that of the node's layer, or what it would be drawn in without one.
   const layerColor = resolveColor(ctx.doc, node.layer === undefined ? undefined : ctx.doc.layers[node.layer]?.color)
   const paint = (value: string | undefined) => resolveColor(ctx.doc, value, layerColor ?? ctx.ink ?? DEFAULT_INK)
-  // A wall takes from its type what the type defines, and keeps what it says for itself; a dimension likewise from its style.
-  const type = node.type === 'wall' && node.wallType ? ctx.doc.wallTypes?.[node.wallType] : undefined
-  const typed = type && {
-    ...(type.stroke === undefined ? {} : { stroke: type.stroke }),
-    ...(type.strokeWidth === undefined ? {} : { strokeWidth: type.strokeWidth }),
-    ...(type.dash === undefined ? {} : { dash: type.dash }),
-    ...(type.pattern === undefined ? {} : { pattern: type.pattern }),
-  }
-  const style = node.type === 'dimension' ? styledDimension(ctx.doc, node).style : typed ? { ...typed, ...node.style } : node.style
+  // A room's floor takes the colour and pattern of its material, unless it gives its own.
+  const material = node.type === 'room' && node.material ? ctx.doc.materials?.[node.material] : undefined
+  const floored = material && { ...(material.fill === undefined ? {} : { fill: material.fill }), ...(material.pattern === undefined ? {} : { pattern: material.pattern }) }
+  // A wall takes the look of its material, or of the default material, unless it gives its own.
+  const made = node.type === 'wall' ? ((node.material ? ctx.doc.materials?.[node.material] : undefined) ?? ctx.doc.materials?.[DEFAULT_MATERIAL]) : undefined
+  const walled = made && { ...(made.fill === undefined ? {} : { fill: made.fill }), ...(made.pattern === undefined ? {} : { pattern: made.pattern }) }
+  // A dimension takes from its style what the style defines, and keeps what it says for itself.
+  const style = node.type === 'dimension' ? styledDimension(ctx.doc, node).style : floored ? { ...floored, ...node.style } : walled ? { ...walled, ...node.style } : node.style
   const styled = kindOf(node)
     .primitives(node, ctx)
     .map((p) => {
@@ -834,7 +906,8 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
       // one half of a wall whose outline is drawn edge by edge.
       const split = p.kind === 'path' && p.union !== undefined
       const stroke = split && p.stroke === 'none' ? 'none' : (paint(p.own ? p.stroke : p.over ? (p.stroke ?? style?.stroke) : (style?.stroke ?? p.stroke)) ?? layerColor ?? ctx.ink ?? DEFAULT_INK)
-      const fill = split && p.fill === 'none' ? 'none' : paint(p.own ? p.fill : (style?.fill ?? p.fill))
+      // So does a line drawn over the shape that says it has no fill, as between the layers of a wall: a fill of the style would fill the curve it makes.
+      const fill = (split || p.over) && p.fill === 'none' ? 'none' : paint(p.own ? p.fill : (style?.fill ?? p.fill))
       return {
         ...p,
         stroke,
@@ -843,15 +916,22 @@ export function nodePrimitives(node: Node, ctx: KindContext): Primitive[] {
         dash: p.own ? p.dash : p.over ? (p.dash ?? style?.dash) : (style?.dash ?? p.dash),
       }
     })
-  // The pattern of the fill: strokes inside each closed shape, cut to it, over its colour.
+  // The pattern of the fill: strokes inside each closed shape, cut to it, over its colour. It is laid
+  // from the origin of the drawing, so that walls of one material run on into each other with
+  // nothing to show where; but the zigzag of an insulation runs along a straight wall, from one
+  // face to the other, as the sign for it is drawn.
   const pattern = style?.pattern
+  const fitted = pattern?.kind === 'Zigzag' && node.type === 'wall' && !node.bulge ? wallFrame(node) : undefined
+  const laid = pattern && fitted ? { ...pattern, spacing: (node as NodeOf<'wall'>).thickness, angle: 0 } : pattern
+  const frame = fitted
   const ink = pattern && fadeColor(paint(pattern.stroke) ?? HATCH_INK, pattern.opacity ?? 1)
   const hatching: Primitive[] = pattern
     ? styled.flatMap((p): Primitive[] => {
-        if (p.own) return []
+        // A merged shape that is only an outline (a wall whose layers fill it) is not a fill to lay a pattern on.
+        if (p.own || (p.kind === 'path' && p.union !== undefined && p.fill === 'none')) return []
         const shape = p.kind === 'path' && p.closed ? p.points : p.kind === 'ellipse' ? ellipseArc({ ...p, from: 0, to: 360 }).slice(0, -1) : []
-        return patternStrokes(shape, pattern).map(
-          (points): Primitive => ({ kind: 'path', points, stroke: ink, strokeWidth: pattern.strokeWidth ?? HATCH_WEIGHT, own: true, texture: true, backdrop: p.backdrop, clip: [...(p.clip ?? []), shape] }),
+        return patternStrokes(shape, laid!, frame).map(
+          (points): Primitive => ({ kind: 'path', points, stroke: ink, strokeWidth: pattern.strokeWidth ?? HATCH_WEIGHT, own: true, texture: true, backdrop: p.backdrop, clip: [...(p.clip ?? []), shape], ...(p.kind === 'path' && p.union !== undefined ? { merged: true } : {}) }),
         )
       })
     : []

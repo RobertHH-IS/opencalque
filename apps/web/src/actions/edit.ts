@@ -1,3 +1,5 @@
+import { goTo } from './instances'
+import { entryName, entryTarget, isModel, placementsOf } from '../entries'
 import {
   applyOps,
   buildScene,
@@ -12,7 +14,7 @@ import {
   moveOps,
   orderAfter,
   orderBefore,
-  orderBetween,
+  ordersAt,
   placeInOps,
   reorderOps,
   sceneBounds,
@@ -24,6 +26,7 @@ import {
   type Modifier,
   type Node,
   type Op,
+  replaceWithOps,
 } from '@opencalque/core'
 import { registry } from '../extensions'
 import { t, tn } from '../i18n'
@@ -57,8 +60,8 @@ export function finishTextEdit(): void {
   if (!editingText) return
   useStore.setState({ editingText: null })
   const node = doc.nodes[editingText.id]
-  // A text with no words cannot be seen; an annotation with none is still an arrow.
-  const empty = node?.type === 'annotation' ? false : node?.type !== 'text' || node.text.trim() === ''
+  // A text with no words cannot be seen; an annotation with none is still an arrow, a grid line still a line.
+  const empty = node?.type === 'annotation' || node?.type === 'gridline' ? false : node?.type !== 'text' || node.text.trim() === ''
   if (!empty) commit()
   else {
     cancel()
@@ -259,6 +262,12 @@ export const vectorizeSelection = () =>
   guarded(() => {
     const { doc, selection } = get()
     const node = doc.nodes[selection[0]]
+    if (selection.length === 1 && node?.type === 'table') {
+      const made = vectorizeOps(doc, node.id, registry, { group: t('Table of quantities'), backing: '' })
+      if (!made || !apply(made.ops)) return
+      select([made.id])
+      return toast(t('Vectorized into a group of lines and texts. It no longer follows the drawing.'))
+    }
     if (selection.length !== 1 || node?.type !== 'parametric') return
     const kind = registry.parametric.get(node.kind)
     const made = vectorizeOps(doc, node.id, registry, { group: kind ? t(kind.label) : node.kind, backing: t('White background') })
@@ -266,6 +275,70 @@ export const vectorizeSelection = () =>
     select([made.id])
     toast(kind?.opening ? t('Vectorized into a group of its shapes. It no longer cuts the wall it is in.') : t('Vectorized into a group of its shapes.'))
   })
+
+/**
+ * Makes every placement of one entry of the Components panel (a component, or a model of
+ * parametric objects) a placement of another, saying how many; a component left so is placed
+ * nowhere any more, which it says too.
+ */
+export function replaceInstances(from: string, to: string): void {
+  const { doc } = get()
+  const target = entryTarget(doc, to)
+  if (!target) return
+  const { ops, skipped } = replaceWithOps(doc, placementsOf(doc, from).map((node) => node.id), target)
+  const names = { from: entryName(doc, from), to: entryName(doc, to) }
+  if (ops.length > 0 && !apply(ops)) return
+  const replaced = placementsOf(doc, from).length - skipped
+  const done = tn(replaced, 'One instance of “{from}” now places “{to}”.', '{n} instances of “{from}” now place “{to}”.', names)
+  const kept = skipped > 0 ? ` ${tn(skipped, 'One inside “{to}” itself was kept.', '{n} inside “{to}” itself were kept.', names)}` : ''
+  const left = skipped === 0 && !isModel(from) ? ` ${t('“{from}” is placed nowhere any more: delete it if it is not wanted.', names)}` : ''
+  toast(`${done}${kept}${left}`)
+}
+
+/** Makes the selected placements placements of another entry, those that become another sort of thing selected again under their new ids. */
+export function swapSelectedComponent(to: string): void {
+  const { doc, selection } = get()
+  const target = entryTarget(doc, to)
+  if (!target) return
+  const { ops, skipped } = replaceWithOps(doc, selection, target)
+  if (ops.length > 0 && apply(ops)) {
+    const added = ops.flatMap((op) => (op.op === 'add_node' ? [op.node.id as string] : []))
+    select([...selection.filter((id) => get().doc.nodes[id]), ...added])
+  }
+  if (skipped > 0) toast(t('A component cannot hold itself: what is inside “{to}” was kept.', { to: entryName(doc, to) }))
+}
+
+/** Deletes an entry: a component with its placements, or every object of a model, once the user has said yes. */
+export function deleteEntry(entry: string): void {
+  if (!isModel(entry)) return deleteComponent(entry)
+  const { doc } = get()
+  const objects = placementsOf(doc, entry)
+  if (objects.length === 0) return
+  const name = entryName(doc, entry)
+  ask({
+    title: t('Delete them'),
+    message: tn(objects.length, 'The one “{name}” in the drawing will be deleted.', 'The {n} “{name}” in the drawing will be deleted.', { name }),
+    action: t('Delete'),
+    run: () => apply(objects.map((node): Op => ({ op: 'remove_node', id: node.id }))),
+  })
+}
+
+/**
+ * Selects the objects of a model together, to be changed at once from the Properties panel: there
+ * where most of them lie (a page, a group or a component), saying how many lie elsewhere.
+ */
+export function editModel(entry: string): void {
+  const { doc } = get()
+  const objects = placementsOf(doc, entry)
+  if (objects.length === 0) return
+  const by = new Map<string, string[]>()
+  for (const node of objects) if (node.parent !== null) by.set(node.parent, [...(by.get(node.parent) ?? []), node.id])
+  const [, most] = [...by.entries()].reduce((best, next) => (next[1].length > best[1].length ? next : best))
+  if (!goTo(most[0])) return
+  select(most)
+  const elsewhere = objects.length - most.length
+  if (elsewhere > 0) toast(tn(elsewhere, 'One more lies elsewhere: the eye beside it goes to it.', '{n} more lie elsewhere: the eye beside them goes to each.'))
+}
 
 export const makeComponent = () =>
   guarded(() => {
@@ -328,9 +401,13 @@ export function reorderSelection(to: 'front' | 'forward' | 'backward' | 'back'):
         ? orderAfter(siblings.map((n) => n.order))
         : to === 'back'
           ? orderBefore(siblings.map((n) => n.order))
-          : up
-            ? orderBetween(neighbour.order, siblings[at + 2]?.order ?? null)
-            : orderBetween(siblings[at - 2]?.order ?? null, neighbour.order)
+          : // Just past its neighbour, among the others: above it going up, under it going down.
+            ordersAt(
+              siblings.filter((n) => n.id !== node.id),
+              at + (up ? 1 : -1),
+              1,
+              up ? 'below' : 'above',
+            )[0]
     // Each is placed among the others as they are once those before it have moved.
     const op: Op = { op: 'update_node', id: node.id, patch: { order } }
     doc = applyOps(doc, [op])

@@ -1,6 +1,6 @@
 import { childrenOf, isVisible, newId } from './document'
 import { LAYER_COLOR } from './colors'
-import { nodePrimitives, objectBacking, parametricPrimitives } from './kinds'
+import { kindOf, nodePrimitives, objectBacking, parametricPrimitives } from './kinds'
 import type { NodeInput, Op } from './ops'
 import { transformPrimitive, type Primitive } from './primitives'
 import type { Registry } from './registry'
@@ -32,7 +32,7 @@ export function primitiveNodes(prims: Primitive[], parent: string, layer?: strin
 }
 
 /**
- * The operations that vectorize a parametric object: the shapes it draws now, where it draws them,
+ * The operations that vectorize a parametric object or a table of quantities: the shapes it draws now, where it draws them,
  * become a group in its place, to be edited one by one. The group takes the object's name (or
  * `names.group`), place in the stacking order, layer and modifiers. A placed object hides what lies
  * under it (`objectBacking`) and a group does not, so that white comes along as filled shapes of
@@ -41,6 +41,7 @@ export function primitiveNodes(prims: Primitive[], parent: string, layer?: strin
  */
 export function vectorizeOps(doc: Document, id: string, registry: Registry, names: { group: string; backing: string }): { ops: Op[]; id: string } | null {
   const node = doc.nodes[id]
+  if (node?.type === 'table') return tableShapesOps(doc, node, registry, names.group)
   if (node?.type !== 'parametric' || node.parent === null) return null
   // Its own look over what the kind draws, as it is drawn: a line keeps a look the kind gave it as its own.
   const prims = parametricPrimitives(node, { doc, registry, depth: 0 }).map((p): Primitive =>
@@ -72,6 +73,31 @@ export function vectorizeOps(doc: Document, id: string, registry: Registry, name
     ops.push(...white.map((shape): Op => ({ op: 'add_node', node: shape })))
   }
   ops.push(...primitiveNodes(placed(prims), group, layer).map((shape): Op => ({ op: 'add_node', node: shape })))
+  return { ops, id: group }
+}
+
+/**
+ * The operations that vectorize a table of quantities: what it shows now, its frame, its lines,
+ * its words and the symbols it draws, become a group in its place, named after its title (or
+ * `name`), to be edited or moved one by one. It no longer counts anything: it stays as it was.
+ * The table's own look goes over what it draws, as it does when the table is drawn.
+ */
+function tableShapesOps(doc: Document, node: NodeOf<'table'>, registry: Registry, name: string): { ops: Op[]; id: string } | null {
+  if (node.parent === null) return null
+  const style = node.style
+  const prims = kindOf(node)
+    .primitives(node, { doc, registry, depth: 0 })
+    .map((p): Primitive => {
+      if (p.own || !style) return p
+      const filled = (p.kind === 'path' && p.closed) || p.kind === 'ellipse'
+      return { ...p, stroke: style.stroke ?? p.stroke, strokeWidth: style.strokeWidth ?? p.strokeWidth, dash: style.dash ?? p.dash, ...(filled && style.fill !== undefined ? { fill: style.fill } : {}) }
+    })
+  const group = newId('group')
+  const ops: Op[] = [
+    { op: 'remove_node', id: node.id },
+    { op: 'add_node', node: { type: 'group', id: group, parent: node.parent, order: node.order, name: node.title || name, ...(node.layer ? { layer: node.layer } : {}), ...(node.modifiers?.length ? { modifiers: node.modifiers } : {}) } as NodeInput },
+    ...primitiveNodes(prims, group, node.layer).map((shape): Op => ({ op: 'add_node', node: shape })),
+  ]
   return { ops, id: group }
 }
 

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Layers, Link2 } from 'lucide-react'
-import { HATCH_INK, HATCH_WEIGHT, LAYER_COLOR, PATTERN_DEFAULTS, patternStrokes, resolveColor, type Pattern } from '@opencalque/core'
+import { HATCH_INK, HATCH_WEIGHT, LAYER_COLOR, PATTERN_DEFAULTS, PATTERN_FINEST, patternStrokes, resolveColor, type Pattern } from '@opencalque/core'
 import { ColorChoice, ColorPanel, colorState, lastColor, swatch, type LayerOption } from './ColorChoice'
 import { FLOATING, useFloating } from './floating'
 import { msg, t } from './i18n'
@@ -33,10 +33,11 @@ function withSetting<K extends keyof Pattern>(pattern: Pattern, key: K, value: P
 /**
  * The settings of a pattern, as rows: its kind from a row of pictures, the colour, opacity and
  * weight of its strokes, and how far apart and how turned they are. The Hatch page of the fill
- * window, and a wall type's pattern.
+ * window, and a material's pattern.
  */
 export function HatchRows({ value, onChange, layer }: { value: Pattern; onChange: (next: Pattern) => void; layer?: LayerOption }) {
   const usual = PATTERN_DEFAULTS[value.kind] ?? { spacing: 100, angle: 0 }
+  const finest = PATTERN_FINEST[value.kind] ?? 5
   return (
     <div className="pattern-rows">
       {/* Not a label: a label would hand every click to the first button in it. */}
@@ -75,7 +76,8 @@ export function HatchRows({ value, onChange, layer }: { value: Pattern; onChange
         <span>{t('Weight')}</span>
         <WeightChoice value={value.strokeWidth ?? HATCH_WEIGHT} label={t('Weight of the strokes, as printed')} onPick={(pixels) => onChange(withSetting(value, 'strokeWidth', pixels === null || pixels === HATCH_WEIGHT ? undefined : pixels))} />
       </div>
-      <Field label={t('Spacing')} numeric length min={1} value={value.spacing ?? usual.spacing} onCommit={(spacing: number) => spacing > 0 && onChange({ ...value, spacing })} />
+      {/* No finer than the pattern is drawn: what shows is what is drawn. */}
+      <Field label={t('Spacing')} numeric length min={finest} value={Math.max(finest, value.spacing ?? usual.spacing)} onCommit={(spacing: number) => spacing > 0 && onChange({ ...value, spacing: Math.max(finest, spacing) })} />
       <Field label={t('Angle')} numeric value={value.angle ?? usual.angle} onCommit={(angle: number) => onChange({ ...value, angle })} />
     </div>
   )
@@ -116,6 +118,22 @@ function HatchPreview({ pattern, background, layer }: { pattern: Pattern; backgr
   )
 }
 
+/** A fill as a small square: its colour, with the strokes of its hatch over it, as the drawing paints them. */
+export function FillSwatch({ fill, pattern, layer }: { fill: string; pattern?: Pattern; layer?: LayerOption }) {
+  const doc = useStore((s) => s.doc)
+  const hatch = pattern && pattern.kind !== 'None' ? pattern : undefined
+  const picture = hatch && PATTERNS.find(([k]) => k === hatch.kind)?.[2]
+  return (
+    <i className="fill-swatch" style={swatch(fill === 'none' ? 'transparent' : (resolveColor(doc, fill, layer?.color) ?? fill))}>
+      {picture && (
+        <svg viewBox="2 0 24 18" preserveAspectRatio="xMidYMid slice" fill="none" stroke={inkOf(hatch!, layer)} strokeOpacity={hatch!.opacity ?? 1} strokeWidth="1.6" strokeLinecap="round" aria-hidden>
+          <path d={picture} />
+        </svg>
+      )}
+    </i>
+  )
+}
+
 /** A change of fill: each key given is set, or taken away when given as undefined. */
 export type FillChange = { fill?: string | undefined; pattern?: Pattern | undefined }
 
@@ -142,7 +160,7 @@ export function FillChoice(props: {
   inherited?: { fill?: string; pattern?: Pattern }
   /** What is drawn when nothing says otherwise: a colour, or 'none' for no fill. */
   fallback: string
-  /** What having no fill of its own is called ("default", "from its type"). */
+  /** What having no fill of its own is called ("default", "from its material"). */
   unset?: string
   /** No fill at all may not be chosen: a wall must hide the lines inside its joints. */
   filled?: boolean
@@ -171,7 +189,7 @@ export function FillChoice(props: {
   if (hatch) lastPattern.current = hatch
   const kind: Page | undefined = mixed ? undefined : hatch ? 'hatch' : shownFill === 'none' ? 'none' : 'solid'
   const page = kind ?? 'solid'
-  // Without a pattern of its own where its type has one, it says so with a pattern of kind None.
+  // Without a pattern of its own where its material has one, it says so with a pattern of kind None.
   const noPattern = inherited?.pattern && inherited.pattern.kind !== 'None' ? { kind: 'None' } : undefined
   // No fill is having none, where that is what having none means; otherwise it is said outright.
   const noFill = fallback === 'none' && inherited?.fill === undefined ? undefined : 'none'
@@ -189,20 +207,7 @@ export function FillChoice(props: {
   const own = fill !== undefined || pattern !== undefined
   const { linked, shared, followsLayer } = colorState(doc, color, solid, layer)
   const patternName = hatch && t(PATTERNS.find(([k]) => k === hatch.kind)?.[1] ?? hatch.kind)
-  const ink = hatch ? inkOf(hatch, layer) : undefined
-  const picture = hatch && PATTERNS.find(([k]) => k === hatch.kind)?.[2]
-  const swatchOf = () =>
-    mixed || kind === 'none' ? (
-      <i className="none" />
-    ) : (
-      <i className="fill-swatch" style={swatch(shownFill === 'none' ? 'transparent' : (resolveColor(doc, shownFill, layer?.color) ?? solid))}>
-        {picture && (
-          <svg viewBox="2 0 24 18" preserveAspectRatio="xMidYMid slice" fill="none" stroke={ink} strokeOpacity={hatch?.opacity ?? 1} strokeWidth="1.6" strokeLinecap="round" aria-hidden>
-            <path d={picture} />
-          </svg>
-        )}
-      </i>
-    )
+  const swatchOf = () => (mixed || kind === 'none' ? <i className="none" /> : <FillSwatch fill={shownFill} pattern={hatch} layer={layer} />)
   const said = mixed ? (
     <em className="faint">{t('Mixed')}</em>
   ) : kind === 'hatch' ? (

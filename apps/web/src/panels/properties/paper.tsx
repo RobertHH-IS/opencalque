@@ -2,7 +2,7 @@ import { paperRescaled, sheetContentOf, sheetContentOps, DEFAULT_PAPER_SCALE, PA
 import { openComponent } from '../../actions'
 import { msg, t } from '../../i18n'
 import { apply, useStore } from '../../store'
-import { Field, Section } from '../../ui'
+import { Field, Section, YesNo } from '../../ui'
 import type { Update } from './FieldRow'
 
 /* A paper in the Properties panel: its format and scale, its title block, and what is on every sheet. */
@@ -57,7 +57,7 @@ function TitleBlockEntries({ node }: { node: Extract<Node, { type: 'paper' }> })
 
   const row = (field: TitleField) => (
     <div key={field} className={`title-entry${hidden.includes(field) ? ' off' : ''}`}>
-      <input type="checkbox" checked={!hidden.includes(field)} title={t('Show it on this sheet')} aria-label={t('Show it on this sheet')} onChange={(e) => show(field, e.target.checked)} />
+      <YesNo value={!hidden.includes(field)} title={t('Show it on this sheet')} label={t(TITLE_NAMES[field])} onChange={(on) => show(field, on)} />
       <span>{t(TITLE_NAMES[field])}</span>
       {typed(field) ? (
         field === 'address' ? (
@@ -128,18 +128,18 @@ export function PaperSheet({ node, update }: { node: Extract<Node, { type: 'pape
       {/* Changing the scale keeps the sheet the sheet it is, as pulling a corner does: it covers more or less of the drawing. */}
       <Field label={t('Scale 1:')} numeric min={1} value={scale} onCommit={(v) => v > 0 && update(() => paperRescaled(node, v))} />
       <p className="hint">{t('A paper moves on its own, over the drawing: put it where it frames what to print. Pulling a corner changes its scale, or its size with Alt. Copying or duplicating it takes along what lies on it.')}</p>
-      <label className="field">
+      <div className="field">
         <span>{t('Title block')}</span>
-        <input type="checkbox" checked={node.titleBlock !== undefined} onChange={(e) => update(() => ({ titleBlock: e.target.checked ? {} : null }))} />
-      </label>
+        <YesNo value={node.titleBlock !== undefined} label={t('Title block')} onChange={(on) => update(() => ({ titleBlock: on ? {} : null }))} />
+      </div>
       {node.titleBlock && <TitleBlockEntries node={node} />}
       <h4 className="title-heading">{t('On every sheet')}</h4>
       {common ? (
         <>
-          <label className="field">
+          <div className="field">
             <span>{t('Show it here')}</span>
-            <input type="checkbox" checked={!node.plain} onChange={(e) => update(() => ({ plain: e.target.checked ? null : true }))} />
-          </label>
+            <YesNo value={!node.plain} label={t('Show it here')} onChange={(on) => update(() => ({ plain: on ? null : true }))} />
+          </div>
           <button className="text-button" onClick={() => openComponent(common.id)}>
             {t('Edit what is on every sheet…')}
           </button>

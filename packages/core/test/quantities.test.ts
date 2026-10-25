@@ -40,7 +40,7 @@ describe('quantities', () => {
   it('measures rooms and walls, and leaves out what needs a height nobody gave', () => {
     const q = quantities(room, 'page_1', registry)
     // The floor inside the walls: (5 - 0.2) × (4 - 0.2).
-    expect(q.rooms).toEqual([{ name: 'Living room', area: 18.24 }])
+    expect(q.rooms).toEqual([{ id: 'r', name: 'Living room', area: 18.24, material: '', materialId: '' }])
     expect(q.walls.map((w) => [w.id, w.length, w.footprint, w.openings])).toEqual([
       ['top', 5, 1, 2],
       ['right', 4, 0.8, 0],
@@ -63,6 +63,40 @@ describe('quantities', () => {
     expect(left).toMatchObject({ height: 3, gross: 12, cut: 0, net: 12 })
   })
 
+  it('counts what a component placed on the page holds, once for each placement, at the size it is drawn', () => {
+    // The hut drawn as a component, a floor of a building, placed as it is, at twice its size, and stretched twice as wide and turned.
+    const inside = (op: Op): Op => (op.op === 'add_node' ? { ...op, node: { ...op.node, parent: 'level' } as NodeInput } : op)
+    const built = applyOps(createDocument('Building'), [
+      { op: 'update_node', id: 'page_1', patch: { wallHeight: 2500 } },
+      { op: 'add_node', node: { type: 'component', id: 'level', parent: null, name: 'Level' } as NodeInput },
+      ...[
+        wall('top', 0, 0, 5000, 0),
+        wall('right', 5000, 0, 5000, 4000),
+        wall('bottom', 5000, 4000, 0, 4000),
+        wall('left', 0, 4000, 0, 0),
+        add({ type: 'parametric', id: 'door', kind: 'test.door', props: {}, x: 500, y: 0 }),
+        add({ type: 'room', id: 'r', name: 'Living room', x: 2500, y: 2000 }),
+      ].map(inside),
+      add({ type: 'instance', id: 'as-is', component: 'level', x: 0, y: 0 }),
+      add({ type: 'instance', id: 'twice', component: 'level', x: 20000, y: 0, scale: 2 }),
+      add({ type: 'instance', id: 'wide', component: 'level', x: 0, y: 20000, scaleX: 2, rotation: 90 }),
+    ])
+    const q = quantities(built, 'page_1', registry)
+    expect(q.rooms.map((r) => r.area)).toEqual([18.24, 72.96, 36.48])
+    // Stretched along its own X: its level walls twice as long, as thick as they were; its upright ones as long, twice as thick.
+    const [top, , , left] = q.walls.slice(8)
+    expect(top).toMatchObject({ length: 10, thickness: 200, gross: 25 })
+    expect(left).toMatchObject({ length: 4, thickness: 400 })
+    expect(q.walls.slice(4, 8).map((w) => [w.length, w.thickness])).toEqual([[10, 400], [8, 400], [10, 400], [8, 400]])
+    // The door: as drawn, twice as wide twice over.
+    expect(q.openings.map((o) => [o.width, o.count])).toEqual([[1, 1], [2, 2]])
+    // Doors make the building, and have a table of their own: the objects placed leave them out.
+    expect(q.objects.map((o) => [o.name, o.count])).toEqual([['Level', 3]])
+    // Hidden where it is placed, a component counts for nothing.
+    const hidden = applyOps(built, [{ op: 'update_node', id: 'wide', patch: { visible: false } }])
+    expect(quantities(hidden, 'page_1', registry).rooms).toHaveLength(2)
+  })
+
   it('writes a table a spreadsheet opens, in the way of the country it is opened in', () => {
     const tall = applyOps(room, [{ op: 'update_node', id: 'page_1', patch: { wallHeight: 2500 } }])
     const english = quantitiesCsv(quantities(tall, 'page_1', registry)).replace('﻿', '').split('\r\n')
@@ -79,85 +113,26 @@ describe('quantities', () => {
   })
 })
 
-describe('wall types', () => {
-  const typed = applyOps(room, [
-    { op: 'add_wall_type', wallType: { id: 'outer', name: 'Outer wall', thickness: 1, fill: '#d6d3d1', layers: [{ name: 'Plaster', thickness: 15 }, { name: 'Brick', thickness: 200 }, { name: 'Insulation', thickness: 120 }] } },
-    { op: 'update_node', id: 'top', patch: { wallType: 'outer' } },
+describe('walls of a material', () => {
+  const made = applyOps(room, [
+    { op: 'add_material', material: { id: 'brick', name: 'Brick', fill: '#efc7b4' } },
+    { op: 'update_node', id: 'top', patch: { material: 'brick' } },
     { op: 'update_node', id: 'page_1', patch: { wallHeight: 2500 } },
   ])
-  const top = (doc: Document) => doc.nodes.top as any
+  const prims = (id: string) => buildScene(made, 'page_1', registry).find((item) => item.id === id)!.prims.filter((p) => p.kind === 'path' && p.closed)
 
-  it('give their thickness to their walls, and keep giving it when they change', () => {
-    // The thickness of a type with layers is their sum, whatever was written.
-    expect(typed.wallTypes!.outer.thickness).toBe(335)
-    expect(top(typed).thickness).toBe(335)
-    const thicker = applyOps(typed, [{ op: 'update_wall_type', id: 'outer', patch: { layers: [{ name: 'Brick', thickness: 300 }] } }])
-    expect(top(thicker).thickness).toBe(300)
-    // A wall given another thickness is an exception to its type: it keeps it, and is marked as one.
-    const odd = applyOps(typed, [{ op: 'update_node', id: 'top', patch: { thickness: 50 } }])
-    expect(top(odd)).toMatchObject({ thickness: 50, overrides: ['thickness'] })
-    expect(top(applyOps(odd, [{ op: 'update_wall_type', id: 'outer', patch: { layers: [{ name: 'Brick', thickness: 300 }] } }])).thickness).toBe(50)
-    // Taking the exception away brings the wall back to its type; so does giving it a type again.
-    expect(top(applyOps(odd, [{ op: 'update_node', id: 'top', patch: { overrides: null } }])).thickness).toBe(335)
-    expect(top(applyOps(odd, [{ op: 'update_node', id: 'top', patch: { wallType: 'outer' } }]))).toMatchObject({ thickness: 335 })
-    expect(() => applyOps(room, [{ op: 'update_node', id: 'top', patch: { wallType: 'nope' } }])).toThrow(/Unknown wall type/)
-    // Removed, the type leaves its walls as they were.
-    const removed = applyOps(typed, [{ op: 'remove_wall_type', id: 'outer' }])
-    expect(top(removed)).toMatchObject({ thickness: 335 })
-    expect(top(removed).wallType).toBeUndefined()
+  it('are drawn in its colour, cut at openings', () => {
+    // Three stretches: either side of the door and of the window.
+    expect(prims('top').map((p) => p.fill)).toEqual(['#efc7b4', '#efc7b4', '#efc7b4'])
   })
 
-  it('are drawn with their fill and a line between each layer, cut at openings', () => {
-    const prims = buildScene(typed, 'page_1', registry).find((item) => item.id === 'top')!.prims
-    expect(prims.filter((p) => p.kind === 'path' && p.closed).every((p) => p.fill === '#d6d3d1')).toBe(true)
-    const lines = prims.filter((p) => p.kind === 'path' && !p.closed && p.strokeWidth === 0.5)
-    // Two lines between three layers, each in three stretches: either side of the door and of the window.
-    expect(lines).toHaveLength(6)
-    // They stay inside the wall: 15 and 215 mm in from the face at y = -167.5 (the left of a wall drawn towards +x is up the sheet).
-    const levels = [...new Set(lines.map((p) => Math.round(boundsOf([p])!.minY * 10) / 10))].sort((a, b) => a - b)
-    expect(levels).toEqual([-152.5, 47.5].map((y) => -y).sort((a, b) => a - b))
-  })
-
-  it('define only what they give a value to, and a wall may still say otherwise', () => {
-    // A type that is no more than a material and a look: it leaves thickness and height to each wall.
-    const doc = applyOps(room, [
-      { op: 'add_wall_type', wallType: { id: 'board', name: 'Plasterboard', stroke: '#b91c1c', strokeWidth: 2, height: 2400, layers: [{ name: 'Gypsum board' }] } },
-      { op: 'update_node', id: 'top', patch: { wallType: 'board' } },
-      { op: 'update_node', id: 'left', patch: { wallType: 'board', height: 1000, style: { stroke: '#000000' } } },
-    ])
-    expect(doc.wallTypes!.board.thickness).toBeUndefined()
-    expect(top(doc).thickness).toBe(200)
-    const outline = (id: string) => buildScene(doc, 'page_1', registry).find((item) => item.id === id)!.prims.find((p) => p.kind === 'path' && p.closed)!
-    // The outline follows the type; a wall with a colour of its own keeps it, and still takes the weight.
-    expect(outline('top')).toMatchObject({ stroke: '#b91c1c', strokeWidth: 2 })
-    expect(outline('left')).toMatchObject({ stroke: '#000000', strokeWidth: 2 })
-    expect(outline('right')).toMatchObject({ strokeWidth: 1 })
-    // Heights: the type's, unless the wall has its own; a wall of no type has none here.
-    const q = quantities(doc, 'page_1', registry)
-    expect(q.walls.map((w) => w.height)).toEqual([2.4, null, null, 1])
-    expect(q.types[0]).toMatchObject({ name: 'Plasterboard', thickness: null, layers: [{ name: 'Gypsum board', thickness: null, volume: null }] })
-  })
-
-  it('are added up in the quantities, layer by layer', () => {
-    const q = quantities(typed, 'page_1', registry)
-    expect(q.walls[0]).toMatchObject({ type: 'Outer wall', thickness: 335, net: 8.7 })
-    expect(q.types).toEqual([
-      {
-        name: 'Outer wall',
-        thickness: 335,
-        length: 5,
-        net: 8.7,
-        // 8.7 m² of a wall 335 mm thick.
-        volume: q.walls[0].volume,
-        layers: [
-          { name: 'Plaster', thickness: 15, area: 8.7, volume: 0.131 },
-          { name: 'Brick', thickness: 200, area: 8.7, volume: 1.74 },
-          { name: 'Insulation', thickness: 120, area: 8.7, volume: 1.044 },
-        ],
-      },
-    ])
-    expect(q.walls[0].volume).toBeCloseTo(2.9145, 2)
-    expect(quantitiesCsv(q)).toContain('Outer wall,Brick,200,,8.7,1.74')
+  it('are counted under it, at their thickness', () => {
+    const q = quantities(made, 'page_1', registry)
+    expect(q.walls.map((w) => w.material)).toEqual(['Brick', '', '', ''])
+    expect(q.materials).toContainEqual(expect.objectContaining({ material: 'Brick', thickness: q.walls[0].thickness, length: 5, area: q.walls[0].net }))
+    const csv = quantitiesCsv(q)
+    expect(csv).toContain(`,Brick,5,${q.walls[0].thickness},`)
+    expect(csv).toContain('Walls by material')
   })
 })
 

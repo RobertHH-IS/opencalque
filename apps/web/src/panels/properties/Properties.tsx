@@ -1,19 +1,24 @@
-import { type NodeOf, childrenOf, rootOf, layersOf, type Node, type Op, roomAt, wallEndsAt, TEXT_FIELDS } from '@opencalque/core'
+import { type NodeOf, boundsOf, childrenOf, nodePrimitives, componentUses, rootOf, layersOf, type Node, type Op, roomAt, wallEndsAt, TEXT_FIELDS } from '@opencalque/core'
+import { swapSelectedComponent } from '../../actions'
+import { EntryChoice } from '../../EntryChoice'
+import { entryOf, isModel } from '../../entries'
 import { executeById } from '../../commands'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { applyCalibration } from '../../floorplan'
 import { language, t } from '../../i18n'
 import { editComponent } from '../../navigation'
+import { registry } from '../../extensions'
 import { apply, useStore } from '../../store'
 import { toast } from '../../windows'
 import { Field, labelOf, Section } from '../../ui'
-import { parseLength, unit } from '../../units'
+import { formatLength, parseLength, unit } from '../../units'
 import { Sections, type Update } from './FieldRow'
-import { AnnotationTool, DimensionTool, SelectedDimensionStyle } from './dimensions'
+import { AnnotationTool, DimensionTool, GridlineTool, SelectedDimensionStyle } from './dimensions'
 import { commonFields, FIELD_NAMES, fieldsOf, SHEET_FIELDS } from './fields'
 import { ModifierStack } from './modifiers'
 import { PaperSheet } from './paper'
-import { CornerPanel, WallCurve, WallEnds, WallLine, WallTypeChoice } from './walls'
+import { CornerPanel, WallCurve, WallEnds, WallLine, WallMaterial } from './walls'
+import { TableSettings } from './tables'
 
 /* The Properties panel: what is selected, or the tool in use when nothing is. */
 
@@ -27,6 +32,31 @@ function RoomFacts({ node }: { node: Extract<Node, { type: 'room' }> }) {
     <>
       <p className="hint">{t('Floor area: {area} m², measured inside the walls.', { area })}</p>
       <p className="hint">{t('The room follows its walls. Drag its name to move it.')}</p>
+    </>
+  )
+}
+
+/**
+ * How wide and high the objects selected stand together, as the box drawn round them on the canvas.
+ * Shown only: scaling them would thicken their walls too, and stretching a plan is yet to be designed.
+ */
+function SelectionSize({ nodes }: { nodes: Node[] }) {
+  const doc = useStore((s) => s.doc)
+  const bounds = useMemo(() => {
+    const ctx = { doc, registry, depth: 0 }
+    return boundsOf(nodes.flatMap((node) => nodePrimitives(node, ctx)))
+  }, [doc, nodes.map((node) => node.id).join()])
+  if (!bounds) return null
+  return (
+    <>
+      <label className="field">
+        <span>{t('Width')}</span>
+        <output>{formatLength(bounds.maxX - bounds.minX)}</output>
+      </label>
+      <label className="field">
+        <span>{t('Height')}</span>
+        <output>{formatLength(bounds.maxY - bounds.minY)}</output>
+      </label>
     </>
   )
 }
@@ -59,6 +89,7 @@ function Selection({ nodes }: { nodes: Node[] }) {
             </select>
           </label>
         )}
+        {!single && <SelectionSize nodes={nodes} />}
         {/* Stacking, aligning and spacing are in the toolbar's Arrange menu, not here. */}
         {single && node.type === 'paper' && (
           <>
@@ -66,11 +97,12 @@ function Selection({ nodes }: { nodes: Node[] }) {
             <Field label={t('Position Y')} numeric length value={node.y} onCommit={(y) => update(() => ({ y }))} />
           </>
         )}
-        {nodes.every((n) => n.type === 'wall') && <WallTypeChoice walls={nodes as Extract<Node, { type: 'wall' }>[]} />}
+        {nodes.every((n) => n.type === 'wall') && <WallMaterial walls={nodes as NodeOf<'wall'>[]} />}
         {nodes.every((n) => n.type === 'wall') && <WallLine walls={nodes as NodeOf<'wall'>[]} />}
         {nodes.every((n) => n.type === 'dimension') && <SelectedDimensionStyle dimensions={nodes as NodeOf<'dimension'>[]} />}
         {single && node.type === 'wall' && <WallEnds wall={node} />}
         {single && node.type === 'wall' && <WallCurve wall={node} />}
+        {single && node.type === 'table' && <TableSettings node={node} />}
         {single && node.type === 'paper' && <PaperSheet node={node} update={update} />}
         {single && node.type === 'room' && <RoomFacts node={node} />}
         {single && node.type === 'image' && (
@@ -89,6 +121,7 @@ function Selection({ nodes }: { nodes: Node[] }) {
             </button>
           </>
         )}
+        {nodes.every((n) => n.type === 'instance' || n.type === 'parametric') && <InstanceComponent instances={nodes as (NodeOf<'instance'> | NodeOf<'parametric'>)[]} />}
         {single && node.type === 'instance' && (
           <>
             <p className="hint">{t('It looks as its component does. Lines the component gives no colour take the colour of the layer it is placed on.')}</p>
@@ -193,6 +226,8 @@ export function Properties() {
           <DimensionTool />
         ) : tool === 'annotation' ? (
           <AnnotationTool />
+        ) : tool === 'gridline' ? (
+          <GridlineTool />
         ) : tool === 'paper' ? (
           <Section title={t('Paper tool')}>
             <p className="hint">{t('A paper is a sheet laid on the drawing, like a frame: it shows what goes on one page. Draw at real size; the scale of the paper sets how much of the drawing it covers.')}</p>
@@ -216,6 +251,32 @@ export function Properties() {
             </p>
           </Section>
         )}
+    </div>
+  )
+}
+
+/**
+ * What the selected placements are of (a component, or a model of parametric objects: `entries.ts`),
+ * to be made placements of another, each where it is, as it is turned. Inside a component, the
+ * components that would hold it are not offered.
+ */
+function InstanceComponent({ instances }: { instances: (NodeOf<'instance'> | NodeOf<'parametric'>)[] }) {
+  const doc = useStore((s) => s.doc)
+  const scope = useStore((s) => s.scope)
+  const placed = new Set(instances.map((instance) => entryOf(instance)))
+  const root = rootOf(doc, scope)
+  const one = placed.size === 1 ? [...placed][0] : null
+  return (
+    // Not a label: a label would hand every click to the button inside, opening its list again.
+    <div className="field">
+      <span>{t('Component')}</span>
+      <EntryChoice
+        label={t('Component')}
+        value={one ?? undefined}
+        mixed={placed.size > 1}
+        exclude={(entry) => !isModel(entry) && root?.type === 'component' && componentUses(doc, entry, root.id)}
+        pick={swapSelectedComponent}
+      />
     </div>
   )
 }

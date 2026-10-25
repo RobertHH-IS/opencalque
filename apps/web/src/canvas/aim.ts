@@ -7,6 +7,32 @@ import { round } from './shapes'
 
 /* Where a point lands for the pointer where it is: snapped to what is drawn or to the grid, or held to a direction. */
 
+/** How long, in ms, the pointer rests on a point for what is drawn after to line up with it. */
+const REST = 250
+/** How many points rested on are kept to line up with: one across, one up and down, and one more. */
+const TRACKED = 3
+
+/** The points the pointer rested on lately, the latest first: what is drawn lines up with them. Another tool forgets them. */
+export function trackedPoints(c: Canvas): Vec2[] {
+  const { tool } = get()
+  if (c.tracked.tool !== tool) c.tracked = { tool, points: [], resting: null }
+  return c.tracked.points
+}
+
+/**
+ * Follows where the pointer rests: a point (a corner, a middle, a crossing) snapped to for long
+ * enough is kept, once the pointer leaves it, to line up with. Only those: a point merely passed
+ * over is not, and lining up with every point of a plan would find a line almost anywhere.
+ */
+function rest(c: Canvas, hit: Snap | null): void {
+  const on = hit && (hit.kind === 'point' || hit.kind === 'middle' || hit.kind === 'crossing') ? hit.p : null
+  const { resting } = c.tracked
+  if (resting && on && dist(on, resting.p) < 1e-6) return
+  const now = performance.now()
+  if (resting && now - resting.since >= REST) c.tracked.points = [resting.p, ...trackedPoints(c).filter((q) => dist(q, resting.p) > 1e-6)].slice(0, TRACKED)
+  c.tracked.resting = on ? { p: on, since: now } : null
+}
+
 /** A point the pointer gives, what it was snapped to (shown by its mark), and the point it was taken from when that is elsewhere. */
 export interface Target {
   p: Vec2
@@ -15,8 +41,17 @@ export interface Target {
 }
 
 /**
+ * The point `t` along the way `dir` from `from`, the way gone tidied rather than the point: held
+ * level, it keeps the y of `from` exactly, upright its x, and at 45° goes as far across as down,
+ * whatever decimals `from` has (a traced plan's do). Tidying the point itself left it a hair off.
+ */
+const stepFrom = (from: Vec2, dir: Vec2, t: number): Vec2 => ({ x: from.x + round(dir.x * t), y: from.y + round(dir.y * t) })
+
+/**
  * Where a point lands after snapping: on what is drawn nearby (a point, the middle of a line, a
- * crossing, the foot of a perpendicular from `from`, or the line itself), else on the grid.
+ * crossing, the foot of a perpendicular from `from`, a place upright from one point and level with
+ * another, of those the pointer rested on and `from`, the line itself, or upright or level with
+ * one of them), else on the grid.
  * Shift holds it to 45° steps from `from`, where it still lines up with what is drawn
  * (`heldLine`); Alt turns snapping off.
  */
@@ -35,11 +70,15 @@ export function snap(c: Canvas, world: Vec2, e: Keys, exclude: string[], from?: 
     return measuring ? heldMeasure(c, world, from, angle, exclude) : heldLine(c, world, from, angle, exclude)
   }
   const gridded = { x: Math.round(world.x / step) * step, y: Math.round(world.y / step) * step }
-  const hit = snapToObjects ? snapTo(c.scene, world, SNAP_REACH / zoom, { exclude, from, gridded: onGrid ? gridded : undefined }) : null
+  const hit = snapToObjects ? snapTo(c.scene, world, SNAP_REACH / zoom, { exclude, from, gridded: onGrid ? gridded : undefined, aligners: trackedPoints(c) }) : null
+  rest(c, hit)
   if (hit) {
-    // A point of an object is taken exactly as it is; a place worked out on a line is tidied.
-    const p = hit.kind === 'point' ? hit.p : { x: round(hit.p.x), y: round(hit.p.y) }
-    return { p, marker: { p, kind: hit.kind } }
+    // A point of an object is taken exactly as it is, and so is what a place lined up with points
+    // takes from them (level with one: its y; upright from one: its x), or it would be a hair off
+    // level; the rest of a place worked out on a line is tidied.
+    const from = (axis: 'x' | 'y') => (hit.kind === 'aligned' && hit.guides?.some(([q]) => q[axis] === hit.p[axis]) ? hit.p[axis] : round(hit.p[axis]))
+    const p = hit.kind === 'point' ? hit.p : { x: from('x'), y: from('y') }
+    return { p, marker: { p, kind: hit.kind, ...(hit.guides ? { guides: hit.guides } : {}) } }
   }
   return { p: onGrid ? gridded : world, marker: null }
 }
@@ -56,7 +95,7 @@ function heldMeasure(c: Canvas, world: Vec2, from: Vec2, angle: number, exclude:
   const { zoom } = get().view
   const dir = { x: Math.cos(angle), y: Math.sin(angle) }
   const along = (q: Vec2) => (q.x - from.x) * dir.x + (q.y - from.y) * dir.y
-  const at = (t: number) => ({ x: round(from.x + dir.x * t), y: round(from.y + dir.y * t) })
+  const at = (t: number) => stepFrom(from, dir, t)
   const pointed = along(world)
   if (usePrefs.getState().snapToObjects) {
     // A place merely somewhere along a line is not something pointed at; a point, a middle or a crossing is.
@@ -136,7 +175,7 @@ export function alongLine(c: Canvas, world: Vec2, from: Vec2, angle: number, exc
     ]
     for (const line of lines) for (let i = 0; i + 1 < line.length; i++) cross(line[i], line[i + 1])
   }
-  const p = { x: round(from.x + dir.x * length), y: round(from.y + dir.y * length) }
+  const p = stepFrom(from, dir, length)
   return { p, marker: crossing ? { p, kind: 'crossing' } : null }
 }
 
@@ -152,10 +191,30 @@ function heldLine(c: Canvas, world: Vec2, from: Vec2, angle: number, exclude: st
   const pointed = snap(c, world, { altKey: false, shiftKey: false }, exclude).marker
   if (pointed && pointed.kind !== 'edge') {
     const t = (pointed.p.x - from.x) * dir.x + (pointed.p.y - from.y) * dir.y
-    const p = { x: round(from.x + dir.x * t), y: round(from.y + dir.y * t) }
+    const p = stepFrom(from, dir, t)
     return { p, marker: pointed, ...(dist(p, pointed.p) > 1e-6 ? { link: [pointed.p, p] as [Vec2, Vec2] } : {}) }
   }
   return alongLine(c, world, from, angle, exclude)
+}
+
+/** A line a point may be held to by Shift: through `at`, at `angle` (radians). */
+export interface Held {
+  at: Vec2
+  angle: number
+}
+
+/** The lines through a point level, upright and at 45°. */
+export const squareFrom = (at: Vec2): Held[] => [0, 1, 2, 3].map((k) => ({ at, angle: (k * Math.PI) / 4 }))
+
+/**
+ * Of the lines a point may be held to, the one nearest the pointer, and where the point goes on it
+ * (`alongLine`): Shift keeps an end on its own line, or brings it level, upright or at 45° with
+ * the point it is measured from, whichever the pointer is nearer.
+ */
+export function heldNearest(c: Canvas, world: Vec2, lines: Held[], exclude: string[]): { line: Held; target: Target } {
+  const off = (line: Held) => Math.abs((world.x - line.at.x) * Math.sin(line.angle) - (world.y - line.at.y) * Math.cos(line.angle))
+  const line = lines.reduce((best, one) => (off(one) < off(best) - 1e-9 ? one : best))
+  return { line, target: alongLine(c, world, line.at, line.angle, exclude) }
 }
 
 /**

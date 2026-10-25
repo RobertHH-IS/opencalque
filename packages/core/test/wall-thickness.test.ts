@@ -75,11 +75,6 @@ describe('changing the thickness of a wall from one face', () => {
     expect(get(doc, 'left')).toEqual(get(house, 'left'))
   })
 
-  it('makes the thickness of a typed wall an exception to its type', () => {
-    const typed = applyOps(createDocument(), [{ op: 'add_wall_type', wallType: { id: 'brick', name: 'Brick', thickness: 200 } } as Op, wall('w', 0, 0, 4000, 0, { wallType: 'brick' })])
-    expect(get(thicken(typed, 'w', 300, 'right'), 'w')).toMatchObject({ thickness: 300, overrides: ['thickness'] })
-  })
-
   it('keeps the centre of a curved wall, and the face that stays on its circle', () => {
     const start = applyOps(createDocument(), [wall('arc', 0, 0, 4000, 0, { bulge: 1000 })])
     const before = wallArc(get(start, 'arc'))!

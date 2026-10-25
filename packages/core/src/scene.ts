@@ -1,6 +1,7 @@
 import { childrenOf, isLocked, isVisible } from './document'
 import { boundsContain, boundsContainPoint, unionBounds, type Bounds, type Vec2 } from './geometry'
 import { drawnSolid, kindOf, nodePrimitives, objectBacking, PAPER_EDGE, PAPER_FILL } from './kinds'
+import { mergedOutlines } from './merge'
 import { distToPrimitive, insidePrimitive, primitiveBounds, type Primitive } from './primitives'
 import type { Registry } from './registry'
 import type { Document, Node } from './schema'
@@ -125,10 +126,14 @@ const SEAM = 0.8
 
 /**
  * The order in which to paint primitives, given bottom to top. Merged shapes (walls) are painted
- * together: all their outlines at double width, then all their fills, which hides the outline
- * segments that fall inside another. The fills are grown by a seam, and the outlines widened by as
- * much so they keep their weight. They go where the first of them is in the stacking order: what
- * is stacked under every wall is painted under them, the rest over them. Pictures keep their place
+ * together: their fills, grown by a seam so that two touching leave no hairline between them, with
+ * the patterns laid on them, then the outline of the whole, as plain lines centred on their edges
+ * with what lies inside the mass left out (`mergedOutlines`). A pattern is painted after the
+ * fills of its own key that follow it, so that walls of one material run on into each other with
+ * no seam across their hatch, but before the fill of any shape of another key stacked over it,
+ * which hides it as it should. They go where the first of
+ * them is in the stacking order: what is stacked under every wall is painted under them, the rest
+ * over them. Pictures keep their place
  * in the stacking order like anything else; one stacked under every floor, as a plan to trace is,
  * stays under the floors too.
  */
@@ -143,14 +148,31 @@ export function paintOrder(prims: Primitive[]): PaintStep[] {
   const images = prims.filter((p, i) => !p.backdrop && traced(p, i))
   const rest = prims.flatMap((p, i) => (!(p.kind === 'path' && p.union) && !p.backdrop && !traced(p, i) ? [{ p, under: i < first }] : []))
   const plain = (prim: Primitive): PaintStep => ({ prim, stroke: prim.kind !== 'image', fill: prim.kind !== 'image', widthScale: 1, widthExtra: 0, seam: 0 })
+  // The fills of the merged shapes, each pattern (which follows the shape it is laid on) kept back
+  // until a fill of another key comes, and painted under it.
+  const masses: PaintStep[] = []
+  let waiting: { key: string; prim: Primitive }[] = []
+  let key: string | undefined
+  for (const p of prims) {
+    if (isMerged(p)) {
+      key = (p as { union: string }).union
+      const shown = waiting.filter((one) => one.key !== key)
+      if (shown.length > 0) {
+        masses.push(...shown.map((one) => plain(one.prim)))
+        waiting = waiting.filter((one) => one.key === key)
+      }
+      masses.push({ prim: p, stroke: false, fill: true, widthScale: 1, widthExtra: 0, seam: SEAM })
+    } else if (p.merged && !p.backdrop && key !== undefined) waiting.push({ key, prim: p })
+  }
+  masses.push(...waiting.map((one) => plain(one.prim)))
   return [
     // Sheets of paper lie under everything that is drawn on them.
     ...backdrops.map(plain),
     ...images.map(plain),
     ...floors.map(plain),
     ...rest.filter((one) => one.under).map((one) => plain(one.p)),
-    ...merged.map((prim) => ({ prim, stroke: true, fill: false, widthScale: 2, widthExtra: SEAM, seam: 0 })),
-    ...merged.map((prim) => ({ prim, stroke: false, fill: true, widthScale: 1, widthExtra: 0, seam: SEAM })),
-    ...rest.filter((one) => !one.under).map((one) => plain(one.p)),
+    ...masses,
+    ...mergedOutlines(merged).map(plain),
+    ...rest.filter((one) => !one.under && !one.p.merged).map((one) => plain(one.p)),
   ]
 }

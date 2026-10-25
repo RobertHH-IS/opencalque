@@ -113,6 +113,8 @@ export interface Overlay {
   marker?: (Snap & { label?: string }) | null
   /** From what the pointer is on to where the line being drawn ends, when that end is only level with it. */
   link?: [Vec2, Vec2]
+  /** The points the pointer rested on, which what is drawn lines up with: each a small cross. */
+  tracked?: Vec2[]
   /** While something is moved: where it lines up with other things, and the gaps it keeps equal. */
   smart?: MoveGuides
   /** A line of a wall pointed at in the properties panel, in world coordinates. */
@@ -156,7 +158,26 @@ export interface Overlay {
   angleReading?: { vertex: Vec2; a?: Vec2; b?: Vec2; label?: string }
   /** The line something is being kept on while it is dragged: through a point, at an angle in radians, shown across the whole view. */
   guide?: { at: Vec2; angle: number }
+  /** What the ends of the selected walls are joined to, and the walls joined to them (`WallLinks`). */
+  wallLinks?: WallLinks | null
 }
+
+/** Ends of selected walls are shown as joined or not for at most this many walls: past that, the marks would hide the plan. */
+export const MAX_LINKED_WALLS = 50
+
+/**
+ * The ends of the selected walls, each with what it is to the other walls there: `joined` to one
+ * or more, `apart` (it touches some without being joined: it was set loose, or it is a lining that
+ * stops against a wall), `near` the end of another without being at it (that end at `near`), or
+ * `free`. And the walls joined to them that are not selected, by id, to light up faintly.
+ */
+export interface WallLinks {
+  ends: { at: Vec2; kind: 'joined' | 'apart' | 'near' | 'free'; near?: Vec2 }[]
+  joined: string[]
+}
+
+/** The colour of an end that nearly meets another without being joined to it: something to look at. */
+const NEARLY = '#f59e0b'
 
 /** The angle at `vertex` between the directions to `a` and to `b`, in degrees from 0 to 180, to one decimal. */
 export function angleBetween(vertex: Vec2, a: Vec2, b: Vec2): number {
@@ -350,6 +371,19 @@ export function drawScene(
   world()
   for (const step of steps) if (step.prim.backdrop !== true) paint(ctx, step, view.zoom, palette.ink)
 
+  // The walls joined to the selected ones, faintly: what follows when their corners are moved.
+  if (overlay.wallLinks && overlay.wallLinks.joined.length > 0) {
+    ctx.globalAlpha = 0.5
+    for (const item of scene) {
+      if (!overlay.wallLinks.joined.includes(item.id)) continue
+      for (const prim of item.prims) {
+        if (prim.kind !== 'path' || prim.texture || prim.stroke === 'none') continue
+        paint(ctx, { prim: { ...prim, stroke: ACCENT, strokeWidth: 1, dash: [4, 3] }, stroke: true, fill: false, widthScale: 1, widthExtra: 0, seam: 0 }, view.zoom)
+      }
+    }
+    ctx.globalAlpha = 1
+  }
+
   const selected = scene.filter((item) => selection.includes(item.id))
   for (const item of selected) {
     for (const prim of item.prims) {
@@ -423,6 +457,42 @@ export function drawScene(
     ctx.fill()
     ctx.stroke()
   }
+  // The ends of the selected walls, over their handles: filled where joined to another wall, struck
+  // through where touching one without being joined, and in orange, tied by a dotted line to the
+  // end it nearly meets, where they are a few millimetres apart. A free end keeps its plain handle.
+  for (const end of overlay.wallLinks?.ends ?? []) {
+    if (end.kind === 'free') continue
+    const p = toScreen(end.at)
+    ctx.setLineDash([])
+    if (end.kind === 'near' && end.near) {
+      const q = toScreen(end.near)
+      ctx.strokeStyle = NEARLY
+      ctx.lineWidth = 1.5
+      ctx.setLineDash([2, 2])
+      ctx.beginPath()
+      ctx.moveTo(p.x, p.y)
+      ctx.lineTo(q.x, q.y)
+      ctx.stroke()
+      ctx.setLineDash([])
+      ctx.beginPath()
+      ctx.arc(q.x, q.y, 3.5, 0, Math.PI * 2)
+      ctx.stroke()
+    }
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2)
+    ctx.fillStyle = end.kind === 'joined' ? ACCENT : end.kind === 'near' ? NEARLY : '#ffffff'
+    ctx.strokeStyle = end.kind === 'apart' ? ACCENT : '#ffffff'
+    ctx.lineWidth = 1.5
+    ctx.fill()
+    ctx.stroke()
+    if (end.kind === 'apart') {
+      ctx.beginPath()
+      ctx.moveTo(p.x - 3.5, p.y + 3.5)
+      ctx.lineTo(p.x + 3.5, p.y - 3.5)
+      ctx.stroke()
+    }
+  }
+  ctx.strokeStyle = ACCENT
   ctx.lineWidth = 1
   if (overlay.marquee) {
     const a = toScreen(overlay.marquee.a)
@@ -776,6 +846,20 @@ export function drawScene(
     ctx.arc(b.x, b.y, 3, 0, Math.PI * 2)
     ctx.fill()
   }
+  if (overlay.tracked) {
+    ctx.strokeStyle = SNAP
+    ctx.lineWidth = 1
+    ctx.setLineDash([])
+    ctx.beginPath()
+    for (const q of overlay.tracked) {
+      const p = toScreen(q)
+      ctx.moveTo(p.x - 4, p.y)
+      ctx.lineTo(p.x + 4, p.y)
+      ctx.moveTo(p.x, p.y - 4)
+      ctx.lineTo(p.x, p.y + 4)
+    }
+    ctx.stroke()
+  }
   if (overlay.marker) {
     const p = toScreen(overlay.marker.p)
     ctx.strokeStyle = SNAP
@@ -783,8 +867,15 @@ export function drawScene(
     ctx.setLineDash([])
     ctx.beginPath()
     // Each kind of snap has its sign, as in drafting programs: a square on a point, a triangle on
-    // a middle, a cross where lines cross, a square corner for a perpendicular, a diamond on a line.
+    // a middle, a cross where lines cross, a square corner for a perpendicular, a diamond on a
+    // line, an upright cross where it lines up with points around.
     switch (overlay.marker.kind) {
+      case 'aligned':
+        ctx.moveTo(p.x, p.y - 6)
+        ctx.lineTo(p.x, p.y + 6)
+        ctx.moveTo(p.x - 6, p.y)
+        ctx.lineTo(p.x + 6, p.y)
+        break
       case 'middle':
         ctx.moveTo(p.x, p.y - 6)
         ctx.lineTo(p.x + 6, p.y + 5)

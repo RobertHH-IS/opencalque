@@ -5,7 +5,7 @@ import { apply, selectCorner, useStore } from '../store'
 import { toast } from '../windows'
 import { dimensionToolLook } from './edit'
 
-/* What is done to the selected walls: dimension them, split one, extend or trim them. */
+/* What is done to the selected walls: dimension them, split one, extend or trim them, turn them round. */
 
 const get = useStore.getState
 

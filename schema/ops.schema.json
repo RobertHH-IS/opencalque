@@ -183,26 +183,13 @@
           "op": {
             "type": "string",
             "const": "add_wall_type"
-          },
-          "wallType": {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "name"
-            ],
-            "additionalProperties": {}
           }
         },
         "required": [
-          "op",
-          "wallType"
+          "op"
         ],
-        "additionalProperties": false,
-        "description": "Adds a wall type: a name and whichever of thickness, height, fill, stroke, strokeWidth, dash and layers it defines. Walls take it with \"wallType\": \"<id>\"."
+        "additionalProperties": {},
+        "description": "Refused since format 2, which took wall types out: a wall carries what it is made of itself."
       },
       {
         "type": "object",
@@ -210,26 +197,13 @@
           "op": {
             "type": "string",
             "const": "update_wall_type"
-          },
-          "id": {
-            "type": "string"
-          },
-          "patch": {
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {},
-            "description": "Shallow merge patch: each key replaces that property, and a null value removes it."
           }
         },
         "required": [
-          "op",
-          "id",
-          "patch"
+          "op"
         ],
-        "additionalProperties": false,
-        "description": "Changes a wall type; every wall of that type follows, except where it has a value of its own. A null in the patch makes the type stop defining that property."
+        "additionalProperties": {},
+        "description": "Refused since format 2, which took wall types out: a wall carries what it is made of itself."
       },
       {
         "type": "object",
@@ -237,17 +211,13 @@
           "op": {
             "type": "string",
             "const": "remove_wall_type"
-          },
-          "id": {
-            "type": "string"
           }
         },
         "required": [
-          "op",
-          "id"
+          "op"
         ],
-        "additionalProperties": false,
-        "description": "Removes a wall type. Its walls stay as they are, of no type."
+        "additionalProperties": {},
+        "description": "Refused since format 2, which took wall types out: a wall carries what it is made of itself."
       },
       {
         "type": "object",
@@ -320,6 +290,78 @@
         ],
         "additionalProperties": false,
         "description": "Removes a dimension style. Its dimensions keep how they look: what the style gave them becomes their own."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "add_material"
+          },
+          "material": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": {}
+          }
+        },
+        "required": [
+          "op",
+          "material"
+        ],
+        "additionalProperties": false,
+        "description": "Adds a material: a name, and the fill and pattern it is drawn with. Walls and the floors of rooms take it with \"material\": \"<id>\"."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "update_material"
+          },
+          "id": {
+            "type": "string"
+          },
+          "patch": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {},
+            "description": "Shallow merge patch: each key replaces that property, and a null value removes it."
+          }
+        },
+        "required": [
+          "op",
+          "id",
+          "patch"
+        ],
+        "additionalProperties": false,
+        "description": "Changes a material; every wall and floor made of it follows. A null in the patch removes that property."
+      },
+      {
+        "type": "object",
+        "properties": {
+          "op": {
+            "type": "string",
+            "const": "remove_material"
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "id"
+        ],
+        "additionalProperties": false,
+        "description": "Removes a material. Walls made of it are of the default material after; floors made of it keep its colour and pattern as their own. The default material cannot be removed."
       },
       {
         "type": "object",

@@ -185,7 +185,7 @@ export const exportDxf = (container?: string) =>
 
 /**
  * Exports what a page holds as a table for a spreadsheet: rooms and their areas, walls with their
- * lengths and faces, doors and windows by kind, wall types layer by layer. It is written the way
+ * lengths and faces, doors and windows by kind, floors and walls by material, the objects placed. It is written the way
  * spreadsheets expect where the app's language is spoken: with a decimal comma, cells are
  * separated by semicolons.
  */
@@ -201,10 +201,12 @@ export const exportQuantities = (pageId?: string) =>
       rooms: t('Rooms'),
       walls: t('Walls'),
       openings: t('Doors and windows'),
-      types: t('Wall types'),
-      layer: t('Layer of the wall'),
+      floors: t('Floors'),
+      materials: t('Walls by material'),
+      objects: t('Objects'),
+      material: t('Material'),
+      none: '—',
       name: t('Name'),
-      type: t('Type'),
       kind: t('Kind'),
       count: t('Count'),
       total: t('Total'),

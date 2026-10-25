@@ -1,4 +1,4 @@
-import { type Document, lengthOf, type Node, resolveColor, DEFAULT_INK, type WallType, type Pattern, wallLength, turnToOps } from '@opencalque/core'
+import { type Document, lengthOf, newId, type Node, type NodeOf, resolveColor, DEFAULT_INK, type Op, type Pattern, wallEndsOf, wallLength, turnToOps } from '@opencalque/core'
 import { useState } from 'react'
 import { Pipette, Link2, Undo2, SquareSplitHorizontal } from 'lucide-react'
 import { msg, t } from '../../i18n'
@@ -6,9 +6,11 @@ import { registry } from '../../extensions'
 import { apply, setTool, useStore } from '../../store'
 import { ColorChoice, type LayerOption } from '../../ColorChoice'
 import { FillChoice, type FillChange } from '../../FillChoice'
+import { MaterialChoice, type MaterialOption } from '../../MaterialChoice'
+import { showPanel } from '../../dock'
 import { WeightChoice } from '../../WeightChoice'
-import { DashPicker, Field, IconButton, OpacitySlider, Section } from '../../ui'
-import { formatLength } from '../../units'
+import { DashPicker, Field, IconButton, OpacitySlider, Section, YesNo } from '../../ui'
+import { formatAngle, formatLength } from '../../units'
 import { GEOMETRY, LOOK_SECTIONS, STROKE, type FieldSpec, type Option } from './fields'
 import { WallEdges } from './walls'
 
@@ -109,6 +111,26 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
       </div>
     )
   }
+  if (field.material) {
+    // A floor's material, picked by its swatch; a new one is made of the floors selected.
+    const options = field.options!.map(({ value: id, label }): MaterialOption => {
+      const material = id ? doc.materials?.[id] : undefined
+      return { id, name: material ? material.name : t(label), fill: material ? (material.fill ?? '#ffffff') : 'none', pattern: material?.pattern }
+    })
+    const create = (name: string) => {
+      const id = newId('material')
+      const count = Object.keys(doc.materials ?? {}).length
+      apply([{ op: 'add_material', material: { id, name: name || t('Material {n}', { n: count + 1 }), fill: '#e7e5e4' } }, ...nodes.map((n): Op => ({ op: 'update_node', id: n.id, patch: { material: id } }))])
+      showPanel('materials')
+    }
+    // Not a label: a label would hand every click to the button inside, opening its list again.
+    return (
+      <div className="field">
+        <span>{t(field.label)}</span>
+        <MaterialChoice label={t(field.label)} value={mixed ? undefined : ((value as string | undefined) ?? '')} mixed={mixed} options={options} pick={(id) => commit(id || undefined)} create={create} />
+      </div>
+    )
+  }
   if (field.ends) {
     // Not a label: a label would hand every click to the first button in it.
     return (
@@ -120,20 +142,11 @@ export function FieldRow({ node, nodes, field, update }: { node: Node; nodes: No
   }
   // A colour's row, or a weight's, is not a label: a label hands every click on it to the button
   // inside, which would open its window again just as a click there closed it.
-  const Row = field.type === 'color' || field.type === 'weight' || field.type === 'opacity' ? 'div' : 'label'
+  const Row = field.type === 'color' || field.type === 'weight' || field.type === 'opacity' || field.type === 'boolean' ? 'div' : 'label'
   return (
     <Row className="field">
       <span>{t(field.label)}</span>
-      {field.type === 'boolean' && (
-        <input
-          type="checkbox"
-          checked={value === true}
-          ref={(box) => {
-            if (box) box.indeterminate = mixed
-          }}
-          onChange={(e) => commit(e.target.checked)}
-        />
-      )}
+      {field.type === 'boolean' && <YesNo value={mixed ? undefined : value === true} label={t(field.label)} onChange={commit} />}
       {field.type === 'opacity' && (
         // Fully opaque is said by saying nothing.
         <OpacitySlider value={mixed ? undefined : (value as number)} onChange={(next) => commit(next >= 1 ? undefined : next)} />
@@ -178,79 +191,30 @@ function layerChoice(doc: Document, nodes: Node[], field: FieldSpec): LayerOptio
   return { color: resolveColor(doc, layers[0]!.color) ?? DEFAULT_INK, several: layers.some((layer) => layer !== layers[0]), byDefault: field.unset === 'from layer' }
 }
 
-/** What a wall type says for a property of a wall, by the path of that property; undefined when it leaves it to the wall. */
-function typeValue(type: WallType, path: string): unknown {
-  switch (path) {
-    case 'thickness':
-      return type.thickness
-    case 'height':
-      return type.height
-    case 'style.fill':
-      return type.fill
-    case 'style.stroke':
-      return type.stroke
-    case 'style.strokeWidth':
-      return type.strokeWidth
-    case 'style.dash':
-      return type.dash
-  }
-  return undefined
-}
-
 /**
- * A property row that knows about wall types and dimension styles. For a wall whose type, or a
- * dimension whose style, defines the property, the row shows that value with a small link, as
- * something the object takes rather than has. It may still be given a value of its own: the row is
- * then marked as an exception, with a button that gives the property back to the type or style.
+ * A property row that knows about dimension styles. For a dimension whose style defines the
+ * property, the row shows that value with a small link, as something the dimension takes rather
+ * than has. It may still be given a value of its own: the row is then marked as an exception, with
+ * a button that gives the property back to the style.
  */
 function TypedRow(props: { node: Node; nodes: Node[]; field: FieldSpec; update: Update }) {
   const { node, nodes, field, update } = props
-  const types = useStore((s) => s.doc.wallTypes)
   const styles = useStore((s) => s.doc.dimensionStyles)
-  const type = nodes.length === 1 && node.type === 'wall' && node.wallType ? types?.[node.wallType] : undefined
   const style = nodes.length === 1 && node.type === 'dimension' && node.dimensionStyle ? styles?.[node.dimensionStyle] : undefined
-  if (field.type === 'fill') return <TypedFill {...props} type={type} />
-  const fromType = type ? typeValue(type, field.path) : style ? read(style, field.path) : undefined
-  if (fromType === undefined) return <FieldRow {...props} />
-  const thickness = node.type === 'wall' && field.path === 'thickness'
-  const own = thickness ? (node.overrides ?? []).includes('thickness') : read(node, field.path) !== undefined
-  // Giving it back: the thickness by taking it off the list of exceptions, the others by having none of their own.
-  const giveBack = () => update((n) => (thickness ? { overrides: null } : patchFor(n, field.path, undefined)))
+  const fromStyle = style ? read(style, field.path) : undefined
+  if (fromStyle === undefined) return <FieldRow {...props} />
+  const own = read(node, field.path) !== undefined
+  // Giving it back: by having no value of its own.
+  const giveBack = () => update((n) => patchFor(n, field.path, undefined))
   return (
     <div className={`typed-row${own ? ' own' : ''}`}>
-      <FieldRow {...props} field={own ? field : { ...field, fallback: fromType as FieldSpec['fallback'], unset: style ? msg('from its style') : msg('from its type') }} />
+      <FieldRow {...props} field={own ? field : { ...field, fallback: fromStyle as FieldSpec['fallback'], unset: msg('from its style') }} />
       {own ? (
-        <IconButton title={style ? t('Differs from its dimension style. Click to take the style’s value again') : t('Differs from its wall type. Click to take the type’s value again')} onClick={giveBack}>
+        <IconButton title={t('Differs from its dimension style. Click to take the style’s value again')} onClick={giveBack}>
           <Undo2 size={12} />
         </IconButton>
       ) : (
-        <i className="typed-mark" title={style ? t('From its dimension style: change it there, or set a value here to make an exception') : t('From its wall type: change it there, or type a value here to make an exception')}>
-          <Link2 size={11} />
-        </i>
-      )}
-    </div>
-  )
-}
-
-/**
- * The fill of a wall whose type defines its colour or its pattern, as `TypedRow` shows any other
- * property: what comes from the type is shown as such, and a fill of its own is an exception, with
- * a button that gives the fill back to the type.
- */
-function TypedFill(props: { node: Node; nodes: Node[]; field: FieldSpec; update: Update; type: WallType | undefined }) {
-  const { node, field, update, type } = props
-  if (!type || (type.fill === undefined && type.pattern === undefined)) return <FieldRow {...props} />
-  const own = (type.fill !== undefined && node.style?.fill !== undefined) || (type.pattern !== undefined && node.style?.pattern !== undefined)
-  const giveBack = () => update((n) => fillPatch(n, { ...(type.fill === undefined ? {} : { fill: undefined }), ...(type.pattern === undefined ? {} : { pattern: undefined }) }))
-  return (
-    <div className={`typed-row${own ? ' own' : ''}`}>
-      <FieldRow {...props} field={{ ...field, inherited: { fill: type.fill, pattern: type.pattern }, unset: msg('from its type') }} />
-      {own ? (
-        <IconButton title={t('Differs from its wall type. Click to take the type’s value again')} onClick={giveBack}>
-          <Undo2 size={12} />
-        </IconButton>
-      ) : (
-        <i className="typed-mark" title={t('From its wall type: change it there, or type a value here to make an exception')}>
+        <i className="typed-mark" title={t('From its dimension style: change it there, or set a value here to make an exception')}>
           <Link2 size={11} />
         </i>
       )}
@@ -339,14 +303,115 @@ export function Sections({ node, nodes = [node], fields, update, pick }: { node:
               <TypedRow key={field.path} node={node} nodes={nodes} field={field} update={update} />
             ))}
           {title === STROKE && wall && split && <WallEdges wall={wall} />}
-          {title === GEOMETRY && nodes.length === 1 && 'a' in node && (
-            <label className="field">
-              <span>{t('Length')}</span>
-              <output>{formatLength(node.type === 'wall' ? wallLength(node) : lengthOf(node))}</output>
-            </label>
-          )}
+          {title === GEOMETRY && nodes.length === 1 && 'a' in node && <LengthRow node={node} />}
+          {title === GEOMETRY && nodes.length === 1 && (node.type === 'wall' || node.type === 'line') && <AngleRow node={node} />}
         </Section>
       ))}
+    </>
+  )
+}
+
+/** How far off level or upright, in degrees, a line is said to be nearly so: further, the angle is meant. */
+const NEARLY = 1
+/**
+ * How far one end must be off the level or upright through the other, in mm, for the line to be
+ * said not quite so: less is the noise of working points out, which drawing tidies to 0.001 mm.
+ */
+const DRIFT = 0.005
+
+type Straight = Extract<Node, { a: unknown; b: unknown }>
+
+/**
+ * The end that stays where it is when a line or a wall is turned or made longer: its start, unless
+ * only its start is free, so as not to move the walls that meet it at its end.
+ */
+function keptEnd(doc: Document, node: Straight): 'a' | 'b' {
+  return node.type === 'wall' && wallEndsOf(doc, node, 'a').length === 1 && wallEndsOf(doc, node, 'b').length > 1 ? 'b' : 'a'
+}
+
+/** What else moves with the end of a line that moves: for a wall, the walls joined there. */
+function endsMoving(doc: Document, node: Straight, end: 'a' | 'b') {
+  return node.type === 'wall' ? wallEndsOf(doc, node, end) : [{ wall: node, end }]
+}
+
+const tidy = (n: number) => Math.round(n * 1e6) / 1e6
+
+/**
+ * The length of a wall or a line, round the curve for a curved wall. Typed, or dragged, it makes it
+ * longer or shorter in its own direction, its kept end (`keptEnd`) where it is; a curved wall keeps
+ * its shape, bowing out in proportion. The walls that meet the end that moves follow it.
+ */
+function LengthRow({ node }: { node: Straight }) {
+  const measure = (n: Straight) => (n.type === 'wall' ? wallLength(n) : lengthOf(n))
+  const length = measure(node)
+  // A line of no length has no direction to grow in.
+  if (lengthOf(node) < 1e-6) {
+    return (
+      <label className="field">
+        <span>{t('Length')}</span>
+        <output>{formatLength(length)}</output>
+      </label>
+    )
+  }
+  const resize = (to: number) => {
+    // Read afresh: dragging the number writes many times.
+    const doc = useStore.getState().doc
+    const now = doc.nodes[node.id] as Straight | undefined
+    if (!now || !(to > 0)) return
+    const k = to / measure(now)
+    const kept = keptEnd(doc, now)
+    const moving = kept === 'a' ? 'b' : 'a'
+    const from = now[kept]
+    const p = { x: tidy(from.x + (now[moving].x - from.x) * k), y: tidy(from.y + (now[moving].y - from.y) * k) }
+    const bulge = now.type === 'wall' && now.bulge ? { bulge: tidy(now.bulge * k) } : {}
+    apply(endsMoving(doc, now, moving).map(({ wall, end }): Op => ({ op: 'update_node', id: wall.id, patch: { [end]: p, ...(wall.id === now.id ? bulge : {}) } })))
+  }
+  return <Field label={t('Length')} numeric length min={1} value={length} onCommit={resize} />
+}
+
+/** An angle of a few hundred-thousandths of a degree written so that it shows, rather than as 0. */
+const smallAngle = (degrees: number) => formatAngle(degrees, degrees >= 0.001 ? 3 : Math.min(8, 1 - Math.floor(Math.log10(degrees))))
+
+/**
+ * The direction of a wall or a line, counter-clockwise from the right as angles are drawn, to a
+ * thousandth of a degree, so that one a hair off level shows it; when it is nearly but not quite
+ * level or upright, a note says so with a button that sets it straight. Typed, or dragged with Alt
+ * by whole degrees, it turns about its start, its length kept, unless only its start is free: then
+ * about its end, so as not to move the walls that meet it there. The walls that meet the end that
+ * moves follow it, as when that end is dragged.
+ */
+function AngleRow({ node }: { node: NodeOf<'wall'> | NodeOf<'line'> }) {
+  const doc = useStore((s) => s.doc)
+  const d = { x: node.b.x - node.a.x, y: node.b.y - node.a.y }
+  const length = Math.hypot(d.x, d.y)
+  if (length < 1e-6) return null
+  const degrees = ((((Math.atan2(-d.y, d.x) * 180) / Math.PI) % 360) + 360) % 360
+  const shown = (Math.round(degrees * 1000) / 1000) % 360
+  const square = Math.round(degrees / 90) * 90
+  const off = Math.abs(degrees - square)
+  const kept = keptEnd(doc, node)
+  const moving = kept === 'a' ? 'b' : 'a'
+  const ends = endsMoving(doc, node, moving)
+  const turn = (to: number) => {
+    const angle = (to * Math.PI) / 180
+    const along = { x: length * Math.cos(angle), y: -length * Math.sin(angle) }
+    const from = node[kept]
+    const sign = kept === 'a' ? 1 : -1
+    // Level, the end takes the very y of the other; upright, its very x: tidied, it would be a hair off.
+    const p = { x: Math.abs(along.x) < 1e-9 ? from.x : tidy(from.x + sign * along.x), y: Math.abs(along.y) < 1e-9 ? from.y : tidy(from.y + sign * along.y) }
+    apply(ends.map(({ wall, end }): Op => ({ op: 'update_node', id: wall.id, patch: { [end]: p } })))
+  }
+  return (
+    <>
+      <Field label={t('Angle')} numeric value={shown} decimals={3} snap={1} onCommit={(to: number) => turn(to)} />
+      {length * Math.sin((off * Math.PI) / 180) >= DRIFT && off < NEARLY && (
+        <p className="hint warning">
+          {square % 180 === 0 ? t('Not quite level: {angle}° off', { angle: smallAngle(off) }) : t('Not quite upright: {angle}° off', { angle: smallAngle(off) })}{' '}
+          <button type="button" className="text-button" onClick={() => turn(square)}>
+            {t('Straighten')}
+          </button>
+        </p>
+      )}
     </>
   )
 }

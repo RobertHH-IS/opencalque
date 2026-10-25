@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, checkIntegrity, childrenOf, createDocument, FORMAT_VERSION, isOrderKey, NewerFormatError, parseDocument, readDocument, serializeDocument, unknownProperties, type Document, type Op } from '../src'
+import { applyOps, checkIntegrity, childrenOf, createDocument, FORMAT_VERSION, isOrderKey, NewerFormatError, parseDocument, readDocument, serializeDocument, unknownProperties, type Document, type NodeInput, type Op } from '../src'
 
 /** A drawing as its file holds it, to be spoilt the way a hand, a script or another program might. */
 const file = (doc: Document = createDocument('Plan')): any => JSON.parse(serializeDocument(doc))
@@ -50,15 +50,17 @@ describe('repairing a drawing', () => {
     expect(read).toEqual(doc)
   })
 
-  it('drops a wall type that is not there, so the drawing can still be edited', () => {
+  it('takes out what a drawing of this version says of wall types (a development build wrote it), says so, and can be edited and copied', () => {
     const raw = file(applyOps(createDocument(), [wall('w')]))
     raw.nodes.w.wallType = 'gone'
     raw.nodes.w.overrides = ['thickness']
     const { doc, repairs } = readDocument(raw)
-    expect(repairs).toEqual([expect.stringMatching(/wall type "gone"/)])
-    expect(doc.nodes.w).not.toHaveProperty('wallType')
+    expect(repairs).toHaveLength(1)
     expect(doc.nodes.w).toMatchObject({ thickness: 200 })
+    expect(doc.nodes.w).not.toHaveProperty('wallType')
     expect(() => editable(doc)).not.toThrow()
+    expect(applyOps(doc, [{ op: 'update_node', id: 'w', patch: { thickness: 300 } }]).nodes.w).toMatchObject({ thickness: 300 })
+    expect(applyOps(doc, [{ op: 'add_node', node: { ...doc.nodes.w, id: 'copy' } as NodeInput }]).nodes.copy).toMatchObject({ thickness: 200 })
   })
 
   it('drops a dimension style that is not there', () => {

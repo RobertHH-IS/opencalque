@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyOps, autoJoinCuts, connectedWalls, splitOps, splitPlace, boundsOf, buildScene, cornerJoin, endLineOps, endLineShown, cornerJoinOps, createDocument, extendWallOps, trimWallOps, moveCornerOps, Registry, roomAt, splitWallOps, wallEndsAt, type Document, type Op } from '../src'
+import { applyOps, autoJoinCuts, connectedWalls, splitOps, splitPlace, boundsOf, buildScene, cornerJoin, endLineOps, endLineShown, cornerJoinOps, createDocument, extendWallOps, trimWallOps, moveCornerOps, Registry, roomAt, splitWallOps, wallEndsAt, wallEndState, looseEndOps, wallEndFollowOps, wallFollowOps, type Document, type Op } from '../src'
 
 const registry = new Registry()
 const add = (node: Record<string, unknown>): Op => ({ op: 'add_node', node: { parent: 'page_1', ...node } }) as Op
@@ -433,5 +433,66 @@ describe('wall corners', () => {
     const room = (doc: Document) => roomAt(applyOps(doc, [wall('w3', 4000, 3000, 0, 3000), wall('w4', 0, 3000, 0, 0)]), 'page_1', { x: 2000, y: 1500 })!.area
     expect(room(joined('round'))).toBe(room(ell))
     expect(room(joined('butt'))).toBe(room(ell))
+  })
+})
+
+describe('a wall end set loose', () => {
+  const loose = applyOps(ell, looseEndOps(ell.nodes.side as never, 'a', true))
+
+  it('is joined to nothing, though another wall ends at the same point', () => {
+    expect((loose.nodes.side as any).joins).toEqual({ a: 'free' })
+    expect(wallEndsAt(loose, 'page_1', corner).map((e) => `${e.wall.id}.${e.end}`)).toEqual(['top.b'])
+    // Square, both of them: no mitre reaching past the corner.
+    expect(reach(loose, 'side').minY).toBeCloseTo(0, 6)
+    expect(reach(loose, 'top').maxX).toBeCloseTo(4000, 6)
+  })
+
+  it('stays where it is when the corner moves, and says what it touches', () => {
+    const moved = applyOps(loose, moveCornerOps(loose, 'page_1', corner, { x: 5000, y: -500 }))
+    expect((moved.nodes.top as any).b).toEqual({ x: 5000, y: -500 })
+    expect((moved.nodes.side as any).a).toEqual(corner)
+    const state = wallEndState(loose, loose.nodes.side as never, 'a')
+    expect(state.loose).toBe(true)
+    expect(state.joined).toEqual([])
+    expect(state.touching.map((w) => w.id)).toEqual(['top'])
+  })
+
+  it('is joined again as it was asked', () => {
+    const again = applyOps(loose, looseEndOps(loose.nodes.side as never, 'a', false))
+    expect((again.nodes.side as any).joins).toBeUndefined()
+    expect(wallEndsAt(again, 'page_1', corner)).toHaveLength(2)
+    expect(looseEndOps(again.nodes.side as never, 'a', false)).toEqual([])
+  })
+})
+
+describe('the state of a wall end', () => {
+  it('names the walls joined there, and an end of another wall that nearly meets it', () => {
+    expect(wallEndState(ell, ell.nodes.top as never, 'b').joined.map((w) => w.id)).toEqual(['side'])
+    // Three millimetres short of the corner: not joined, and pointed out.
+    const off = applyOps(createDocument(), [wall('top', 0, 0, 4000, 0), wall('side', 4003, 0, 4003, 3000)])
+    const state = wallEndState(off, off.nodes.top as never, 'b')
+    expect(state.joined).toEqual([])
+    expect(state.near).toMatchObject({ end: 'a', distance: 3 })
+    expect(state.near?.wall.id).toBe('side')
+    // Further than that, nothing nearly meets it.
+    const far = applyOps(createDocument(), [wall('top', 0, 0, 4000, 0), wall('side', 4020, 0, 4020, 3000)])
+    expect(wallEndState(far, far.nodes.top as never, 'b').near).toBeNull()
+  })
+})
+
+describe('moving a wall with an end set loose', () => {
+  const loose = applyOps(ell, looseEndOps(ell.nodes.side as never, 'a', true))
+
+  it('by its end leaves the wall it was set loose from where it is, and the other way round', () => {
+    const side = loose.nodes.side as never
+    expect(wallEndFollowOps(loose, side, 0, { x: 4200, y: 300 })).toEqual([])
+    expect(wallEndFollowOps(loose, loose.nodes.top as never, 1, { x: 4200, y: 300 })).toEqual([])
+    // Joined, the other end comes along.
+    expect(wallEndFollowOps(ell, ell.nodes.side as never, 0, { x: 4200, y: 300 })).toEqual([{ op: 'update_node', id: 'top', patch: { b: { x: 4200, y: 300 } } }])
+  })
+
+  it('whole leaves it behind too', () => {
+    expect(wallFollowOps(loose, [loose.nodes.side], { x: 500, y: 0 }, registry)).toEqual([])
+    expect(wallFollowOps(ell, [ell.nodes.side], { x: 500, y: 0 }, registry)).toEqual([{ op: 'update_node', id: 'top', patch: { b: { x: 4500, y: 0 } } }])
   })
 })

@@ -43,7 +43,7 @@ export type Gesture =
    * not snap to.
    */
   | { kind: 'face'; wall: NodeOf<'wall'>; side: 'left' | 'right'; moving: string[] }
-  | { kind: 'end'; wall: NodeOf<'wall'>; end: 'a' | 'b' }
+  | { kind: 'end'; wall: NodeOf<'wall'>; end: 'a' | 'b'; joined: { id: string; end: 'a' | 'b' }[] }
 
 export type GestureOf<K extends Gesture['kind']> = Extract<Gesture, { kind: K }>
 
@@ -63,7 +63,7 @@ export interface Keys {
   shiftKey: boolean
 }
 
-export const TWO_POINT: Tool[] = ['line', 'wall', 'divider', 'dimension', 'annotation', 'rect', 'ellipse', 'paper']
+export const TWO_POINT: Tool[] = ['line', 'wall', 'divider', 'dimension', 'annotation', 'gridline', 'rect', 'ellipse', 'paper']
 /** The tools that measure what is drawn: their points snap to it, never to the grid. A dimension's line is still placed by grid steps. */
 export const MEASURING: Tool[] = ['dimension', 'measure', 'angle']
 /** Tools whose two typed sizes are a width and a height. */

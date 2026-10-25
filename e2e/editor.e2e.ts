@@ -42,7 +42,7 @@ test('opens a drawing that needs repairs, and says so; refuses one from a newer 
   // "Discard unsaved changes?" before opening the second file.
   page.on('dialog', (dialog) => dialog.accept())
   await openEditor(page)
-  const broken = drawing({ w: { id: 'w', type: 'wall', parent: 'page_1', order: 'a1', a: { x: 0, y: 0 }, b: { x: 3000, y: 0 }, thickness: 200, wallType: 'missing' } })
+  const broken = drawing({ w: { id: 'w', type: 'wall', parent: 'page_1', order: 'a1', a: { x: 0, y: 0 }, b: { x: 3000, y: 0 }, thickness: 200, layer: 'missing' } })
   await choose(page, () => page.keyboard.press('Control+o'), 'broken.opencalque', broken)
   await expect(page.locator('.toast')).toContainText('One problem in broken.opencalque was put right')
   await expect(objectRows(page)).toHaveCount(1)
@@ -284,7 +284,8 @@ test('makes a wall thicker from one face, the other face staying where it was', 
   await drawWall(page, [300, 300], [700, 300])
   await objectRows(page).first().click()
   const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
-  await expect(field('Thickness')).toHaveValue('200')
+  const thickness = field('Thickness')
+  await expect(thickness).toHaveValue('200')
   await expect(field('Y1')).toHaveValue('800')
   const box = (await canvas(page).boundingBox())!
   await page.mouse.move(box.x + 500, box.y + 291)
@@ -295,12 +296,12 @@ test('makes a wall thicker from one face, the other face staying where it was', 
   await expect(page.locator('.hint-bar')).toContainText('The other face stays where it is')
   await page.mouse.up()
   // The upper face went up 400 mm: 600 thick, its middle 200 mm higher, its lower face still at 900.
-  await expect(field('Thickness')).toHaveValue('600')
+  await expect(thickness).toHaveValue('600')
   await expect(field('Y1')).toHaveValue('600')
   await expect(field('Y2')).toHaveValue('600')
   // One step to undo.
   await page.keyboard.press('Control+z')
-  await expect(field('Thickness')).toHaveValue('200')
+  await expect(thickness).toHaveValue('200')
   await expect(field('Y1')).toHaveValue('800')
 
   const drag = async (to: number, key: 'Control' | 'Alt') => {
@@ -313,16 +314,39 @@ test('makes a wall thicker from one face, the other face staying where it was', 
   }
   // Ctrl grows it both ways: 300 mm either side of a middle line that stays put.
   await drag(270, 'Control')
-  await expect(field('Thickness')).toHaveValue('600')
+  await expect(thickness).toHaveValue('600')
   await expect(field('Y1')).toHaveValue('800')
   await page.keyboard.press('Control+z')
   // Alt, as everywhere, ignores the steps: 470 mm, where the steps of this zoom (50 mm) would give 450 or 500.
   await drag(263, 'Alt')
-  await expect(field('Thickness')).toHaveValue('470')
+  await expect(thickness).toHaveValue('470')
   await expect(field('Y1')).toHaveValue('665')
 })
 
-test('draws a wall by its face and keeps it: thicker, it grows away; given another line, its corners stay', async ({ page }) => {
+test('with Shift, an end of a slanting wall dragged near level comes level with its other end', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const plan = drawing({ w: { id: 'w', type: 'wall', parent: 'page_1', layer: 'layer_1', order: 'a1', a: { x: 0, y: 0 }, b: { x: 3000, y: 400 }, thickness: 200 } })
+  await choose(page, () => page.keyboard.press('Control+o'), 'plan.opencalque', plan)
+  await objectRows(page).first().click()
+  const at = await drawingOnScreen(page)
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  const [x, y] = at(3000, 400)
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.keyboard.down('Shift')
+  const [tx, ty] = at(3000, 50)
+  await page.mouse.move(tx, ty, { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.up('Shift')
+  // The end of a wall is a corner of the plan: it is the corner that was dragged, and is selected.
+  await expect(field('Y')).toHaveValue('0')
+  await objectRows(page).first().click()
+  await expect(field('Y2')).toHaveValue('0')
+  await expect(field('X2')).toHaveValue(/^3\s?000$/)
+})
+
+test('draws a wall by its face and keeps it: thicker, it grows away; given another line, it stays where it is', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
   const box = (await canvas(page).boundingBox())!
@@ -336,19 +360,20 @@ test('draws a wall by its face and keeps it: thicker, it grows away; given anoth
   await page.keyboard.press('v')
   await page.mouse.click(box.x + 500, box.y + 289)
   const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  const thickness = field('Thickness')
   const line = page.locator('.field', { has: page.locator('span:text-is("Reference line")') })
   await expect(field('Y1')).toHaveValue('800')
   await expect(line.locator('[aria-checked="true"]')).toHaveAttribute('title', /^By its right face/)
   // Thicker, it grows away from its line, which stays where it was clicked.
-  await field('Thickness').fill('400')
-  await field('Thickness').press('Enter')
+  await thickness.fill('400')
+  await thickness.press('Enter')
   await expect(field('Y1')).toHaveValue('800')
   await expect(field('Y2')).toHaveValue('800')
-  // By its middle now: the corners stay, the wall moves to straddle them.
+  // By its middle now: the wall stays where it is, from 400 to 800, its line going to its middle.
   await line.getByTitle(/^By its middle/).click()
   await expect(line.locator('[aria-checked="true"]')).toHaveAttribute('title', /^By its middle/)
-  await expect(field('Y1')).toHaveValue('800')
-  await expect(field('Thickness')).toHaveValue('400')
+  await expect(field('Y1')).toHaveValue('600')
+  await expect(thickness).toHaveValue('400')
 })
 
 test('with Shift, a wall being drawn keeps level and still stops on what it meets: a wall it crosses, a point it comes level with', async ({ page }) => {
@@ -413,6 +438,124 @@ test('makes a wall longer by the line across its free end, in its own direction;
   await page.mouse.click(box.x + 430, box.y + 320)
   await expect(field('X2')).toHaveValue('2400')
   await expect(field('Y2')).toHaveValue('1200')
+})
+
+test('shows the angle of a wall to a thousandth of a degree, says when it is nearly level and straightens it, and turns it by whole degrees with Alt', async ({ page }) => {
+  await startWith(page)
+  await recordSaves(page)
+  await openEditor(page)
+  // Four metres long and 8 mm off level, as a traced plan has them; another wall meets its end.
+  const wall = (id: string, a: [number, number], b: [number, number]) => ({ id, type: 'wall', parent: 'page_1', layer: 'layer_1', order: `a${id}`, a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] }, thickness: 200 })
+  await choose(page, () => page.keyboard.press('Control+o'), 'askew.opencalque', drawing({ w1: wall('1', [0, 0], [4000, 8]), w2: wall('2', [4000, 8], [4000, 3000]) }))
+  await expect(objectRows(page)).toHaveCount(2)
+  await objectRows(page).last().click()
+  const angle = page.locator('.field', { has: page.locator('span:text-is("Angle")') }).locator('input')
+  await expect(angle).toHaveValue('359.885')
+  const note = page.locator('[data-panel="properties"] .hint', { hasText: 'Not quite level' })
+  await expect(note).toContainText('Not quite level: 0.115° off')
+  await note.getByRole('button', { name: 'Straighten' }).click()
+  await expect(angle).toHaveValue('0')
+  await expect(note).toHaveCount(0)
+  const saved = async () => {
+    await page.keyboard.press('Control+s')
+    return JSON.parse(await page.evaluate(() => (window as any).saves.at(-1)))
+  }
+  let doc = await saved()
+  // Level, as long as it was, turned about the end the other wall meets, which stays where it was: its free start moved.
+  expect(doc.nodes.w1.b).toEqual({ x: 4000, y: 8 })
+  expect(doc.nodes.w1.a.y).toBe(8)
+  expect(doc.nodes.w1.a.x).toBeCloseTo(-0.008, 3)
+  expect(doc.nodes.w2.a).toEqual({ x: 4000, y: 8 })
+  // Dragged with Alt, ten pixels to the right: ten degrees, one step to undo.
+  const box = (await angle.boundingBox())!
+  await page.keyboard.down('Alt')
+  await page.mouse.move(box.x + 20, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 30, box.y + box.height / 2, { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.up('Alt')
+  await expect(angle).toHaveValue('10')
+  await page.keyboard.press('Control+z')
+  await expect(angle).toHaveValue('0')
+  doc = await saved()
+  expect(doc.nodes.w1.b).toEqual({ x: 4000, y: 8 })
+})
+
+test('sets the length of a wall typed in its properties, its free end moving and the walls joined there following', async ({ page }) => {
+  await startWith(page)
+  await recordSaves(page)
+  await openEditor(page)
+  // A wall whose start another wall meets, so that its free end is the one that moves; and a curved one.
+  const wall = (id: string, a: [number, number], b: [number, number], extra = {}) => ({ id, type: 'wall', parent: 'page_1', layer: 'layer_1', order: `a${id}`, a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] }, thickness: 200, ...extra })
+  await choose(page, () => page.keyboard.press('Control+o'), 'lengths.opencalque', drawing({ w1: wall('1', [3000, 0], [0, 0]), w2: wall('2', [0, 0], [0, 2000]), w3: wall('3', [0, 5000], [4000, 5000], { bulge: 500 }) }))
+  await expect(objectRows(page)).toHaveCount(3)
+  const length = page.locator('.field', { has: page.locator('span:text-is("Length")') }).locator('input')
+  const saved = async () => {
+    await page.keyboard.press('Control+s')
+    return JSON.parse(await page.evaluate(() => (window as any).saves.at(-1)))
+  }
+  await objectRows(page).nth(2).click()
+  await expect(length).toHaveValue('3000')
+  await length.fill('4500')
+  await length.press('Enter')
+  await expect(length).toHaveValue('4500')
+  let doc = await saved()
+  // Its end at (0, 0), where the other wall meets it, stays; its free start goes on in the same direction.
+  expect(doc.nodes.w1.a).toEqual({ x: 4500, y: 0 })
+  expect(doc.nodes.w1.b).toEqual({ x: 0, y: 0 })
+  expect(doc.nodes.w2.a).toEqual({ x: 0, y: 0 })
+  // The curved wall keeps its shape: twice as long round the curve, it bows out twice as far.
+  await objectRows(page).nth(0).click()
+  await expect(length).not.toHaveValue('4500')
+  const round = Number(await length.inputValue())
+  await length.fill(String(round * 2))
+  await length.press('Enter')
+  doc = await saved()
+  // The length shown is rounded to the millimetre, so twice it is twice the length to a millimetre or two.
+  expect(doc.nodes.w3.a).toEqual({ x: 0, y: 5000 })
+  expect(doc.nodes.w3.b.y).toBe(5000)
+  expect(Math.abs(doc.nodes.w3.b.x - 8000)).toBeLessThan(2)
+  expect(doc.nodes.w3.b.x / doc.nodes.w3.bulge).toBeCloseTo(8, 6)
+})
+
+test('shows how wide and high the objects selected stand together', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  // Two walls 200 thick meeting at a corner: their outer faces stand 4100 by 3100 apart.
+  const wall = (id: string, a: [number, number], b: [number, number]) => ({ id, type: 'wall', parent: 'page_1', layer: 'layer_1', order: `a${id}`, a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] }, thickness: 200 })
+  await choose(page, () => page.keyboard.press('Control+o'), 'corner.opencalque', drawing({ w1: wall('1', [0, 0], [4000, 0]), w2: wall('2', [4000, 0], [4000, 3000]) }))
+  await expect(objectRows(page)).toHaveCount(2)
+  await objectRows(page).first().click()
+  await objectRows(page).last().click({ modifiers: ['Shift'] })
+  const size = (name: string) => page.locator('[data-panel="properties"] .field', { has: page.locator(`span:text-is("${name}")`) }).locator('output')
+  await expect(page.locator('[data-panel="properties"]')).toContainText('2 objects')
+  await expect(size('Width')).toHaveText('4100 mm')
+  await expect(size('Height')).toHaveText('3100 mm')
+})
+
+test('moves the step between two walls in line by the line across the end of either, the other following', async ({ page }) => {
+  await startWith(page)
+  await recordSaves(page)
+  await openEditor(page)
+  // A wall 400 thick, then one 100 thick carrying on from it, the line of the step drawn.
+  const wall = (id: string, from: number, to: number, thickness: number, extra = {}) => ({ id, type: 'wall', parent: 'page_1', layer: 'layer_1', order: `a${id}`, a: { x: from, y: 0 }, b: { x: to, y: 0 }, thickness, ...extra })
+  await choose(page, () => page.keyboard.press('Control+o'), 'step.opencalque', drawing({ w1: wall('1', 0, 3000, 400, { edges: { b: { show: true } } }), w2: wall('2', 3000, 6000, 100) }))
+  await expect(objectRows(page)).toHaveCount(2)
+  const at = await drawingOnScreen(page)
+  await objectRows(page).last().click()
+  // On the step, beside the thinner wall: the pointer says along the wall.
+  await page.mouse.move(...at(3000, 150))
+  await expect(canvas(page)).toHaveCSS('cursor', 'ew-resize')
+  await page.mouse.down()
+  await page.mouse.move(...at(4000, 170), { steps: 5 })
+  await page.mouse.up()
+  await page.keyboard.press('Control+s')
+  const doc = JSON.parse(await page.evaluate(() => (window as any).saves.at(-1)))
+  // The thick wall longer, level as it was; the thin one shorter, still starting where the thick one ends.
+  expect(doc.nodes.w1.b.x).toBeGreaterThan(3800)
+  expect(doc.nodes.w1.b.y).toBe(0)
+  expect(doc.nodes.w2.a).toEqual(doc.nodes.w1.b)
+  expect(doc.nodes.w2.b).toEqual({ x: 6000, y: 0 })
 })
 
 test('stretches a window placed on a wall by either of its ends, the other staying put', async ({ page }) => {
@@ -808,6 +951,149 @@ test('vectorizes a stair into a group of its shapes from the right-click menu', 
   await expect(field('Steps')).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Ungroup' })).toBeVisible()
   await expect(objectRows(page).filter({ hasText: 'Stair, straight' })).toHaveCount(1)
+})
+
+test('vectorizes a table of quantities into a group of its lines and words from the right-click menu', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const nodes = {
+    w: { id: 'w', type: 'wall', parent: 'page_1', layer: 'layer_1', order: 'a1', a: { x: 0, y: 0 }, b: { x: 4000, y: 0 }, thickness: 200 },
+    t: { id: 't', type: 'table', parent: 'page_1', layer: 'layer_1', order: 'a2', x: 0, y: 1000, schedule: 'walls', title: 'Walls' },
+  }
+  await choose(page, () => page.keyboard.press('Control+o'), 'table.opencalque', drawing(nodes, { version: 2 }))
+  await expect(objectRows(page)).toHaveCount(2)
+  await objectRows(page).filter({ hasText: 'Table of quantities' }).click({ button: 'right' })
+  await page.getByRole('menuitem', { name: 'Vectorize' }).click()
+  // A group named after its title where the table was, which counts nothing any more.
+  await expect(page.locator('.toast')).toContainText('It no longer follows the drawing.')
+  await expect(objectRows(page).filter({ hasText: 'Table of quantities' })).toHaveCount(0)
+  await expect(objectRows(page).filter({ hasText: 'Walls' })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: 'Ungroup' })).toBeVisible()
+})
+
+test('goes through the instances of a component one by one, on every page and in groups, from the Components panel', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const placed = (id: string, parent: string, order: string, x: number, y: number) => ({ id, type: 'instance', parent, layer: 'layer_1', order, component: 'chair', x, y })
+  const nodes = {
+    chair: { id: 'chair', type: 'component', parent: null, order: 'a5', name: 'Chair' },
+    seat: { id: 'seat', type: 'rect', parent: 'chair', order: 'a0', x: 0, y: 0, width: 450, height: 450 },
+    c1: placed('c1', 'page_1', 'a1', 0, 0),
+    c2: placed('c2', 'page_1', 'a2', 3000, 0),
+    g: { id: 'g', type: 'group', parent: 'page_1', layer: 'layer_1', order: 'a3', name: 'Dining' },
+    c3: placed('c3', 'g', 'a0', 0, 3000),
+    page_2: { id: 'page_2', type: 'page', parent: null, order: 'a1', name: 'Upstairs' },
+    c4: placed('c4', 'page_2', 'a0', 0, 0),
+  }
+  await choose(page, () => page.keyboard.press('Control+o'), 'chairs.opencalque', drawing(nodes, { version: 2 }))
+  await page.locator('.dv-tab', { hasText: 'Components' }).click()
+  await page.locator('[data-panel="components"] .row').first().hover()
+  await page.getByRole('button', { name: 'Go through its instances one by one' }).click()
+  const bar = page.locator('.instance-bar')
+  const field = (name: string) => page.locator('.field', { has: page.locator(`span:text-is("${name}")`) }).locator('input')
+  // The first, on the page, selected; then the one beside it, by the arrow or by Alt+→.
+  await expect(bar).toContainText('Chair')
+  await expect(bar.locator('.instance-count')).toHaveText('1 / 4')
+  await expect(field('X')).toHaveValue('0')
+  await bar.getByRole('button', { name: /^Next instance/ }).click()
+  await expect(bar.locator('.instance-count')).toHaveText('2 / 4')
+  await expect(field('X')).toHaveValue('3000')
+  // Both on the page can be selected at once from the bar.
+  await bar.getByRole('button', { name: 'Select the 2 here' }).click()
+  await expect(page.locator('[data-panel="objects"] .row.selected')).toHaveCount(2)
+  // In its group, which is gone into; then on the other page.
+  await page.keyboard.press('Alt+ArrowRight')
+  await expect(bar.locator('.instance-count')).toHaveText('3 / 4')
+  await expect(page.locator('.breadcrumb')).toContainText('Dining')
+  await page.keyboard.press('Alt+ArrowRight')
+  await expect(bar.locator('.instance-count')).toHaveText('4 / 4')
+  // Upstairs, it is all there is.
+  await expect(objectRows(page)).toHaveCount(1)
+  await expect(page.locator('.breadcrumb')).toHaveCount(0)
+  // Round to the first again, and Escape lets go of the bar, the instance staying selected.
+  await page.keyboard.press('Alt+ArrowRight')
+  await expect(bar.locator('.instance-count')).toHaveText('1 / 4')
+  await canvas(page).hover()
+  await page.keyboard.press('Escape')
+  await expect(bar).toHaveCount(0)
+  await expect(field('X')).toHaveValue('0')
+})
+
+test('makes the instances of one component instances of another, all from the Components panel or those selected from their properties', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const shape = (id: string, parent: string) => ({ id, type: 'ellipse', parent, order: 'a0', cx: 0, cy: 0, rx: 100, ry: 100 })
+  const placed = (id: string, component: string, order: string, x: number) => ({ id, type: 'instance', parent: 'page_1', layer: 'layer_1', order, component, x, y: 0 })
+  const nodes = {
+    socket: { id: 'socket', type: 'component', parent: null, order: 'a5', name: 'Socket' },
+    s: shape('s', 'socket'),
+    twin: { id: 'twin', type: 'component', parent: null, order: 'a6', name: 'Socket 2' },
+    t: shape('t', 'twin'),
+    lamp: { id: 'lamp', type: 'component', parent: null, order: 'a7', name: 'Lamp' },
+    l: shape('l', 'lamp'),
+    i1: placed('i1', 'socket', 'a1', 0),
+    i2: placed('i2', 'twin', 'a2', 1000),
+    i3: placed('i3', 'twin', 'a3', 2000),
+    i4: placed('i4', 'lamp', 'a4', 3000),
+  }
+  await choose(page, () => page.keyboard.press('Control+o'), 'sockets.opencalque', drawing(nodes, { version: 2 }))
+  await page.locator('.dv-tab', { hasText: 'Components' }).click()
+  const row = (name: string) => page.locator('[data-panel="components"] .row', { has: page.locator(`.component-name :text-is("${name}")`) })
+  await row('Socket 2').hover()
+  await row('Socket 2').getByRole('button', { name: 'Replace its instances with another component' }).click()
+  // The other components, found by name; Enter takes the first found.
+  await page.getByPlaceholder('Find a component…').fill('sock')
+  await expect(page.locator('.material-menu .color-option')).toHaveText(['Socket'])
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.toast')).toContainText('2 instances of “Socket 2” now place “Socket”.')
+  await expect(row('Socket').locator('.uses')).toHaveText('3')
+  await expect(row('Socket 2').locator('.uses')).toHaveText('0')
+  // One selected, from its properties: only it.
+  await objectRows(page).nth(0).click()
+  const choice = page.locator('.field', { has: page.locator('span:text-is("Component")') }).locator('.component-choice > button')
+  await expect(choice).toHaveText('Lamp')
+  await choice.click()
+  await page.locator('.material-menu .color-option', { hasText: 'Socket' }).first().click()
+  await expect(choice).toHaveText('Socket')
+  await expect(row('Socket').locator('.uses')).toHaveText('4')
+  await expect(row('Lamp').locator('.uses')).toHaveText('0')
+})
+
+test('lists the objects placed with the same settings as one entry beside the components, which changes them together', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const radiator = (id: string, order: string, x: number, props: Record<string, unknown>) => ({ id, type: 'parametric', parent: 'page_1', layer: 'layer_1', order, kind: 'arch.radiator', props, x, y: 0 })
+  const nodes = {
+    r1: radiator('r1', 'a1', 0, {}),
+    r2: radiator('r2', 'a2', 2000, { width: 800 }),
+    r3: radiator('r3', 'a3', 4000, { width: 1200 }),
+    chair: { id: 'chair', type: 'component', parent: null, order: 'a5', name: 'Chair' },
+    seat: { id: 'seat', type: 'rect', parent: 'chair', order: 'a0', x: 0, y: 0, width: 450, height: 450 },
+    c1: { id: 'c1', type: 'instance', parent: 'page_1', layer: 'layer_1', order: 'a4', component: 'chair', x: 0, y: 2000 },
+  }
+  await choose(page, () => page.keyboard.press('Control+o'), 'heating.opencalque', drawing(nodes, { version: 2 }))
+  await page.locator('.dv-tab', { hasText: 'Components' }).click()
+  const rows = page.locator('[data-panel="components"] .row')
+  // By name, the two lengths of radiator apart, each with how many there are.
+  await expect(rows.locator('.component-name > span:first-child')).toHaveText(['Chair', 'Radiator 800', 'Radiator 1200'])
+  await expect(rows.locator('.uses')).toHaveText(['1', '2', '1'])
+  // Its pencil selects the two of 80 cm, to be changed together: made 1.20 m long, all three are one entry.
+  const short = rows.filter({ hasText: 'Radiator 800' })
+  await short.hover()
+  await short.getByRole('button', { name: 'Select them all, to change them together' }).click()
+  await expect(page.locator('[data-panel="objects"] .row.selected')).toHaveCount(2)
+  const length = page.locator('.field', { has: page.locator('span:text-is("Length")') }).locator('input').first()
+  await length.fill('1200')
+  await length.press('Enter')
+  await expect(rows.locator('.component-name > span:first-child')).toHaveText(['Chair', 'Radiator'])
+  await expect(rows.filter({ hasText: 'Radiator' }).locator('.uses')).toHaveText('3')
+  // A click puts one more of it on the pointer, as it is.
+  await rows.filter({ hasText: 'Radiator' }).click()
+  const box = (await canvas(page).boundingBox())!
+  await page.mouse.move(box.x + 600, box.y + 500, { steps: 3 })
+  await page.mouse.click(box.x + 600, box.y + 500)
+  await page.keyboard.press('Escape')
+  await expect(rows.filter({ hasText: 'Radiator' }).locator('.uses')).toHaveText('4')
 })
 
 test('lists the components of the drawing in their own panel, and places one from there by a click or a drag', async ({ page }) => {
@@ -1244,13 +1530,13 @@ test('shows every value of a dimension style whole, in the narrow side panel', a
 test('leaves out whole the tabs a narrow column has no room for, lists them behind a "···", and brings one chosen there into the row', async ({ page }) => {
   await startWith(page)
   await openEditor(page)
-  const all = ['Structure', 'Colours', 'Wall types', 'Dimension styles']
+  const all = ['Structure', 'Colours', 'Materials', 'Dimension styles']
   const header = page.locator('.dv-tabs-and-actions-container', { has: page.locator('.dv-tab', { hasText: 'Structure' }) })
   const row = header.locator('.dv-tabs-container')
   const shown = row.locator('.dv-tab:visible')
   const more = header.getByRole('button', { name: 'More tabs' })
   await expect(row.locator('.dv-tab')).toHaveText(all)
-  // In a column of about 250 px, some of the four tabs are left out; those shown are whole.
+  // In a column of about 250 px, some of the five tabs are left out; those shown are whole.
   await expect(more).toBeVisible()
   const names = await shown.allInnerTexts()
   expect(names.length).toBeLessThan(all.length)
@@ -1289,6 +1575,70 @@ test('leaves out whole the tabs a narrow column has no room for, lists them behi
   await expect(marks).toHaveCount(1)
   await page.mouse.up()
   await expect(pages).toHaveText(['Pages', 'Layers', 'Components'])
+})
+
+test('resizes a column by its line away from the drawing: the columns between keep their width, the drawing takes the difference', async ({ page }) => {
+  await startWith(page)
+  await openEditor(page)
+  const group = (tab: string) => page.locator('.dv-groupview', { has: page.locator('.dv-tab', { hasText: tab }) })
+  const stage = page.locator('.dv-groupview', { has: page.locator('.stage') })
+  const columns = { layers: group('Layers'), components: group('Components'), stage, assistant: group('Assistant'), properties: group('Properties') }
+  const widths = async () => Object.fromEntries(await Promise.all(Object.entries(columns).map(async ([name, column]) => [name, (await column.count()) ? (await column.boundingBox())!.width : 0]))) as Record<keyof typeof columns, number>
+  const changed = async (before: Record<keyof typeof columns, number>, by: Partial<Record<keyof typeof columns, number>>) => {
+    const after = await widths()
+    for (const name of Object.keys(columns) as (keyof typeof columns)[]) expect(Math.abs(after[name] - before[name] - (by[name] ?? 0)), name).toBeLessThanOrEqual(1)
+  }
+  const dropBeside = async (tab: string, x: (area: { x: number; width: number }) => number) => {
+    const from = (await page.locator('.dv-tab', { hasText: tab }).boundingBox())!
+    const area = (await stage.boundingBox())!
+    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(from.x + from.width / 2 + 10, from.y + from.height / 2, { steps: 2 })
+    await page.mouse.move(x(area), area.y + area.height / 2, { steps: 8 })
+    await page.mouse.up()
+  }
+  const drag = async (x: number, by: number) => {
+    const y = (await stage.boundingBox())!.y + 120
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x + by, y, { steps: 6 })
+    await page.mouse.up()
+  }
+
+  // Two columns on each side of the drawing.
+  await dropBeside('Components', (area) => area.x + 30)
+  await dropBeside('Assistant', (area) => area.x + area.width - 30)
+  let before = await widths()
+  for (const name of Object.keys(columns) as (keyof typeof columns)[]) expect(before[name], name).toBeGreaterThan(100)
+  const edge = async (column: keyof typeof columns) => (await columns[column].boundingBox())!.x
+
+  // The line between the two on the left is the outer column's: narrowed, the other keeps its width.
+  await drag(await edge('components'), -60)
+  await changed(before, { layers: -60, stage: 60 })
+  before = await widths()
+  await drag(await edge('components'), 80)
+  await changed(before, { layers: 80, stage: -80 })
+
+  // On the right too.
+  before = await widths()
+  await drag(await edge('properties'), 50)
+  await changed(before, { properties: -50, stage: 50 })
+
+  // A column closed leaves its room to the drawing.
+  before = await widths()
+  await page.locator('.dv-tab', { hasText: 'Components' }).hover()
+  await page.locator('.dv-tab', { hasText: 'Components' }).locator('.dv-default-tab-action').click()
+  await expect(columns.components).toHaveCount(0)
+  const after = await widths()
+  expect(after.stage).toBeGreaterThan(before.stage + before.components - 10)
+  for (const name of ['layers', 'assistant', 'properties'] as const) expect(Math.abs(after[name] - before[name]), name).toBeLessThanOrEqual(1)
+
+  // And so in the arrangement remembered for the next time.
+  await page.reload()
+  await expect(stage).toHaveCount(1)
+  before = await widths()
+  await drag(await edge('properties'), -40)
+  await changed(before, { properties: 40, stage: -40 })
 })
 
 test('imports a DXF of twenty thousand lines in a few seconds', async ({ page }) => {
@@ -1420,4 +1770,78 @@ test('shows the version and its notes under About, and the licences of what the 
   await expect(about.locator('.about-licences')).toContainText('SIL OPEN FONT LICENSE')
   await about.getByRole('button', { name: 'What is new' }).click()
   await expect(about.locator('.about-licences')).toHaveCount(0)
+})
+
+test('shows which ends of a wall are joined, sets one loose, and brings an end that nearly meets another onto it', async ({ page }) => {
+  await startWith(page)
+  await recordSaves(page)
+  await openEditor(page)
+  const wall = (id: string, order: string, a: [number, number], b: [number, number]) => ({ id, type: 'wall', parent: 'page_1', layer: 'layer_1', order, a: { x: a[0], y: a[1] }, b: { x: b[0], y: b[1] }, thickness: 200 })
+  // An L joined at (4000, 0), and a third wall whose end stops 4 mm short of the L's other end.
+  const plan = drawing({ top: wall('top', 'a1', [0, 0], [4000, 0]), side: wall('side', 'a2', [4000, 0], [4000, 3000]), short: wall('short', 'a3', [4000, 3004], [1000, 3004]) }, { version: 2 })
+  await choose(page, () => page.keyboard.press('Control+o'), 'plan.opencalque', plan)
+  await expect(objectRows(page)).toHaveCount(3)
+  const saved = async () => {
+    await page.keyboard.press('Control+s')
+    return JSON.parse(await page.evaluate(() => (window as any).saves.at(-1)))
+  }
+  const endOf = (label: string) => page.locator('.field', { has: page.locator(`span:text-is("${label}")`) }).locator('.wall-end')
+
+  // The side wall: joined at its start, nearly meeting the short wall at its end.
+  await objectRows(page).filter({ hasText: 'Wall' }).nth(1).click()
+  await expect(endOf('At its end')).toContainText('Nearly meets another wall, 4 mm away')
+  await endOf('At its end').getByRole('button', { name: 'Join them' }).click()
+  expect((await saved()).nodes.side.b).toEqual({ x: 4000, y: 3004 })
+  await expect(endOf('At its end')).not.toContainText('Nearly')
+
+  // Set loose at its start, it is joined to the top wall no more, and can be joined again.
+  await endOf('At its start').getByRole('button', { name: 'Detach' }).click()
+  expect((await saved()).nodes.side.joins).toEqual({ a: 'free' })
+  await expect(endOf('At its start')).toContainText('Detached from the wall that ends here')
+
+  // Dragged by that end, the selected wall moves, and the wall it was set loose from stays.
+  const onScreen = await drawingOnScreen(page)
+  const [x, y] = onScreen(4000, 0)
+  const [, y2] = onScreen(4000, 600)
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.mouse.move(x, (y + y2) / 2, { steps: 4 })
+  await page.mouse.move(x, y2, { steps: 4 })
+  await page.mouse.up()
+  const dragged = await saved()
+  expect(dragged.nodes.top.b).toEqual({ x: 4000, y: 0 })
+  expect(dragged.nodes.side.a.y).toBeGreaterThan(300)
+  await expect(page.locator('.field', { has: page.locator('span:text-is("At its start")') })).toBeVisible()
+  await page.keyboard.press('Control+z')
+
+  await endOf('At its start').getByRole('button', { name: 'Join again' }).click()
+  expect((await saved()).nodes.side.joins).toBeUndefined()
+})
+
+test('brings the end of a wall level with its other end exactly, whatever decimals that one has, and says nothing of a hair off', async ({ page }) => {
+  await startWith(page)
+  await recordSaves(page)
+  await openEditor(page)
+  // Its start where a traced plan puts it, to the millionth of a millimetre.
+  const traced = { x: 0.123456, y: 1000.340414 }
+  const plan = drawing({ w: { id: 'w', type: 'wall', parent: 'page_1', layer: 'layer_1', order: 'a1', a: traced, b: { x: 3000, y: 1600 }, thickness: 200 } })
+  await choose(page, () => page.keyboard.press('Control+o'), 'traced.opencalque', plan)
+  await expect(objectRows(page)).toHaveCount(1)
+  await objectRows(page).first().click()
+  const onScreen = await drawingOnScreen(page)
+  const [x, y] = onScreen(3000, 1600)
+  const [, level] = onScreen(3000, 1030)
+  // Its end dragged with Shift, held level with its start.
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  await page.keyboard.down('Shift')
+  await page.mouse.move(x, (y + level) / 2, { steps: 4 })
+  await page.mouse.move(x, level, { steps: 4 })
+  await page.mouse.up()
+  await page.keyboard.up('Shift')
+  await page.keyboard.press('Control+s')
+  const doc = JSON.parse(await page.evaluate(() => (window as any).saves.at(-1)))
+  expect(doc.nodes.w.a).toEqual(traced)
+  expect(doc.nodes.w.b.y).toBe(traced.y)
+  await expect(page.locator('[data-panel="properties"] .hint', { hasText: 'Not quite level' })).toHaveCount(0)
 })

@@ -2,12 +2,14 @@ import { isVisible, leavesOf, rootOf } from '../document'
 import { add, applyTransform, dist, perp, scale, sub, type Vec2 } from '../geometry'
 import type { Registry } from '../registry'
 import type { Document, Node, NodeOf } from '../schema'
-import { courseOf, distToBody, dot, middleAcross, tidy, wallArc, wallSides, type Wall } from './course'
+import { courseOf, distToBody, dot, laidAgainst, middleAcross, tidy, wallArc, wallSides, type Wall } from './course'
 import { cellKey, current, drawnWith, wallIndex, wallsIn } from './spatial'
 
 /*
  * Doors and windows in walls. Nothing ties one to its wall but where it is: an opening is in a wall
- * when both ends of the stretch it cuts lie between the wall's faces, found again each time.
+ * when both ends of the stretch it cuts lie between the wall's faces, found again each time. It
+ * goes through the walls laid against that one, face to face, as a lining of insulation and the
+ * plaster on it are: a wall of several materials is drawn as several walls side by side.
  */
 
 /** A door or window set in a wall, with the stretch of the wall's middle line it takes (distances from `a`). */
@@ -76,20 +78,57 @@ export function openingIndex(doc: Document, parentId: string | null, registry: R
       for (let y = square(Math.min(span[0].y, span[1].y)); y <= square(Math.max(span[0].y, span[1].y)); y++) for (const wall of grid.get(cellKey(x, y)) ?? []) candidates.add(wall)
     }
     let host: Wall | null = null
+    const cut = (wall: Wall, taken: [number, number]) => {
+      const list = index.cuts.get(wall.id)
+      const one = { node, from: taken[0], to: taken[1], visible: isVisible(doc, node) }
+      if (list) list.push(one)
+      else index.cuts.set(wall.id, [one])
+    }
+    const cutting = new Set<string>()
     for (const wall of [...candidates].sort((u, v) => rank.get(u.id)! - rank.get(v.id)!)) {
       const taken = overlap(wall, span)
       if (!taken) continue
       host ??= wall
-      const list = index.cuts.get(wall.id)
-      const cut = { node, from: taken[0], to: taken[1], visible: isVisible(doc, node) }
-      if (list) list.push(cut)
-      else index.cuts.set(wall.id, [cut])
+      cutting.add(wall.id)
+      cut(wall, taken)
+    }
+    // And through the walls laid against it, face to face, one after the other.
+    if (host && !wallArc(host)) {
+      const near = new Set(always)
+      const reach = STACK_REACH
+      for (let x = square(Math.min(span[0].x, span[1].x) - reach); x <= square(Math.max(span[0].x, span[1].x) + reach); x++) {
+        for (let y = square(Math.min(span[0].y, span[1].y) - reach); y <= square(Math.max(span[0].y, span[1].y) + reach); y++) for (const wall of grid.get(cellKey(x, y)) ?? []) near.add(wall)
+      }
+      const stack = [host]
+      for (let i = 0; i < stack.length && stack.length <= MAX_STACK; i++) {
+        for (const wall of near) {
+          if (cutting.has(wall.id) || !laidAgainst(stack[i], wall)) continue
+          const taken = along(wall, span)
+          if (!taken) continue
+          cutting.add(wall.id)
+          stack.push(wall)
+          cut(wall, taken)
+        }
+      }
     }
     index.hosts.set(node.id, host)
   }
   for (const list of index.cuts.values()) list.sort((p, q) => p.from - q.from)
   entry.byRoot.set(key, index)
   return index
+}
+
+/** How far, in mm, from the stretch an opening cuts, the walls laid against its wall are looked for. */
+const STACK_REACH = 1000
+/** How many walls an opening goes through, at most, its own and those laid against it. */
+const MAX_STACK = 16
+/** The stretch of a straight wall (distances from `a`) that a span takes, wherever across it the span lies. */
+function along(wall: Wall, span: [Vec2, Vec2]): [number, number] | null {
+  const course = courseOf(wall)
+  const ts = span.map((p) => course.project(p).along)
+  const from = Math.max(0, Math.min(...ts))
+  const to = Math.min(course.length, Math.max(...ts))
+  return to - from > 1e-6 ? [from, to] : null
 }
 
 /** The stretch a parametric node cuts out of a wall, as two world points, or null if it cuts nothing. */

@@ -14,7 +14,7 @@ export const Vec2Schema = z.object({ x: z.number(), y: z.number() })
 
 export const PatternSchema = z
   .object({
-    kind: z.string().describe("Which pattern: 'Lines', 'Cross', 'Planks', 'Tiles', 'Dots' or 'Zigzag'; 'None' for no pattern where one would otherwise be taken from a wall type."),
+    kind: z.string().describe("Which pattern: 'Lines', 'Cross', 'Planks', 'Tiles', 'Dots' or 'Zigzag'; 'None' for no pattern where one would otherwise be taken from a material."),
     spacing: z.number().positive().optional().describe('Distance between its strokes, in mm. Each pattern has its own when not given.'),
     angle: z.number().optional().describe('Degrees its strokes are turned by. Each pattern has its own when not given.'),
     stroke: z.string().optional().describe('The colour of its strokes. A CSS colour or a shared colour reference.'),
@@ -57,7 +57,7 @@ export const AssetSchema = z
   .describe('A binary file embedded in the document, referenced by image nodes.')
 
 /** How a wall end is finished where it meets one other wall. */
-export const WALL_JOINS = ['miter', 'round', 'bevel', 'through', 'butt'] as const
+export const WALL_JOINS = ['miter', 'round', 'bevel', 'through', 'butt', 'free'] as const
 const join = z.enum(WALL_JOINS).optional()
 
 export const SharedColorSchema = z
@@ -69,31 +69,27 @@ export const SharedColorSchema = z
   .describe(
     'A named colour that belongs to the drawing. A stroke, a fill or a layer colour refers to it by writing "var(--<id>)" in place of a colour; changing the value here then changes everything that refers to it.',
   )
-/** What a wall type can define for its walls. */
-export const WALL_TYPE_PROPERTIES = ['thickness', 'height', 'fill', 'pattern', 'stroke', 'strokeWidth', 'dash', 'layers'] as const
+/**
+ * The id of the default material: what walls are made of until they are given another. Walls of
+ * no material take its fill and pattern; it is never referred to, cannot be removed, and need not
+ * be there, walls then being white.
+ */
+export const DEFAULT_MATERIAL = 'default'
 
-export const WallTypeSchema = z
+export const MaterialSchema = z
   .object({
     id: Id,
     name: z.string(),
-    thickness: z.number().positive().optional().describe('In mm. When every layer gives a thickness, their sum.'),
-    height: z.number().positive().optional().describe('How high walls of this type stand, in mm. Used to measure their faces; nothing is drawn with it.'),
-    fill: z.string().optional().describe('The colour walls of this type are filled with. A CSS colour or a shared colour reference.'),
-    pattern: PatternSchema.optional().describe('The pattern drawn over that fill, such as the hatching of a material.'),
-    stroke: z.string().optional().describe('The colour of their outline. A CSS colour or a shared colour reference.'),
-    strokeWidth: z.number().positive().optional().describe('The weight of their outline, in screen pixels as in a style.'),
-    dash: z.array(z.number()).optional().describe('The dash pattern of their outline, as in a style.'),
-    layers: z
-      .array(z.object({ name: z.string(), thickness: z.number().positive().optional() }))
-      .optional()
-      .describe('What the wall is made of, from its left face to its right face as it is drawn from a to b: each layer a material and, when known, its thickness in mm. Layers with thicknesses are drawn as lines inside the wall and counted in the quantities.'),
+    fill: z.string().optional().describe('The colour it is drawn in where it is cut, in a wall or a floor. A CSS colour or a shared colour reference. White when not given.'),
+    pattern: PatternSchema.optional().describe('The pattern drawn over that colour: the hatching that tells the material.'),
   })
   .describe(
-    'A way of building walls that belongs to the drawing. It defines whichever properties it gives a value to, and only those: one type may be no more than a material, another a thickness, a fill and an outline. A wall refers to it by "wallType" and takes what it defines; what it leaves out stays the wall\'s own. A wall may still differ from its type on a property: by its own "height" or "style" for those, and by listing "thickness" in its "overrides" for that one.',
+    'A material the drawing is built of: concrete, brick, insulation, plaster, a floor finish. It belongs to the drawing, as a shared colour does: walls and the floors of rooms refer to it by its id, are drawn in its colour and pattern, and are counted under its name. The material of id "default" is what walls are made of until given another: walls of no material take its fill and pattern, unless they give their own; it cannot be removed.',
   )
 
+export type Material = z.infer<typeof MaterialSchema>
+
 export type SharedColor = z.infer<typeof SharedColorSchema>
-export type WallType = z.infer<typeof WallTypeSchema>
 export type WallEdge = z.infer<typeof WallEdgeSchema>
 
 export const ModifierSchema = z
@@ -138,6 +134,8 @@ const tip = z.enum(DIMENSION_MARKERS).optional()
 const markerSize = z.number().positive().optional().describe('Length of the end symbols in mm. Defaults to 150.')
 /** The paths an annotation's leader can take. */
 export const LEADER_SHAPES = ['curve', 'straight', 'elbow'] as const
+/** Which ends of a grid line carry its bubble. */
+export const GRIDLINE_BUBBLES = ['start', 'end', 'both', 'none'] as const
 
 /** The look of a dimension: everything about it but where it is and what it says in place of its length. A dimension style may define any of it. */
 const dimensionLook = {
@@ -255,10 +253,50 @@ export const NodeSchema = z
         y: z.number(),
         size: z.number().positive().optional().describe('Size of the name and area written at (x, y), in mm. Defaults to 250.'),
         showArea: z.boolean().optional().describe('Whether the floor area is written under the name. Defaults to true.'),
+        material: Id.optional().describe('The id of the material its floor is made of, among the document\'s "materials": the floor takes its colour and pattern, unless the room gives its own in "style", and is counted under it.'),
       })
       .describe(
         'A room: the space enclosed by the walls and dividers around the point (x, y), which is also where its name and area are written. Its outline is not stored: it is found from the walls each time, so it follows them. Give it a "name". style.fill colours the floor and style.pattern covers it (tiles, planks); style.stroke is the colour of the name and area. If the walls around the point do not close, only the name is drawn.',
       ),
+    z
+      .object({
+        ...base,
+        type: z.literal('table'),
+        x: z.number(),
+        y: z.number(),
+        schedule: z
+          .string()
+          .describe(
+            "What it counts, which is worked out again each time it is drawn: 'objects' (each component and each kind of parametric object, with how many are placed), 'floors' (the floor area of each material), 'rooms' (each room and its area), 'walls' (the walls by material and thickness: how many, length, face and volume) or 'openings' (doors and windows by kind and size). An unknown one draws an empty table.",
+          ),
+        title: z.string().optional().describe('Written above the table.'),
+        columns: z
+          .array(z.string())
+          .optional()
+          .describe("The fields shown, in order. Left out, the schedule's usual ones. Fields: objects: symbol (each drawn as it is on the plan), name, count; floors: material, rooms, area; rooms: name, material, area; walls: material, thickness, count, length, area, volume; openings: kind, width, height, count."),
+        labels: z
+          .record(z.string(), z.string())
+          .optional()
+          .describe("The words the table is written with, by field (the heading of its column), and 'total' (the last row) and 'none' (what stands for no material or no type). Left out, English ones."),
+        size: z.number().positive().optional().describe('Text size in mm. Defaults to 200.'),
+        source: Id.optional().describe('The id of the page whose contents it counts. Defaults to the page it is on.'),
+        totals: z.boolean().optional().describe('Whether a last row adds up the columns that can be added up. Defaults to true.'),
+        rowsPerBlock: z
+          .number()
+          .positive()
+          .optional()
+          .describe('At most this many rows of things counted one under the other: the next ones go into a block beside it, with the headings again, and so on, the total at the end of the last. Left out, all in one block.'),
+        only: z
+          .array(z.string())
+          .optional()
+          .describe(
+            "The rows shown, by their keys; the others are left out of the table and its total, and what comes on the plan later is not shown. Keys: objects 'component:<id>', or for a parametric object 'parametric:' then its kind and every one of its parameters, defaults filled in, as JSON with its keys in order ('parametric:arch.radiator {\"length\":800,...}': a model with other parameters is another row); floors 'material:<id>' ('material:' for the floors of no material); rooms 'room:<id>'; walls 'material:<id>' and the thickness in mm, as 'material:brick 200' ('material: 200' for the default material); openings the kind, then width and height in metres, as 'arch.door 0.9 2.1', whatever the table's units. Left out, every row.",
+          ),
+        decimal: z.enum(['.', ',']).optional().describe("The decimal separator of its numbers. Defaults to '.'."),
+        system: z.enum(['metric', 'imperial']).optional().describe("'imperial' gives lengths in feet, areas in square feet, volumes in cubic feet and thicknesses in inches. Defaults to 'metric'."),
+        language: z.string().optional().describe('The language code its rows are named in where they take a name from an extension, as "fr".'),
+      })
+      .describe('A table of quantities placed on the drawing, its top-left corner at (x, y): what is on a page, counted and measured, and kept up to date as the drawing changes.'),
     z
       .object({ ...base, type: z.literal('divider'), a: Vec2Schema, b: Vec2Schema })
       .describe('A line that separates two rooms where there is no wall, for example between a kitchen and a living room in one open space. It bounds rooms as a wall does and takes no space.'),
@@ -334,10 +372,27 @@ export const NodeSchema = z
     z
       .object({
         ...base,
+        type: z.literal('gridline'),
+        a: Vec2Schema,
+        b: Vec2Schema,
+        label: z.string().describe('What its bubble says, as "A" or "1".'),
+        bubbles: z.enum(GRIDLINE_BUBBLES).optional().describe("Which ends carry the bubble: 'start' (at a, the default), 'end' (at b), 'both' or 'none'."),
+        size: z.number().positive().optional().describe('The diameter of the bubble in mm. Defaults to 800; the label is half as tall.'),
+        font,
+      })
+      .describe(
+        'A grid line: a line of the building\'s grid from a to b, with a circle (its bubble) past one end or both, the label written upright inside; a label too wide for the circle stretches it level into a pill. Its "style" is the line, usually dashed; the bubble and the label take its colour and weight but are never dashed.',
+      ),
+    z
+      .object({
+        ...base,
         type: z.literal('wall'),
         a: Vec2Schema,
         b: Vec2Schema,
-        thickness: z.number().positive().describe('In mm. For a wall of a type that defines a thickness it is kept equal to the type\'s, unless "overrides" lists it.'),
+        thickness: z.number().positive().describe('In mm.'),
+        material: Id.optional().describe(
+          'The id of the material it is made of, among the drawing\'s "materials": it is drawn in its colour and pattern unless its style gives its own, and counted under it. Left out, it is of the default material. Walls of one material that meet are drawn as one; between walls of different materials that touch, a line is drawn. A wall built of several materials (brick lined with insulation, then plaster) is several walls side by side, each of one.',
+        ),
         justify: z
           .enum(['left', 'center', 'right'])
           .optional()
@@ -357,16 +412,11 @@ export const NodeSchema = z
           .describe(
             'The lines of its outline one by one, each with a look of its own over the wall\'s style. "left" and "right" are its two faces, as it runs from a to b; "a" and "b" are the lines across its ends. "show": false hides a line. Across an end, left out, the line is drawn when the end is free or stops against another wall, and not where two walls are joined into one; "show": true draws the line between two joined walls (what cutting a wall in two gives).',
           ),
-        wallType: Id.optional().describe('The id of the wall type it is built as, among the document\'s "wallTypes". It takes what the type defines.'),
-        overrides: z
-          .array(z.enum(['thickness']))
-          .optional()
-          .describe('The properties this wall keeps its own value for although its type defines them. Only the thickness needs listing: a height or a style of its own is an exception by being there.'),
         joins: z
           .object({ a: join, b: join })
           .optional()
           .describe(
-            "How each end is finished where it meets exactly one other wall. Left out (the default), the corner is automatic: a sharp point, cut off when the walls meet at less than 60° and the point would stick out. 'miter' keeps the sharp point at any angle, 'round' and 'bevel' round or cut that corner off, and 'through' with 'butt' on the other wall's end lets this wall run past while the other stops against it. Give both ends of a corner the same value, or the through/butt pair.",
+            "How each end is finished where it meets exactly one other wall. Left out (the default), the corner is automatic: a sharp point, cut off when the walls meet at less than 60° and the point would stick out. 'miter' keeps the sharp point at any angle, 'round' and 'bevel' round or cut that corner off, and 'through' with 'butt' on the other wall's end lets this wall run past while the other stops against it. Give both ends of a corner the same value, or the through/butt pair. 'free' joins this end to nothing, even where other walls end at the same point: it ends square, or cut along the side of a wall it stops against, and moving those walls leaves it where it is.",
           ),
       })
       .describe('A wall along the line a-b (its middle, or one of its faces with "justify"), straight or, with "bulge", an arc. Walls sharing an endpoint are drawn joined.'),
@@ -435,7 +485,7 @@ export const DocumentSchema = z
     unit: z.literal('mm'),
     layers: z.record(Id, LayerSchema).describe('Layers by id.'),
     colors: z.record(Id, SharedColorSchema).optional().describe('Shared colours by id, referred to from colour properties as "var(--<id>)".'),
-    wallTypes: z.record(Id, WallTypeSchema).optional().describe('Wall types by id, referred to from walls by "wallType".'),
+    materials: z.record(Id, MaterialSchema).optional().describe('Materials by id, referred to from walls and the floors of rooms by "material".'),
     dimensionStyles: z.record(Id, DimensionStyleSchema).optional().describe('Dimension styles by id, referred to from dimensions by "dimensionStyle".'),
     assets: z.record(Id, AssetSchema).optional().describe('Embedded files by id. Large; tools that only need the drawing can ignore it.'),
     nodes: z

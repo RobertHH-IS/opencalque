@@ -4,7 +4,7 @@ import type { Op } from '../ops'
 import type { Registry } from '../registry'
 import type { Document, Node } from '../schema'
 import { courseOf, cross, dot, JOIN_TOLERANCE, middleAcross, tidy, wallArc, wallContains, wallPoints, wallSides, type Wall } from './course'
-import { lineCircle, moveCornerOps, wallEndsAt } from './joints'
+import { lineCircle, moveCornerOps, wallEndsAt, wallEndsOf } from './joints'
 import { openingIndex } from './openings'
 import { withoutEnd } from './outline'
 import { wallIndex, wallsIn, wallsNear } from './spatial'
@@ -17,8 +17,8 @@ const flatten = (doc: Document, nodes: Node[]): Node[] => nodes.flatMap((n) => (
 /**
  * What has to follow when nodes are moved by `d` for the plan to stay in one piece. Walls are tied
  * to each other, and openings to walls, by position only, so this is where the ties are honoured:
- * - an end of another wall that met an end of a moved wall goes with it, so that wall stretches
- *   and turns instead of being left behind;
+ * - an end of another wall joined to an end of a moved wall goes with it, so that wall stretches
+ *   and turns instead of being left behind (an end set loose there, joined to nothing, stays);
  * - a door or window sitting in a moved wall goes with it.
  * `doc` is the drawing before the move. The result does not include the move itself.
  */
@@ -29,17 +29,17 @@ export function wallFollowOps(doc: Document, moved: Node[], d: Vec2, registry: R
   if (walls.length === 0) return []
   const ends = new Map<string, { a?: Vec2; b?: Vec2 }>()
   const ops: Op[] = []
-  for (const parent of new Set(walls.map((w) => w.parent))) {
-    const index = wallIndex(doc, parent)
-    const joints = walls.filter((w) => w.parent === parent).flatMap((w) => [w.a, w.b])
-    const meets = (p: Vec2) => joints.some((q) => dist(p, q) < JOIN_TOLERANCE)
-    // The walls that may meet a moved one, in the order of the drawing.
-    const near = new Set(joints.flatMap((p) => wallsNear(index, p)))
-    for (const other of index.walls) {
-      if (!near.has(other) || going.has(other.id)) continue
-      const patch = { ...(meets(other.a) ? { a: add(other.a, d) } : {}), ...(meets(other.b) ? { b: add(other.b, d) } : {}) }
-      if (patch.a || patch.b) ends.set(other.id, { ...ends.get(other.id), ...patch })
+  // The walls joined to a moved one at its ends, and those only: not one set loose there, nor a
+  // lining stopping against it. What follows is what the canvas shows as joined.
+  for (const wall of walls) {
+    for (const side of ['a', 'b'] as const) {
+      for (const { wall: other, end } of wallEndsOf(doc, wall, side)) {
+        if (other.id === wall.id || going.has(other.id)) continue
+        ends.set(other.id, { ...ends.get(other.id), [end]: add(other[end], d) })
+      }
     }
+  }
+  for (const parent of new Set(walls.map((w) => w.parent))) {
     for (const [id, host] of openingIndex(doc, parent, registry).hosts) {
       const other = doc.nodes[id]
       if (host && going.has(host.id) && !going.has(id) && other?.type === 'parametric') ops.push({ op: 'update_node', id, patch: { x: other.x + d.x, y: other.y + d.y } })
@@ -105,6 +105,19 @@ export function wallThicknessOps(doc: Document, wall: Wall, thickness: number, s
   const across = side === 'right' ? share * change : side === 'left' ? -(1 - share) * change : (-(1 - 2 * share) * change) / 2
   const middle = side === 'right' ? change / 2 : side === 'left' ? -change / 2 : 0
   if (Math.abs(across) < 1e-9) return [{ op: 'update_node', id: wall.id, patch: { thickness } }, ...openingsAcross(doc, wall, middle, registry)]
+  const moved = lineAcrossOps(doc, wall, across, { thickness }, true)
+  return moved && [...moved, ...openingsAcross(doc, wall, middle, registry)]
+}
+
+/**
+ * The operations that move a wall's line across by `across` (to its right when positive), with
+ * `patch` for what else changes in the wall: its corners go along, the walls joined there sliding
+ * along their own line to stay joined, or, where they carry straight on from it, left where they
+ * are; an end of it that stops against the side of another wall slides along that wall; and, with
+ * `stopping`, the walls that stop against its sides are lengthened or shortened to keep reaching
+ * it. A curved wall keeps its centre. Null when its line would shrink to its centre.
+ */
+function lineAcrossOps(doc: Document, wall: Wall, across: number, change: Record<string, unknown>, stopping: boolean): Op[] | null {
   const arc = wallArc(wall)
   const way = arc ? Math.sign(arc.sweep) : 0
   const radius = arc ? arc.radius - way * across : 0
@@ -158,7 +171,7 @@ export function wallThicknessOps(doc: Document, wall: Wall, thickness: number, s
     const host = walls.find((w) => w.id !== wall.id && straight(w) && wallContains(w, c, JOIN_TOLERANCE))
     return (host && onto(c, straight(host)!)) || move(c, across)
   })
-  const patch: Record<string, unknown> = { a: ends[0], b: ends[1], thickness }
+  const patch: Record<string, unknown> = { a: ends[0], b: ends[1], ...change }
   if (arc) {
     // The same centre, so the face that stays is the same circle: the curve stands off its new chord by what that radius gives.
     const chord = dist(ends[0], ends[1])
@@ -167,7 +180,7 @@ export function wallThicknessOps(doc: Document, wall: Wall, thickness: number, s
   ops.unshift({ op: 'update_node', id: wall.id, patch })
 
   // The walls that stop against its sides.
-  for (const other of walls) {
+  for (const other of stopping ? walls : []) {
     if (other.id === wall.id) continue
     for (const end of ['a', 'b'] as const) {
       const p = other[end]
@@ -178,19 +191,23 @@ export function wallThicknessOps(doc: Document, wall: Wall, thickness: number, s
       if (to) carry(p, to)
     }
   }
-  return [...ops, ...openingsAcross(doc, wall, middle, registry)]
+  return ops
 }
 
 /**
  * The operations that draw a wall by another of its lines: its middle, or its left or right face
- * as it runs from `a` to `b`. The line stays where it is, and with it the corners and the walls
- * joined there; the wall moves to the other side of it, taking its doors and windows along.
+ * as it runs from `a` to `b`. The wall stays where it is, with its doors and windows: its line goes
+ * onto the line chosen, and its corners with it, the walls joined there sliding along their own
+ * line to stay joined (as when it is made thicker, `lineAcrossOps`). A thickness given afterwards
+ * grows away from that line. Several walls are changed one after the other, each from the drawing
+ * the one before left. A curved wall whose line cannot go there keeps its line and moves instead.
  */
 export function wallJustifyOps(doc: Document, wall: Wall, justify: 'left' | 'center' | 'right', registry: Registry): Op[] {
   const next = justify === 'center' ? undefined : justify
   if (wall.justify === next || (justify === 'center' && wall.justify === 'center')) return []
   const by = middleAcross({ thickness: wall.thickness, justify: next }) - middleAcross(wall)
-  return [{ op: 'update_node', id: wall.id, patch: { justify: next ?? null } }, ...openingsAcross(doc, wall, by, registry)]
+  const patch = { justify: next ?? null }
+  return lineAcrossOps(doc, wall, -by, patch, false) ?? [{ op: 'update_node', id: wall.id, patch }, ...openingsAcross(doc, wall, by, registry)]
 }
 
 /**
@@ -200,13 +217,11 @@ export function wallJustifyOps(doc: Document, wall: Wall, justify: 'left' | 'cen
 export function wallEndFollowOps(doc: Document, wall: Node, index: number, p: Vec2): Op[] {
   // A wall's third handle bends it, which moves neither end.
   if (wall.type !== 'wall' || index > 1) return []
-  const joint = index === 0 ? wall.a : wall.b
-  return wallsNear(wallIndex(doc, wall.parent), joint)
-    .filter((other) => other.id !== wall.id)
-    .flatMap((other): Op[] => {
-      const patch = { ...(dist(other.a, joint) < JOIN_TOLERANCE ? { a: p } : {}), ...(dist(other.b, joint) < JOIN_TOLERANCE ? { b: p } : {}) }
-      return patch.a || patch.b ? [{ op: 'update_node', id: other.id, patch }] : []
-    })
+  // Only the walls joined to it there: not one that ends at the same point but was set loose, or
+  // that it was set loose from, nor a lining stopping against it.
+  return wallEndsOf(doc, wall, index === 0 ? 'a' : 'b')
+    .filter((other) => other.wall.id !== wall.id)
+    .map(({ wall: other, end }): Op => ({ op: 'update_node', id: other.id, patch: { [end]: p } }))
 }
 
 /**
@@ -264,7 +279,7 @@ function crossings(doc: Document, parentId: string | null, wall: Wall, from: Vec
  * The ends of a wall that no other wall ends at: the ones that can be extended or trimmed. A
  * curved wall has none: there is no saying where a curve carried on would go.
  */
-const freeEnds = (doc: Document, wall: Wall): ('a' | 'b')[] => (wallArc(wall) ? [] : (['a', 'b'] as const).filter((end) => wallEndsAt(doc, wall.parent, wall[end]).length === 1))
+const freeEnds = (doc: Document, wall: Wall): ('a' | 'b')[] => (wallArc(wall) ? [] : (['a', 'b'] as const).filter((end) => wallEndsOf(doc, wall, end).length === 1))
 
 /**
  * Lengthens walls to the next wall in their way: each free end of each wall given (or only `end`

@@ -2882,7 +2882,126 @@ button.crumb.ahead:hover {
   padding-left: 0;
 }
 
-/* A wall type: its row, then what it is made of */
+/* Yes or no, as two tabs side by side, in place of a checkbox */
+.yes-no {
+  display: inline-flex;
+  flex: none;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--hover);
+}
+
+.yes-no > button {
+  min-width: 34px;
+  height: 20px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.yes-no > button:hover {
+  color: var(--text);
+}
+
+.yes-no > button.active {
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--border), 0 1px 2px rgb(0 0 0 / 8%);
+  color: var(--text);
+}
+
+/* A row a table may show, by its name, beside whether it does */
+.table-columns .row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Going through the placements of a component: in place of the hints, at the top of the canvas */
+.instance-bar {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 6px 3px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 8%);
+  font-size: 12px;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.instance-bar > strong {
+  margin: 0 4px 0 2px;
+}
+
+.instance-bar .instance-count {
+  min-width: 40px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.instance-bar .text-button {
+  margin: 0 2px;
+}
+
+/* The list a component is picked from: its picture beside its name */
+.material-menu .color-option > .thumb {
+  width: 22px;
+  height: 22px;
+  padding: 2px;
+  border-radius: 3px;
+}
+
+/* The list a material is picked from: a box to find one by name, the + beside it, then the materials */
+.material-search {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px 2px 4px;
+}
+
+.material-search > input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--bg);
+  color: inherit;
+  font: inherit;
+}
+
+.material-search > input:focus {
+  border-color: var(--accent);
+  outline: 0;
+}
+
+/* A material: its swatch, which a click changes, its name, how many things are made of it */
+.row.material {
+  gap: 8px;
+}
+
+.row.material .uses {
+  margin-left: auto;
+}
+
+/* A dimension style: its row, then its settings */
 .wall-type {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
@@ -2890,6 +3009,115 @@ button.crumb.ahead:hover {
 
 .wall-type .field > em {
   font-style: normal;
+}
+
+/* The layers of a wall type, from its right face to its left: material, thickness, order */
+
+.build-up {
+  padding: 2px 8px 4px 16px;
+}
+
+.build-up-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 24px;
+  color: var(--muted);
+}
+
+.build-up-head > em {
+  font-size: 11px;
+}
+
+.build-up-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+}
+
+.build-up-swatch {
+  flex: none;
+  width: 10px;
+  height: 18px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+
+.build-up-row > select {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--hover);
+  color: inherit;
+  font: inherit;
+}
+
+.build-up-thickness {
+  flex: none;
+  width: 64px;
+}
+
+.build-up-thickness > .field {
+  min-height: 0;
+  padding: 0;
+}
+
+.build-up-thickness > .field > span:first-child {
+  display: none;
+}
+
+.build-up-row > .icon-button {
+  flex: none;
+}
+
+/* In a narrow column the material takes the whole row, its thickness and buttons going under it. */
+@container (max-width: 320px) {
+  .build-up-row {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    padding: 2px 0 4px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .build-up-row > select {
+    flex: 1 0 calc(100% - 18px);
+  }
+
+  .build-up-thickness {
+    margin-left: 14px;
+    width: 88px;
+  }
+
+  .build-up-row > button:first-of-type {
+    margin-left: auto;
+  }
+}
+
+/* The columns of a table of quantities: a tick to show each, and the words over it */
+
+.table-columns {
+  padding: 4px 0 2px;
+}
+
+.table-columns > .faint {
+  display: block;
+  padding: 0 12px 2px 16px;
+}
+
+.column-heading {
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--hover);
+  color: inherit;
+  font: inherit;
 }
 
 /* A property of a wall type: a tick to define it, its name, its value */
@@ -3052,6 +3280,30 @@ button.crumb.ahead:hover {
 .field > em {
   flex: 1;
   font-style: normal;
+}
+
+/* A wall end: its joint or that it is free, what it touches or nearly meets, and what to do about it */
+.wall-end {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.wall-end > em {
+  font-style: normal;
+}
+
+.wall-end > .hint {
+  margin: 0;
+  padding: 0;
+}
+
+.wall-end > .text-button {
+  padding: 0;
 }
 
 /* The lines of a wall one by one, once its look is split */

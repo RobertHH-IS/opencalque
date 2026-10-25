@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { BrickWall, Circle, Hexagon, Component, File, Group, Image, MessageSquare, Minus, RulerDimensionLine, Shapes, SeparatorVertical, Spline, Square, SquareDashed, StickyNote, Type, type LucideIcon } from 'lucide-react'
+import { BrickWall, Circle, Hexagon, Component, File, Group, Image, MessageSquare, Minus, RulerDimensionLine, Shapes, SeparatorVertical, Spline, Square, SquareDashed, StickyNote, Table, Type, type LucideIcon } from 'lucide-react'
 import type { Document, Node } from '@opencalque/core'
+import { GridLine } from './icons'
 import { msg, t } from './i18n'
 import { registry } from './extensions'
 import { collapseHistory, useStore } from './store'
@@ -16,8 +17,10 @@ const TYPE_LABELS: Record<Node['type'], string> = {
   rect: msg('Rectangle'),
   paper: msg('Paper'),
   annotation: msg('Annotation'),
+  gridline: msg('Grid line'),
   room: msg('Room'),
   divider: msg('Room divider'),
+  table: msg('Table of quantities'),
   ellipse: msg('Ellipse'),
   text: msg('Text'),
   wall: msg('Wall'),
@@ -36,8 +39,10 @@ const TYPE_ICONS: Record<Node['type'], LucideIcon> = {
   rect: Square,
   paper: StickyNote,
   annotation: MessageSquare,
+  gridline: GridLine,
   room: SquareDashed,
   divider: SeparatorVertical,
+  table: Table,
   ellipse: Circle,
   text: Type,
   wall: BrickWall,
@@ -63,6 +68,7 @@ export function labelOf(doc: Document, node: Node): string {
   if (node.name) return node.name
   // A text is known by its first line; a note by its words, when it has some.
   if (node.type === 'text' || (node.type === 'annotation' && node.text.trim())) return node.text.split('\n')[0]
+  if (node.type === 'gridline' && node.label.trim()) return t('Grid line {label}', { label: node.label })
   if (node.type === 'instance') return labelOf(doc, doc.nodes[node.component] ?? node)
   if (node.type === 'parametric') return t(registry.parametric.get(node.kind)?.label ?? node.kind)
   // A closed polyline is a polygon: what it is called says which.
@@ -123,14 +129,16 @@ const LENGTH_STEP = 10
 /**
  * Lets a number be changed by holding Alt and dragging sideways on its field: right for more, left
  * for less, Shift for ten times faster. `read` gives the number as it is now (null when there is
- * none to start from) and `write` is called with each new one. However far the drag goes, it is
- * one step to undo.
+ * none to start from) and `write` is called with each new one. With `snap`, the number starts from
+ * the nearest multiple of it, so that the steps land on whole values. However far the drag goes,
+ * it is one step to undo.
  */
-export function scrub(read: () => number | null, write: (value: number) => void, step = 1, min = -Infinity) {
+export function scrub(read: () => number | null, write: (value: number) => void, step = 1, min = -Infinity, snap?: number) {
   return {
     onPointerDown(e: React.PointerEvent<HTMLInputElement>) {
-      const start = read()
-      if (!e.altKey || e.button !== 0 || start === null || !Number.isFinite(start)) return
+      const now = read()
+      if (!e.altKey || e.button !== 0 || now === null || !Number.isFinite(now)) return
+      const start = snap ? Math.round(now / snap) * snap : now
       // No caret and no text selection: this press is a drag on the number.
       e.preventDefault()
       const input = e.currentTarget
@@ -138,7 +146,7 @@ export function scrub(read: () => number | null, write: (value: number) => void,
       input.setPointerCapture(e.pointerId)
       const from = e.clientX
       const mark = useStore.getState().past.length
-      let last = start
+      let last = now
       const move = (m: PointerEvent) => {
         const next = Math.max(min, Math.round((start + Math.round(m.clientX - from) * step * (m.shiftKey ? 10 : 1)) * 1e6) / 1e6)
         if (next === last) return
@@ -208,9 +216,10 @@ export function watchScrubKey(): () => void {
   }
 }
 
-export function Field(props: { label: string; value: string | number; numeric?: boolean; length?: boolean; optional?: boolean; step?: number; min?: number; placeholder?: string; multiline?: boolean; onCommit: (value: any) => void }) {
-  // A length is kept in mm and shown in the user's unit; any other number is shown as it is.
-  const shown = typeof props.value !== 'number' ? props.value : props.length ? formatNumber(props.value) : String(Math.round(props.value * 100) / 100)
+export function Field(props: { label: string; value: string | number; numeric?: boolean; length?: boolean; optional?: boolean; step?: number; min?: number; snap?: number; decimals?: number; placeholder?: string; multiline?: boolean; onCommit: (value: any) => void }) {
+  // A length is kept in mm and shown in the user's unit; any other number is shown as it is, to `decimals` places (2 unless said).
+  const places = 10 ** (props.decimals ?? 2)
+  const shown = typeof props.value !== 'number' ? props.value : props.length ? formatNumber(props.value) : String(Math.round(props.value * places) / places)
   const [text, setText] = useState(shown)
   useEffect(() => {
     setText(shown)
@@ -239,12 +248,29 @@ export function Field(props: { label: string; value: string | number; numeric?: 
         value={text}
         placeholder={props.placeholder}
         title={props.numeric ? t('Hold Alt and drag sideways to change the value') : undefined}
-        {...(props.numeric ? scrub(() => (typeof props.value === 'number' ? props.value : null), props.onCommit, props.step ?? (props.length ? LENGTH_STEP : 1), props.min) : {})}
+        {...(props.numeric ? scrub(() => (typeof props.value === 'number' ? props.value : null), props.onCommit, props.step ?? (props.length ? LENGTH_STEP : 1), props.min, props.snap) : {})}
         onChange={(e) => setText(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
       />
     </label>
+  )
+}
+
+/**
+ * Yes or no (or two other `words`), as two tabs side by side, the one that holds lit, in place of a
+ * checkbox, which reads less plainly. Neither is lit when what it is about disagrees (several things selected). Not to be
+ * put in a label: a label would hand every click to the first tab.
+ */
+export function YesNo(props: { value: boolean | undefined; onChange: (value: boolean) => void; label: string; title?: string; words?: [yes: string, no: string] }) {
+  return (
+    <div className="yes-no" role="radiogroup" aria-label={props.label} title={props.title}>
+      {[true, false].map((one) => (
+        <button key={String(one)} type="button" role="radio" aria-checked={props.value === one} className={props.value === one ? 'active' : ''} onClick={() => props.value !== one && props.onChange(one)}>
+          {props.words ? props.words[one ? 0 : 1] : one ? t('Yes') : t('No')}
+        </button>
+      ))}
+    </div>
   )
 }
 

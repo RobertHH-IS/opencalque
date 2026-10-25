@@ -1,5 +1,5 @@
 import * as z from 'zod'
-import { MIGRATIONS } from './migrations'
+import { carriesWallTypes, MIGRATIONS, withoutWallTypes } from './migrations'
 import { repairDocument } from './repair'
 import { DocumentSchema, FORMAT, FORMAT_VERSION, FORMER_FORMAT, NODE_TYPES, type Document } from './schema'
 import { keepUnknown } from './unknown'
@@ -41,6 +41,9 @@ export function readDocument(json: unknown): { doc: Document; repairs: string[] 
   if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) throw invalid(`"version" is ${JSON.stringify(version)}, where a drawing gives the version of its format, a whole number.`)
   if (version > FORMAT_VERSION) throw new NewerFormatError(version)
   for (let from = version; from < FORMAT_VERSION; from++) raw = { ...MIGRATIONS[from - 1](raw), version: from + 1 }
+  // Saved by a development build of version 2 that still had wall types: taken out as from version 1.
+  const typed = carriesWallTypes(raw)
+  if (typed) raw = withoutWallTypes(raw)
   if (isPlain(raw.nodes)) {
     for (const [key, node] of Object.entries(raw.nodes)) {
       if (isPlain(node) && typeof node.type === 'string' && !NODE_TYPES.includes(node.type)) {
@@ -50,7 +53,8 @@ export function readDocument(json: unknown): { doc: Document; repairs: string[] 
   }
   const result = DocumentSchema.safeParse(raw)
   if (!result.success) throw invalid(z.prettifyError(result.error))
-  return repairDocument(keepUnknown(raw, result.data))
+  const { doc, repairs } = repairDocument(keepUnknown(raw, result.data))
+  return { doc, repairs: typed ? ['Wall types, left by a development version, were taken out: each became a material of its name, and each wall has what its type gave it.', ...repairs] : repairs }
 }
 
 /** Validates untrusted JSON into a document, putting right what it can (see `readDocument`). */

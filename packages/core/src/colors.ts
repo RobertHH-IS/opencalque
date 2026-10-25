@@ -76,11 +76,11 @@ export function colorRefsIn(value: unknown): string[] {
   return [...new Set([...JSON.stringify(value ?? null).matchAll(REFERENCES)].map((match) => match[1]))].filter((id) => id !== 'layer')
 }
 
-/** How many nodes and layers refer to a shared colour. */
+/** How many nodes, layers, dimension styles and materials refer to a shared colour. */
 export function colorUses(doc: Document, id: string): number {
   const reference = colorRef(id)
   const uses = (thing: unknown) => JSON.stringify(thing).includes(reference)
-  return Object.values(doc.nodes).filter(uses).length + Object.values(doc.layers).filter(uses).length
+  return [doc.nodes, doc.layers, doc.dimensionStyles, doc.materials].reduce((total, map) => total + Object.values(map ?? {}).filter(uses).length, 0)
 }
 
 /** A copy of something with every reference to one shared colour replaced by a plain colour. */

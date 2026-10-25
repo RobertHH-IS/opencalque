@@ -41,6 +41,8 @@ import {
   openExample,
   alignSelection,
   distributeSelection,
+  browseSelectedInstances,
+  stepInstance,
 } from './actions'
 import { registry } from './extensions'
 import { editComponent, showPage } from './navigation'
@@ -90,7 +92,12 @@ const get = useStore.getState
 const prefs = usePrefs.getState
 const selected = () => get().selection.length > 0
 const onlyInstance = () => get().selection.length === 1 && get().doc.nodes[get().selection[0]]?.type === 'instance'
-const onlyParametric = () => get().selection.length === 1 && get().doc.nodes[get().selection[0]]?.type === 'parametric'
+/** One placement selected: an instance, or a parametric object, which is placed as a model is (`entries.ts`). */
+const onlyPlacement = () => get().selection.length === 1 && ['instance', 'parametric'].includes(get().doc.nodes[get().selection[0]]?.type ?? '')
+/** The placements of a component are being gone through (`InstanceBar`). */
+const browsing = () => useWindows.getState().browsing !== null
+/** One parametric object or one table of quantities selected: what can be made into the shapes it draws. */
+const onlyVectorizable = () => get().selection.length === 1 && ['parametric', 'table'].includes(get().doc.nodes[get().selection[0]]?.type ?? '')
 /** A line, a wall or a divider has its first point and is waiting for the next. */
 const drawingLine = () => get().drawStep > 0 && ['line', 'wall', 'divider'].includes(get().tool)
 /** Something is being dragged with the select tool: moved, or reshaped by one of its points. */
@@ -231,7 +238,10 @@ const STATIC: Command[] = [
   },
 
   // A component alone is one already: making another from it would only wrap it.
-  { id: 'component.vectorize', title: msg('Vectorize'), category: 'Edit', interrupts: true, when: onlyParametric, run: vectorizeSelection },
+  { id: 'component.vectorize', title: msg('Vectorize'), category: 'Edit', interrupts: true, when: onlyVectorizable, run: vectorizeSelection },
+  { id: 'component.browse', title: msg('Go through the instances of this component'), category: 'Components', keywords: 'find placements next', when: onlyPlacement, run: browseSelectedInstances },
+  { id: 'component.nextInstance', title: msg('Next instance'), category: 'Components', keys: ['Alt+ArrowRight'], when: browsing, run: () => stepInstance(1) },
+  { id: 'component.previousInstance', title: msg('Previous instance'), category: 'Components', keys: ['Alt+ArrowLeft'], when: browsing, run: () => stepInstance(-1) },
   { id: 'component.create', title: msg('Make into a component'), category: 'Components', keys: ['Mod+Alt+K'], interrupts: true, when: () => selected() && !onlyInstance(), run: makeComponent },
   { id: 'component.purge', title: msg('Delete unused components'), category: 'Components', when: () => unusedComponents(get().doc).length > 0, run: deleteUnusedComponents },
   { id: 'component.finish', title: msg('Finish editing this group or component'), category: 'Components', when: () => get().scope !== get().page, run: () => editComponent(null) },
@@ -254,7 +264,7 @@ const STATIC: Command[] = [
   panel('components'),
   panel('objects'),
   panel('colors'),
-  panel('wallTypes'),
+  panel('materials'),
   panel('dimensionStyles'),
   panel('properties'),
   panel('assistant', ['Mod+J']),
@@ -287,6 +297,7 @@ const STATIC: Command[] = [
   tool('eyedropper', msg('Eyedropper: copy the look of an object'), 'I'),
   tool('text', msg('Text'), 'T'),
   tool('annotation', msg('Annotation'), 'Shift+T'),
+  tool('gridline', msg('Grid line'), 'G'),
   tool('paper', msg('Paper'), 'F'),
   tool('room', msg('Room'), 'A'),
   tool('divider', msg('Room divider'), 'Shift+A'),

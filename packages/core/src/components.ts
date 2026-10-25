@@ -1,6 +1,5 @@
-import { generateNKeysBetween } from 'fractional-indexing'
 import { colorRefsIn } from './colors'
-import { childrenOf, componentsOf, layerIn, layersOf, leavesOf, newId, rootOf } from './document'
+import { childrenOf, componentUses, componentsOf, layerIn, layersOf, leavesOf, newId, ordersAt, rootOf } from './document'
 import { cloneOps } from './groups'
 import { moveOps, nodePrimitives } from './kinds'
 import { applyOps, OpError, type NodeInput, type Op } from './ops'
@@ -136,7 +135,7 @@ export function detachInstance(doc: Document, instanceId: string, registry: Regi
   // Loose, the copies go where the instance was among its siblings; in a group they keep the component's order.
   const siblings = childrenOf(doc, instance.parent)
   const at = siblings.findIndex((n) => n.id === instanceId)
-  const orders = kept ? [] : generateNKeysBetween(siblings[at - 1]?.order ?? null, siblings[at + 1]?.order ?? null, parts.length)
+  const orders = kept ? [] : ordersAt(siblings.filter((n) => n.id !== instanceId), at, parts.length)
   const placement = { x: instance.x, y: instance.y }
   const copies = parts.map((part, i) => {
     const copy = cloneOps(doc, part.id, placement, into)
@@ -152,8 +151,8 @@ export function detachInstance(doc: Document, instanceId: string, registry: Regi
 
 /**
  * The operations that copy what is inside `from` (a page, component or group of `source`) into
- * `to` in `target`, with new ids, however deeply grouped. Pictures bring their files, and walls
- * and dimensions their type or style, unless the target has one of that id already; nodes go to
+ * `to` in `target`, with new ids, however deeply grouped. Pictures bring their files, walls and
+ * floors their materials and dimensions their style, unless the target has one of that id already; nodes go to
  * the target layer with the same name as theirs, else to `fallbackLayer`, else to none, and to no
  * layer at all inside a component.
  * `components` maps the source's component ids to the target's, for the instances among them.
@@ -180,15 +179,18 @@ export function transplantOps(
       if (asset && !target.assets?.[asset.id] && !ops.some((o) => o.op === 'add_asset' && o.asset.id === asset.id)) {
         ops.push({ op: 'add_asset', asset })
       }
-      // So does the wall type or dimension style it is drawn in, which keeps its id as well.
-      const wallType = child.type === 'wall' && child.wallType ? source.wallTypes?.[child.wallType] : undefined
+      // So does the dimension style it is drawn in, which keeps its id as well.
       const dimensionStyle = child.type === 'dimension' && child.dimensionStyle ? source.dimensionStyles?.[child.dimensionStyle] : undefined
-      // So does a shared colour it or its type refers to, which also keeps its id.
-      for (const id of colorRefsIn([child, wallType, dimensionStyle])) {
+      // So does the material of a wall or of a floor, which keeps its id too.
+      const materials = [child.type === 'wall' || child.type === 'room' ? child.material : undefined].flatMap((id) => (id && source.materials?.[id] ? [source.materials[id]] : []))
+      // So does a shared colour it, its style or its materials refer to, which also keeps its id.
+      for (const id of colorRefsIn([child, dimensionStyle, materials])) {
         const color = source.colors?.[id]
         if (color && !target.colors?.[id] && !ops.some((o) => o.op === 'add_color' && o.color.id === id)) ops.push({ op: 'add_color', color })
       }
-      if (wallType && !target.wallTypes?.[wallType.id] && !ops.some((o) => o.op === 'add_wall_type' && o.wallType.id === wallType.id)) ops.push({ op: 'add_wall_type', wallType })
+      for (const material of materials) {
+        if (!target.materials?.[material.id] && !ops.some((o) => o.op === 'add_material' && o.material.id === material.id)) ops.push({ op: 'add_material', material })
+      }
       if (dimensionStyle && !target.dimensionStyles?.[dimensionStyle.id] && !ops.some((o) => o.op === 'add_dimension_style' && o.dimensionStyle.id === dimensionStyle.id)) {
         ops.push({ op: 'add_dimension_style', dimensionStyle })
       }
@@ -287,4 +289,45 @@ export function importComponents(
 
   for (const id of componentIds) copy(id)
   return { doc: result, ops, imported }
+}
+
+/** What a placement may be made a placement of: a component, or a parametric object of a kind with its parameters. */
+export type PlacedModel = { kind: 'component'; id: string } | { kind: 'parametric'; id: string; props: Record<string, unknown> }
+
+/**
+ * The operations that make placements (instances of components, or parametric objects) placements
+ * of `to` instead, each where it is, turned, mirrored and on its layer, in its place in the
+ * stacking order: so that two components drawn twice over and used here and there become one, and
+ * tables count them together. The placement is by the insertion point, as a block is replaced in
+ * CAD programs. An instance made another component's keeps its scale and stretch, a parametric
+ * object made another model takes its kind and parameters, and one made the other sort of thing
+ * is replaced by a node of that sort with a new id. What would put a component inside itself is
+ * left as it was: `skipped` says how many.
+ */
+export function replaceWithOps(doc: Document, ids: string[], to: PlacedModel): { ops: Op[]; skipped: number } {
+  if (to.kind === 'component' && doc.nodes[to.id]?.type !== 'component') return { ops: [], skipped: 0 }
+  const ops: Op[] = []
+  let skipped = 0
+  for (const id of ids) {
+    const node = doc.nodes[id]
+    if ((node?.type !== 'instance' && node?.type !== 'parametric') || node.parent === null) continue
+    const root = rootOf(doc, node.parent)
+    if (to.kind === 'component' && root?.type === 'component' && componentUses(doc, to.id, root.id)) {
+      skipped++
+      continue
+    }
+    if (node.type === 'instance' && to.kind === 'component') {
+      if (node.component !== to.id) ops.push({ op: 'update_node', id, patch: { component: to.id } })
+      continue
+    }
+    if (node.type === 'parametric' && to.kind === 'parametric') {
+      ops.push({ op: 'update_node', id, patch: { kind: to.id, props: to.props } })
+      continue
+    }
+    // The other sort of thing: a node of it in the same place.
+    const kept = { parent: node.parent, order: node.order, x: node.x, y: node.y, ...(node.rotation ? { rotation: node.rotation } : {}), ...(node.flipX ? { flipX: true } : {}), ...(node.layer ? { layer: node.layer } : {}), ...(node.visible === false ? { visible: false } : {}), ...(node.locked ? { locked: true } : {}), ...(node.modifiers?.length ? { modifiers: node.modifiers } : {}) }
+    const made = to.kind === 'component' ? { type: 'instance', component: to.id } : { type: 'parametric', kind: to.id, props: to.props }
+    ops.push({ op: 'remove_node', id }, { op: 'add_node', node: { id: newId(), ...kept, ...made } as NodeInput })
+  }
+  return { ops, skipped }
 }

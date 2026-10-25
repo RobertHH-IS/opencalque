@@ -2,7 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, shell } fr
 import { spawn, type ChildProcess } from 'node:child_process'
 import { cpSync, existsSync, readFileSync } from 'node:fs'
 import { copyFile, mkdir, readdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import { checkForUpdate, installOnClose, installUpdate, keptOpen, listen } from './updates'
 
 // Settings made while the project was called OpenCAD (preferences, shortcuts, conversations) are
@@ -281,7 +281,10 @@ app.whenReady().then(() => {
     let path = token
     if (!path || !granted.has(path)) {
       const win = BrowserWindow.fromWebContents(event.sender)!
-      const result = await dialog.showSaveDialog(win, { defaultPath: suggestedName })
+      // A filter of the file's type: the dialog shows it ("OpenCalque (*.opencalque)") and adds the extension to a name typed without one.
+      const extension = extname(suggestedName).slice(1).toLowerCase()
+      const filters = extension ? [{ name: /^(opencalque|opencad)$/.test(extension) ? 'OpenCalque' : extension.toUpperCase(), extensions: [extension] }] : []
+      const result = await dialog.showSaveDialog(win, { defaultPath: suggestedName, filters })
       if (result.canceled || !result.filePath) return null
       path = result.filePath
       granted.add(path)

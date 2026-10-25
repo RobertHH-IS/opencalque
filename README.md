@@ -91,11 +91,12 @@ pnpm notices      # rewrite THIRD-PARTY-NOTICES.txt after adding or updating a d
 - Text typed in place, on several lines, bold or not, aligned left, centred or right, with fields such as `{date}` or `{page}` that fill themselves in.
 - Line weights in printed millimetres, dashed and dotted lines, arrows at the ends.
 - Exact sizes: type a length or an angle while drawing, in mm, cm, m, inches, feet, or feet and inches with fractions.
-- Wall types with a thickness, a fill and layers, shared by the walls built as them.
 - Dimensions with configurable ends, text and units, and chains of them along walls and their openings; a measure tool that only reads.
 
 **Organise**
 - Rooms that follow their walls, with name and area; dividers to split an open space.
+- Materials (concrete, brick, insulation, plaster, parquet…) that walls and floors are made of: each wall is of one material, drawn in its colour and hatch, and a wall of several materials is drawn as several walls side by side, a door going through them all.
+- Tables of quantities placed on the drawing that keep up to date: objects counted, floor areas by material, rooms, walls by material and thickness, doors and windows.
 - Papers: sheets at a standard format and drawing scale (A5 to A0) that carry what is drawn on them.
 - Pages you can duplicate and reorder; layers; groups and reusable components. What is drawn "on every sheet" (a title, a logo, a north arrow) shows on every paper, following each sheet and its scale.
 - Shared colours: link objects to a named colour and recolour them all at once.
@@ -112,7 +113,7 @@ pnpm notices      # rewrite THIRD-PARTY-NOTICES.txt after adding or updating a d
 - Drop a PDF or a picture to trace it, and set its scale from one known distance.
 - Import a DXF from another CAD program: its geometry and text on their layers, blocks as groups, hatches, dimensions and leaders. A DXF laid out as a sheet, as AutoCAD's paper space and SketchUp LayOut write them, comes in as a paper at its scale.
 - Export a vector PDF at true scale, one page per paper, with a title block, its text in any script but Korean. Also SVG and DXF.
-- Export the quantities as a CSV for a spreadsheet: room areas, wall lengths and faces less openings, doors and windows by kind, wall types layer by layer.
+- Export the quantities as a CSV for a spreadsheet: room areas, wall lengths and faces less openings, doors and windows by kind, floors and walls by material, the objects placed.
 
 The full inventory and roadmap are in [docs/FEATURES.md](docs/FEATURES.md).
 
@@ -168,10 +169,10 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Exact sizes | While drawing, a bar above the tools shows the shape's sizes. Type a number (just start typing) to fix one, Tab to the next, Enter to draw. For a rectangle, type both and click once to place it |
 | Draw | Click the first point, click the second. Lines and walls keep chaining; `Esc` or a double-click ends. Dragging also works |
 | Navigate | Scroll to zoom, middle-drag or `Space`+drag to pan, `Shift+1` to fit; a tap on `Space` goes back to selecting |
-| Snapping | Snaps to existing points, then to the grid. `Shift` constrains to 45°, `Alt` turns it off |
+| Snapping | Snaps to existing points, then to the grid. Rest the pointer a moment on a point (a small cross marks it): what you draw or drag then lines up with it, and with two such points (upright from one, level with the other) snaps where their guides cross. `Shift` constrains to 45°, `Alt` turns it off |
 | Edit | Drag objects or their square handles, or type exact values in the right panel |
-| Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the Components panel, beside Layers. Double-click an instance to edit the component; every instance updates |
-| Walls | Walls that end at the same point join cleanly, at any angle. Double-click the last corner to close the walls back to the first one |
+| Components | Select objects, `Ctrl+Alt+K`. Place, rename, edit and delete them from the Components panel, beside Layers. The panel also lists the objects placed from the library by their settings (a radiator of 80 cm, one of 1.20 m), each with how many there are; its pencil selects them all to change them together. Double-click an instance to edit the component; every instance updates. The framed eye on a component (or right-click on an instance) goes through its instances one by one, on every page: `Alt+→` and `Alt+←` step, `Esc` stops. The button beside it makes all its instances instances of another component (two drawn twice over become one); Component, in the properties of selected instances, changes only theirs |
+| Walls | Walls that end at the same point join cleanly, at any angle. Double-click the last corner to close the walls back to the first one. A selected wall or line shows its Angle under Geometry, to a thousandth of a degree, with a note when it is nearly but not quite level or upright and a Straighten button beside it. Type an angle, or hold Alt and drag on it, to turn it |
 | Dimensions | `D`, click the two points, then click where the dimension line should sit. End markers, line, extension lines, text, font, unit and decimals are in the right panel; set them before drawing to change the defaults |
 | Measure | `M`, click two points for a live reading. Nothing is added to the drawing. The arrow beside the button, or `Shift+M`, measures an angle: click its corner, then a point along each side |
 | Text | `T`, click, and type: the text is written on the drawing as you type. Enter starts a new line; `Esc`, `Ctrl+Enter` or a click elsewhere finishes; double-click a text to change it |
@@ -197,20 +198,22 @@ A batch is all-or-nothing and every result is validated, so a script or a model 
 | Paper | `F`, click a corner, pull: the standard formats (A5 to A0) appear at the scale shown in the bar, upright or lying as you move; come close to one to take it, or hold `Alt` for any size. A paper moves on its own, to frame the drawing; pulling a corner changes its scale (`Alt` for any size), and is copied or duplicated with what is drawn on it; grab it by its edge or its name |
 | Wall faces | With the wall tool, the three small pictures in the bar above the tools say where the points you click lie: along the left face, the middle or the right face of the wall, as you draw it. Trace the inside of a room clockwise with "left" and the walls land outside it |
 | Extend and trim | Select a wall end (click it): Extend runs it on to the next wall, Trim cuts it back to the last wall it crossed. Object → Extend or Trim does it for every free end of the selected walls |
-| Keep on course | Hold `Shift` while dragging the end of a wall or a line: it stays on the line it lies on, at any angle, shown as a dashed line across the view, and stops on the walls that line crosses. On a corner, `Shift` keeps it on the line of one of its walls |
+| Keep on course | Hold `Shift` while dragging the end of a wall or a line: it stays on the line it lies on, at any angle, shown as a dashed line across the view, and stops on the walls that line crosses. On a corner, `Shift` keeps it on the line of one of its walls. Brought near level, upright or 45° with the other end, it holds that instead: a slanting wall is set straight this way |
 | Joined walls | Moving a wall, or dragging one of its corners, stretches the walls that meet it and takes its doors and windows along. Hold `Alt` to move it alone |
 | Drag a number | Hold `Alt` over a number in the panels and drag sideways to change it; `Shift` goes ten times faster |
 | Transform | Select, then drag a corner of the box to scale or the round handle above it to turn (`Shift` for 15° steps). `Shift+R` turns a quarter, `Shift+H` and `Shift+V` flip, the arrow keys move by one grid step. Exact angles and percentages are in the right panel, under Transform |
 | Annotation | The arrow beside the text button, or `Shift+T`: click what the note is about, click where the note goes, type it. Ends (arrow, open arrow, dot, tick, none), path (curved, straight or elbow) and text size are in the right panel; drag the middle of the line to bend it |
-| Corners | Click the end of a wall to select the corner: drag it and every wall that meets there follows. In the right panel, choose how two walls are joined from small pictures: mitred, rounded, cut off, two walls with the line between them, or one running past the other. A wall's own properties show the same choice for each of its ends. Use the Split tool (`K`) to cut a wall, a line or a polyline in two: it shows the length either side before you click |
+| Corners | Click the end of a wall to select the corner: drag it and every wall that meets there follows. In the right panel, choose how two walls are joined from small pictures: mitred, rounded, cut off, two walls with the line between them, or one running past the other. A wall's own properties show the same choice for each of its ends. A selected wall shows what its ends hold to: a filled dot where joined to another wall (which is outlined faintly), a struck-through one where it touches a wall without being joined, an orange one where it is a few millimetres short of another wall's end. Detach, in its properties, joins an end to nothing although other walls end there; Join them brings an end that nearly meets another onto it. Use the Split tool (`K`) to cut a wall, a line or a polyline in two: it shows the length either side before you click |
 | Rooms | `A`, then click inside closed walls: the room gets a tinted floor, a name and its area, and follows the walls when they move. Pick it by its name. The arrow beside the button has the divider (`Shift+A`), a dashed line that splits an open space into two rooms |
-| Patterns | Open the Fill of any closed shape (or of a wall type) and choose Pattern: lines, cross-hatch, planks, tiles, dots for concrete, zigzag for insulation, with their spacing, angle and stroke colour over the fill's colour. A room's floor takes one from Add… → Hatch under Modifiers |
+| Patterns | Open the Fill of any closed shape and choose Pattern: lines, cross-hatch, planks, tiles, dots for concrete, zigzag for insulation, with their spacing, angle and stroke colour over the fill's colour. A room's floor takes one from Add… → Hatch under Modifiers |
 | Colours | A colour field opens a picker, the colours you picked lately, and the drawing's shared colours |
 | Shared colours | In any colour field, choose "New shared colour from this one", then link other objects to it from the same list. Change it in the Colours panel and everything linked follows. A linked colour shows its name with a link icon |
 | Crop | Select something (an object, a group, a placed component), Object → Crop: only the part inside the orange rectangle is drawn. Drag its corners to change it. Nothing is cut: switch it off or remove it under Modifiers in the right panel |
 | Extensions | Preferences → Extensions adds new kinds of object: install, remove, switch off, or load more from a web catalog |
-| Quantities | File → Export → CSV: rooms and areas, walls, doors and windows, wall types. Give the wall height there (it is kept on the page; a wall can have its own) to get the area of wall faces less openings |
-| Wall types | The Wall types panel: add a type and tick what it defines: its build-up ("Plaster 15, Brick 200", or just a material), thickness, height, fill, outline. Select walls and choose their type in the right panel, or pick it in the bar above the tools before drawing. In a wall's properties, what comes from its type shows a small link; type another value to make an exception (marked in orange), and click the arrow beside it to go back to the type |
+| Quantities | File → Export → CSV: rooms and areas, walls and what each is made of, doors and windows, floors and walls by material, objects. Give the wall height there (it is kept on the page; a wall can have its own) to get the area of wall faces less openings |
+| Tables of quantities | In the object library, under Drawing → Tables of quantities: click a table, then click on the drawing. It counts what is on its page and keeps up to date; in the right panel choose what it counts, its columns and the words over them |
+| Walls of materials | Select a wall: in the right panel choose its Material, from the list of the drawing's (type to find one, or + to make a new one), and its Thickness. For brick lined with insulation, draw the lining as a thin wall of its own against the brick, both by the face they share (the reference line), so they stay flush; a door or window set in the brick goes through the lining too. Select several walls to give them one material |
+| Materials | Default, first in the Materials panel, is what walls are made of until given one: change its fill or hatch to change every such wall. The Materials panel: "Add common materials", or add your own, one to a row; a click on its swatch changes its fill and hatch. A room's floor takes a material in its properties, under Floor |
 | Dimension walls | Select walls, Object → Dimension the selected walls: a chain along each through its doors and windows. They are ordinary dimensions in a group; after changing the wall, delete the group and make it again |
 | Import and export | File → Import (`Ctrl+I`) takes any file the app understands: a picture or a PDF to trace, a DXF, another drawing for its components, an extension. File → Export (`Ctrl+P`) opens one window: choose PDF (tick the sheets; each paper is a page at true scale, with its title block), SVG or DXF (choose the page) |
 | Files | `Ctrl+S` save, `Ctrl+O` open, `Ctrl+Z` / `Ctrl+Shift+Z` undo and redo, `Ctrl+D` duplicate |
@@ -238,7 +241,7 @@ The assistant can use, chosen under Preferences:
 
 ```
 packages/core              The document model. No UI, no DOM, runs anywhere.
-packages/ext-architecture  Built-in extension: doors, windows, stairs, washbasins, bathtub, kitchen, corner sofa, compass.
+packages/ext-architecture  Built-in extension: doors, windows, stairs, washbasins, bathtub, kitchen, corner sofa, radiator, compass.
 packages/warehouse         What ships besides code: the component libraries and the extensions written as data.
 packages/cli               Command-line access to the model.
 apps/web                   The editor: React + Canvas. Deployable as a static site.
@@ -277,18 +280,18 @@ A `.opencalque` file is JSON. JSON Schemas for documents and operations are in [
 - **Derived, not stored.** A room keeps a point and a name; its outline and area come from the walls around it. A paper holds whatever lies on it. Nothing in the file can go stale when a wall moves.
 - **Modifiers** are non-destructive: any node can carry a list such as a crop or a floor pattern, applied in order when it is drawn.
 - **Unknown parametric kinds survive.** A file that uses an extension you do not have still opens; those objects show as placeholders and are saved back untouched.
-- **It stays readable.** From 1.0, a drawing says which version of the format it is written in (`"version": 1`). The app reads that version and every older one. Properties it does not know, written by a newer version or by a script, are kept as they are and saved back. A drawing in a newer format than the app reads is refused with a message, never half-read. A drawing with a reference to something missing (a layer, a wall type, a parent) opens with the problem put right and a note saying so.
+- **It stays readable.** From 1.0, a drawing says which version of the format it is written in (`"version": 1`). The app reads that version and every older one. Properties it does not know, written by a newer version or by a script, are kept as they are and saved back. A drawing in a newer format than the app reads is refused with a message, never half-read. A drawing with a reference to something missing (a layer, a material, a parent) opens with the problem put right and a note saying so.
 - **Order keys** are keys of the [fractional-indexing](https://github.com/rocicorp/fractional-indexing) package, such as `a0` or `a1V`. Leave `order` out when adding a node and it goes on top.
 
 ### What stays stable
 
 Through every 1.x version:
 
-- **Drawings.** A drawing saved by 1.0 opens in every later version, with nothing in it lost. A change to the format that an older version could not read raises its `version`, and every later version brings older drawings up to date as it reads them.
+- **Drawings.** A drawing saved by 1.0 opens in every later version, with nothing in it lost or changed in meaning. A change to the format that an older version could not read raises its `version`, and every later version brings older drawings up to date as it reads them.
 - **Extensions written as data.** An extension with `"formatVersion": 1` keeps loading; what is added to the format is optional. Its schema is [`schema/extension.schema.json`](schema/extension.schema.json).
 - **Operations.** An operation valid in 1.0 (from a script, `opencalque apply` or the assistant) stays valid and means the same; new kinds of operation may be added.
 
-One exception, in 1.2 (format version 2): what a component holds is on no layer, each placement giving its own, and a placement of a component has no style. Operations that set either are refused, and drawings made before are brought up to date as they open, looking as they did save in rare cases the [changelog](CHANGELOG.md) lists. Drawings saved by 1.2 do not open in 1.0 and 1.1.
+One exception, in 1.2 (format version 2): what a component holds is on no layer, each placement giving its own, a placement of a component has no style, and there are no wall types any more, each wall carrying its own material, thickness, height and look. Operations that set any of these are refused. Drawings made before are brought up to date as they open, each wall type becoming a material of its name, and look as they did save in rare cases the [changelog](CHANGELOG.md) lists; one thing is lost, the layers of a wall type (its build-up), which were drawn as lines inside its walls. Drawings saved by 1.2 do not open in 1.0 and 1.1.
 
 The TypeScript packages of this repository are not published, and their code may change between versions.
 

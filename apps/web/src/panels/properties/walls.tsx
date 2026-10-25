@@ -1,22 +1,19 @@
-import { type NodeOf, type Node, type Op, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, wallArc, wallLength, wallJustifyOps } from '@opencalque/core'
+import { type NodeOf, type Node, type Op, applyOps, DEFAULT_MATERIAL, WALL_FILL, newId, resolveColor, autoJoinCuts, cornerJoin, cornerJoinOps, endLineOps, endLineShown, withEdge, type WallEdge, moveCornerOps, wallEndsAt, wallEndsOf, wallEndState, looseEndOps, wallArc, wallLength, wallJustifyOps } from '@opencalque/core'
 import { executeById } from '../../commands'
 import { useEffect, type ReactNode } from 'react'
 import { Link2, Undo2 } from 'lucide-react'
-import { showPanel } from '../../dock'
-import { msg, t } from '../../i18n'
+import { msg, t, tn } from '../../i18n'
 import { registry } from '../../extensions'
 import { apply, selectCorner, useStore } from '../../store'
 import { ColorChoice } from '../../ColorChoice'
 import { WeightChoice } from '../../WeightChoice'
-import { DashPicker, Field, IconButton, JustifyPicker, Section } from '../../ui'
+import { DashPicker, Field, IconButton, JustifyPicker, Section, YesNo } from '../../ui'
 import { formatLength } from '../../units'
+import { MaterialChoice, type MaterialOption } from '../../MaterialChoice'
+import { showPanel } from '../../dock'
 
-/* What the Properties panel shows of walls: their line, type and curve, their ends and lines, and a selected corner. */
+/* What the Properties panel shows of walls: their material, line and curve, their ends and lines, and a selected corner. */
 
-/**
- * The wall type of the selected walls: one of the drawing's types, none, or a new type made from
- * the wall as it is. A wall of a type is as thick as its type, whatever is typed for it.
- */
 /** What each line a wall can be drawn by does, said where it is chosen. */
 const WALL_LINES = {
   left: msg('By its left face: the corners are on that face, and the wall lies to the other side of it'),
@@ -26,16 +23,26 @@ const WALL_LINES = {
 
 /**
  * Which line of the selected walls their corners are on: their middle, or one of their faces.
- * Changing it keeps the line, and the corners and walls joined there, where they are: the wall
- * moves to the other side of it. Pointing at a face shows it on the drawing, as left and right
- * depend on the way the wall was drawn.
+ * Changing it leaves the walls where they are: their line, and their corners, go onto the line
+ * chosen, the walls joined there following. Pointing at a face shows it on the drawing, as left
+ * and right depend on the way the wall was drawn.
  */
 export function WallLine({ walls }: { walls: NodeOf<'wall'>[] }) {
   const values = new Set(walls.map((wall) => wall.justify ?? 'center'))
   const value = values.size === 1 ? [...values][0] : undefined
   const give = (justify: 'left' | 'center' | 'right') => {
-    const { doc } = useStore.getState()
-    apply(walls.flatMap((wall) => (doc.nodes[wall.id]?.type === 'wall' ? wallJustifyOps(doc, doc.nodes[wall.id] as NodeOf<'wall'>, justify, registry) : [])))
+    // One wall after the other, each from the drawing the one before left: a corner two of them
+    // share goes where both their new lines meet.
+    let doc = useStore.getState().doc
+    const ops: Op[] = []
+    for (const wall of walls) {
+      const now = doc.nodes[wall.id]
+      if (now?.type !== 'wall') continue
+      const more = wallJustifyOps(doc, now, justify, registry)
+      doc = applyOps(doc, more)
+      ops.push(...more)
+    }
+    apply(ops)
   }
   const point = (justify: 'left' | 'center' | 'right' | null) =>
     useStore.setState({ edgeHover: walls.length === 1 && (justify === 'left' || justify === 'right') ? { wall: walls[0].id, edge: justify } : null })
@@ -47,37 +54,38 @@ export function WallLine({ walls }: { walls: NodeOf<'wall'>[] }) {
   )
 }
 
-export function WallTypeChoice({ walls }: { walls: Extract<Node, { type: 'wall' }>[] }) {
+/**
+ * What the selected walls are made of: the default material or one of the drawing's, each shown
+ * with its swatch, or a new one made from the list. A wall of several materials is drawn as
+ * several walls side by side, each of one.
+ */
+export function WallMaterial({ walls }: { walls: NodeOf<'wall'>[] }) {
   const doc = useStore((s) => s.doc)
-  const types = Object.values(doc.wallTypes ?? {})
-  const current = walls.every((wall) => wall.wallType === walls[0].wallType) ? (walls[0].wallType ?? '') : 'mixed'
-  const give = (value: string) => {
-    if (value === 'new') {
-      const id = newId('walltype')
-      apply([
-        { op: 'add_wall_type', wallType: { id, name: t('Wall type {n}', { n: types.length + 1 }), thickness: walls[0].thickness } },
-        ...walls.map((wall): Op => ({ op: 'update_node', id: wall.id, patch: { wallType: id } })),
-      ])
-      showPanel('wallTypes')
-    } else apply(walls.map((wall): Op => ({ op: 'update_node', id: wall.id, patch: { wallType: value || null } })))
+  const materials = Object.values(doc.materials ?? {}).filter((material) => material.id !== DEFAULT_MATERIAL)
+  const usual = doc.materials?.[DEFAULT_MATERIAL]
+  const options: MaterialOption[] = [
+    { id: '', name: t('Default'), fill: usual?.fill ?? WALL_FILL, pattern: usual?.pattern },
+    ...materials.map((material) => ({ id: material.id, name: material.name, fill: material.fill ?? '#ffffff', pattern: material.pattern })),
+  ]
+  const values = new Set(walls.map((wall) => wall.material ?? ''))
+  // A fill a wall was given of its own, as walls had before materials, gives way to the material's.
+  const unfilled = (wall: NodeOf<'wall'>) => {
+    const { fill: _, pattern: __, ...rest } = wall.style ?? {}
+    return wall.style && ('fill' in wall.style || 'pattern' in wall.style) ? { style: Object.keys(rest).length > 0 ? rest : null } : {}
+  }
+  const made = (id: string | null, before: Op[] = []) => apply([...before, ...walls.map((wall): Op => ({ op: 'update_node', id: wall.id, patch: { material: id, ...unfilled(wall) } }))])
+  const create = (name: string) => {
+    const id = newId('material')
+    made(id, [{ op: 'add_material', material: { id, name: name || t('Material {n}', { n: materials.length + 1 }), fill: '#e7e5e4' } }])
+    // Its look is set where the drawing's materials are.
+    showPanel('materials')
   }
   return (
-    <>
-      <label className="field">
-        <span>{t('Wall type')}</span>
-        <select value={current} onChange={(e) => give(e.target.value)}>
-          {current === 'mixed' && <option value="mixed">{t('Mixed')}</option>}
-          <option value="">{t('No type')}</option>
-          {types.map((type) => (
-            <option key={type.id} value={type.id}>
-              {type.name}
-            </option>
-          ))}
-          <option value="new">{t('New type from this wall…')}</option>
-        </select>
-      </label>
-      {current !== '' && current !== 'mixed' && <p className="hint">{t('It takes what its type defines, shown with a link. A value typed here instead is an exception, and the arrow beside it gives it back to the type.')}</p>}
-    </>
+    // Not a label: a label would hand every click to the button inside, opening its list again.
+    <div className="field">
+      <span>{t('Material')}</span>
+      <MaterialChoice label={t('Material')} value={values.size === 1 ? [...values][0] : undefined} mixed={values.size > 1} options={options} pick={(id) => made(id || null)} create={create} />
+    </div>
   )
 }
 
@@ -139,23 +147,52 @@ function JointPicker(props: { choices: JointChoice[]; value: JointChoice | undef
  */
 export function WallEnds({ wall }: { wall: Extract<Node, { type: 'wall' }> }) {
   const doc = useStore((s) => s.doc)
-  const scope = useStore((s) => s.scope)
   const rows = (['a', 'b'] as const).map((end) => {
-    const ends = wallEndsAt(doc, scope, wall[end])
+    const ends = wallEndsOf(doc, wall, end)
+    const state = wallEndState(doc, wall, end)
     const mine = ends.findIndex((other) => other.wall.id === wall.id && other.end === end)
-    if (ends.length !== 2 || mine < 0) return { end, note: ends.length < 2 ? t('free end') : t('{n} walls meet here, mitred', { n: ends.length }) }
+    // What it is joined to, or why it is not, and what can be done about it: set it loose, join it
+    // again, or bring it onto the end of a wall it nearly meets.
+    const status =
+      state.joined.length > 0
+        ? { text: null, action: { label: t('Detach'), title: t('Join this end to no wall: the walls joined here no longer follow it, nor it them'), ops: () => looseEndOps(wall, end, true) } }
+        : state.loose
+          ? { text: state.touching.length > 0 ? tn(state.touching.length, 'Detached from the wall that ends here', 'Detached from the {n} walls that end here') : t('Detached'), action: { label: t('Join again'), title: t('Join this end to the walls that end at the same point'), ops: () => looseEndOps(wall, end, false) } }
+          : state.touching.length > 0
+            ? { text: t('Touches a wall without being joined to it: it stops against it'), action: null }
+            : state.near
+              ? {
+                  text: t('Nearly meets another wall, {distance} away, without being joined to it', { distance: formatLength(state.near.distance) }),
+                  action: { label: t('Join them'), title: t('Bring this end onto the end of the other wall, so that they are joined'), ops: () => moveCornerOps(useStore.getState().doc, wall.parent, wall[end], state.near!.at) },
+                }
+              : null
+    const base = { end, status }
+    if (ends.length !== 2 || mine < 0) return { ...base, note: ends.length < 2 ? t('free end') : t('{n} walls meet here, mitred', { n: ends.length }) }
     const joint = cornerJoin(ends)
     // A butt joint is one of two things for this wall: it is the one that passes, or the one that stops.
     const value: JointChoice = joint === 'butt' ? (wall.joins?.[end] === 'through' || (wall.joins?.[end] !== 'butt' && ends[1 - mine].wall.joins?.[ends[1 - mine].end] === 'butt') ? 'through' : 'butt') : joint
     const pick = (choice: JointChoice) => apply(choice === 'through' ? cornerJoinOps(ends, 'butt', mine) : choice === 'butt' ? cornerJoinOps(ends, 'butt', 1 - mine) : cornerJoinOps(ends, choice))
-    return { end, value, pick, cuts: autoJoinCuts(ends) }
+    return { ...base, value, pick, cuts: autoJoinCuts(ends) }
   })
   return (
     <>
       {rows.map((row) => (
         <div key={row.end} className="field">
           <span>{row.end === 'a' ? t('At its start') : t('At its end')}</span>
-          {row.pick ? <JointPicker choices={['auto', 'miter', 'bevel', 'round', 'through', 'butt']} value={row.value} cuts={row.cuts} onPick={row.pick} /> : <em className="faint">{row.note}</em>}
+          <div className="wall-end">
+            {'pick' in row && row.pick ? (
+              <JointPicker choices={['auto', 'miter', 'bevel', 'round', 'through', 'butt']} value={row.value} cuts={row.cuts} onPick={row.pick} />
+            ) : (
+              // A free end that touches or nearly meets another says that instead.
+              !row.status?.text && <em className="faint">{'note' in row ? row.note : null}</em>
+            )}
+            {row.status?.text && <span className="hint">{row.status.text}</span>}
+            {row.status?.action && (
+              <button type="button" className="text-button" title={row.status.action.title} onClick={() => apply(row.status!.action!.ops())}>
+                {row.status.action.label}
+              </button>
+            )}
+          </div>
         </div>
       ))}
     </>
@@ -176,13 +213,12 @@ export function WallEdges({ wall }: { wall: Extract<Node, { type: 'wall' }> }) {
     { id: 'a', name: msg('At its start'), shown: endLineShown(doc, wall, 'a') },
     { id: 'b', name: msg('At its end'), shown: endLineShown(doc, wall, 'b') },
   ]
-  // What a line takes when it says nothing: the wall's own look, else its type's, else the layer's colour.
-  const type = wall.wallType ? doc.wallTypes?.[wall.wallType] : undefined
+  // What a line takes when it says nothing: the wall's own look, else the layer's colour.
   const layer = wall.layer ? doc.layers[wall.layer] : undefined
   const inherited = {
-    stroke: (resolveColor(doc, wall.style?.stroke ?? type?.stroke ?? layer?.color) as string | undefined) ?? '#1f1f1f',
-    strokeWidth: wall.style?.strokeWidth ?? type?.strokeWidth ?? 1,
-    dash: wall.style?.dash ?? type?.dash,
+    stroke: (resolveColor(doc, wall.style?.stroke ?? layer?.color) as string | undefined) ?? '#1f1f1f',
+    strokeWidth: wall.style?.strokeWidth ?? 1,
+    dash: wall.style?.dash,
   }
   const set = (id: 'left' | 'right' | 'a' | 'b', change: Partial<WallEdge>) => {
     // Read afresh: a choice may change the drawing twice in a row (show the line, then give it a kind).
@@ -331,10 +367,10 @@ export function CornerPanel({ at }: { at: { x: number; y: number } }) {
               onPick={(choice) => apply(cornerJoinOps(ends, choice === 'through' ? 'butt' : (choice as Exclude<JointChoice, 'through' | 'butt'>), passing))}
             />
           </div>
-          <label className="field">
+          <div className="field">
             <span>{t('Line between them')}</span>
-            <input type="checkbox" checked={endLineShown(doc, ends[0].wall, ends[0].end)} onChange={(e) => apply(endLineOps(doc, ends[0].wall, ends[0].end, e.target.checked))} />
-          </label>
+            <YesNo value={endLineShown(doc, ends[0].wall, ends[0].end)} label={t('Line between them')} onChange={(on) => apply(endLineOps(doc, ends[0].wall, ends[0].end, on))} />
+          </div>
           {join === 'butt' && (
             <button className="text-button" onClick={() => apply(cornerJoinOps(ends, 'butt', passing === 0 ? 1 : 0))}>
               {t('Let the other wall run through')}

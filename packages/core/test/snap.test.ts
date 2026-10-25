@@ -35,6 +35,22 @@ describe('snapping a point', () => {
     expect(snapTo(scene, { x: 30, y: 40 }, 100, { exclude: ['level'] })).toBeNull()
   })
 
+  it('lines up with the points it is given: upright from one and level with another, where both are near', () => {
+    // A level line from (0, 0) to (1000, 0), and an upright one from (3000, 2000) to (3000, 4000).
+    const scene = sceneOf([line('a', 0, 0, 1000, 0), line('b', 3000, 2000, 3000, 4000)])
+    const aligners = [{ x: 0, y: 0 }, { x: 3000, y: 2000 }]
+    // Near x = 3000, upright from b, and y = 0, level with a, far from both lines.
+    const both = snapTo(scene, { x: 3040, y: 30 }, 100, { aligners })
+    expect(both).toMatchObject({ p: { x: 3000, y: 0 }, kind: 'aligned' })
+    expect(both?.guides).toHaveLength(2)
+    // Not with the points of the drawing it is not given: a full plan would have one lined up almost anywhere.
+    expect(snapTo(scene, { x: 3040, y: 30 }, 100)).toBeNull()
+    // Level with one point only: along that level, the grid says where.
+    expect(snapTo(scene, { x: 2010, y: 1960 }, 100, { aligners, gridded: { x: 2000, y: 2000 } })).toMatchObject({ p: { x: 2000, y: 2000 }, kind: 'aligned' })
+    // Level with where the line being drawn starts.
+    expect(snapTo(scene, { x: 2010, y: 3030 }, 100, { from: { x: 0, y: 3000 } })).toMatchObject({ p: { x: 2010, y: 3000 }, kind: 'aligned' })
+  })
+
   it('offers no middle along a curve, and none so short that its ends are as near', () => {
     const arc = sceneOf([add({ type: 'ellipse', id: 'arc', cx: 0, cy: 0, rx: 2000, ry: 2000, from: 0, to: 90 })])
     // Part of the way round the arc there are points the curve is drawn through, but each is only a place on the line.

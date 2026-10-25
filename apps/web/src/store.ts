@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { applyOps, createDocument, holdsChildren, layerIn, layersOf, pagesOf, type Document, type NodeInput, type Op, type Pattern, type Vec2, wallEndsAt } from '@opencalque/core'
+import { applyOps, createDocument, holdsChildren, layerIn, layersOf, pagesOf, type Document, type NodeInput, type NodeOf, type Op, type Pattern, type Vec2, wallEndsAt } from '@opencalque/core'
 import type { StoredFile } from './platform'
 import type { Tool } from './tools'
 import { MEASURE_TOOLS, ROOM_TOOLS, SHAPE_TOOLS, TEXT_TOOLS } from './tools'
@@ -13,12 +13,14 @@ export type { View } from './view'
  * What the place tool puts down; `carried` while it is being dragged from the object library, to be
  * put down where the button is let go. A component of a library comes into the drawing with its
  * first placement, in the same step, so that none is left behind when the placing is given up;
- * `names` are the library's translations, in the language in use.
+ * `names` are the library's translations, in the language in use. A table of quantities is put
+ * down as it is given, its top-left corner where the pointer is.
  */
 export type Placing = (
   | { type: 'instance'; component: string }
-  | { type: 'parametric'; kind: string }
+  | { type: 'parametric'; kind: string; props?: Record<string, unknown> }
   | { type: 'library'; library: Document; component: string; names: Record<string, string> }
+  | { type: 'table'; table: Omit<NodeOf<'table'>, 'id' | 'parent' | 'order' | 'x' | 'y'> }
 ) & { carried?: boolean }
 
 /**
@@ -61,8 +63,6 @@ interface Session {
    */
   corner: Vec2 | null
   activeLayer: string
-  /** The wall type the wall tool draws next, or null for walls of no type: one of this drawing's, so it goes with it. */
-  wallType: string | null
   view: View
 }
 
@@ -105,7 +105,8 @@ interface Interaction {
    * The text being typed in place. `create` is the node to add when it is a new text that is not in
    * the drawing yet (it exists only as a preview until the typing ends).
    */
-  editingText: { id: string; create?: NodeInput } | null
+  /** The node whose words are being typed in place; for a grid line, which of its bubbles (`gridlineBubbles`). */
+  editingText: { id: string; create?: NodeInput; bubble?: number } | null
   /** Where the right-click menu is open, in window coordinates. */
   contextMenu: { x: number; y: number } | null
   /** Where on the drawing the last right-click was, for commands of its menu that act at that very place. */
@@ -136,6 +137,8 @@ interface ToolSettings {
   dimensionTemplate: Record<string, unknown>
   /** Likewise for the annotations the annotation tool draws next: their ends, curve and text size. */
   annotationTemplate: Record<string, unknown>
+  /** Likewise for the grid lines drawn next, with the label of the next one, which goes up by one as each is drawn. */
+  gridlineTemplate: Record<string, unknown>
 }
 
 /** The size of the drawing area on screen, which outlives drawings too. */
@@ -163,7 +166,6 @@ function session(doc: Document, file: StoredFile | null): Session {
     selection: [],
     corner: null,
     activeLayer: layersOf(doc)[0].id,
-    wallType: null,
     view: { x: 320, y: 220, zoom: 0.1 },
   }
 }
@@ -198,6 +200,8 @@ const SETTINGS: ToolSettings = {
   drawPattern: null,
   dimensionTemplate: {},
   annotationTemplate: {},
+  // Dash and dot, as an axis is drawn (the last of DASHES in strokes.ts).
+  gridlineTemplate: { label: 'A', style: { dash: [9, 3, 1.5, 3] } },
 }
 
 export const useStore = create<State>(() => ({ ...session(createDocument(), null), ...IDLE, ...SETTINGS, viewport: { width: 0, height: 0 } }))

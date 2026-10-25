@@ -1,4 +1,4 @@
-import { alignables, boundsFrame, dist, distToSegment, sceneBounds, sub, wallEdgeLines, wallEndsAt, type Alignable, type Bounds, type Node, type NodeOf, type ResizeFrame, type SceneItem, type Vec2 } from '@opencalque/core'
+import { alignables, boundsFrame, dist, distToSegment, endLineShown, isLocked, wallEndsAt, sceneBounds, sub, wallEdgeLines, wallEndsOf, type Alignable, type Bounds, type Node, type NodeOf, type ResizeFrame, type SceneItem, type Vec2 } from '@opencalque/core'
 import { registry } from '../extensions'
 import { toWorld, visibleArea } from '../view'
 import { boxGrips } from './draw'
@@ -44,6 +44,24 @@ export function cornerAt(c: Canvas, at: Vec2): Vec2 | null {
     for (const end of [item.node.a, item.node.b]) if (dist({ x: end.x * view.zoom + view.x, y: end.y * view.zoom + view.y }, at) < 7) return end
   }
   return null
+}
+
+/**
+ * The end of the one wall selected under the pointer (0 for its start, 1 for its end, as its
+ * handles go) where other walls end without being joined to it: set loose, or a lining stopping
+ * against them. -1 where there is none, or that end is joined to the walls there, or is alone.
+ */
+export function looseEndAt(c: Canvas, at: Vec2): number {
+  const { view, selection, doc, scope } = get()
+  const wall = selection.length === 1 ? doc.nodes[selection[0]] : undefined
+  if (wall?.type !== 'wall' || isLocked(doc, wall)) return -1
+  for (const [index, end] of (['a', 'b'] as const).entries()) {
+    const p = wall[end]
+    if (dist({ x: p.x * view.zoom + view.x, y: p.y * view.zoom + view.y }, at) >= 7) continue
+    const there = wallEndsAt(doc, scope, p)
+    if (there.length > 0 && !there.some((one) => one.wall.id === wall.id && one.end === end)) return index
+  }
+  return -1
 }
 
 /**
@@ -117,10 +135,10 @@ export function faceAt(c: Canvas, at: Vec2): { wall: NodeOf<'wall'>; side: 'left
 }
 
 /**
- * The free end of the one selected wall whose line across is under a point of the canvas, which a
- * press drags along the wall to make it longer or shorter, its direction kept. Only a straight
- * wall's free end: where walls meet, their corner is moved instead. The point at the end still
- * moves it anywhere.
+ * The end of the one selected wall whose line across is under a point of the canvas, which a
+ * press drags along the wall to make it longer or shorter, its direction kept: a free end, or one
+ * where it meets another wall and that line is drawn (the step between two walls in line), the
+ * corner then going with it. Only a straight wall's end. The point at the end still moves it anywhere.
  */
 export function endAt(c: Canvas, at: Vec2): { wall: NodeOf<'wall'>; end: 'a' | 'b' } | null {
   const s = get()
@@ -130,7 +148,7 @@ export function endAt(c: Canvas, at: Vec2): { wall: NodeOf<'wall'>; end: 'a' | '
   const p = toWorld(at, s.view)
   const reach = Math.min(5, (wall.thickness * s.view.zoom) / 4) / s.view.zoom
   for (const end of ['a', 'b'] as const) {
-    if (wallEndsAt(s.doc, wall.parent, wall[end]).length !== 1) continue
+    if (wallEndsOf(s.doc, wall, end).length !== 1 && !endLineShown(s.doc, wall, end)) continue
     if (dist({ x: wall[end].x * s.view.zoom + s.view.x, y: wall[end].y * s.view.zoom + s.view.y }, at) <= END_POINT) continue
     if (wallEdgeLines(wall, s.doc, registry, end).some((line) => line.slice(1).some((q, i) => distToSegment(p, line[i], q) <= reach))) return { wall, end }
   }

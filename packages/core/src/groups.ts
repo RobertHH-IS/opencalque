@@ -1,5 +1,4 @@
-import { generateNKeysBetween } from 'fractional-indexing'
-import { childrenOf, newId, orderBetween, pagesOf } from './document'
+import { childrenOf, newId, ordersAt, pagesOf } from './document'
 import type { Vec2 } from './geometry'
 import { kindOf, movePatch } from './kinds'
 import { applyOps, OpError, type NodeInput, type Op } from './ops'
@@ -31,7 +30,7 @@ export function ungroupNode(doc: Document, groupId: string): { doc: Document; op
   const siblings = childrenOf(doc, group.parent)
   const at = siblings.findIndex((n) => n.id === groupId)
   const members = childrenOf(doc, groupId)
-  const orders = generateNKeysBetween(siblings[at - 1]?.order ?? null, siblings[at + 1]?.order ?? null, members.length)
+  const orders = ordersAt(siblings.filter((n) => n.id !== groupId), at, members.length)
   const ops: Op[] = [
     ...members.map((n, i): Op => ({ op: 'update_node', id: n.id, patch: { parent: group.parent, order: orders[i] } })),
     { op: 'remove_node', id: groupId },
@@ -62,9 +61,8 @@ export function duplicatePageOps(doc: Document, pageId: string, name: string): {
   const page = doc.nodes[pageId]
   if (page?.type !== 'page') throw new OpError(`"${pageId}" is not a page`)
   const pages = pagesOf(doc)
-  const next = pages[pages.findIndex((p) => p.id === pageId) + 1]
   const id = newId('page')
-  const ops: Op[] = [{ op: 'add_node', node: { type: 'page', id, name, order: orderBetween(page.order, next?.order ?? null) } }]
+  const ops: Op[] = [{ op: 'add_node', node: { type: 'page', id, name, order: ordersAt(pages, pages.findIndex((p) => p.id === pageId) + 1, 1)[0] } }]
   for (const child of childrenOf(doc, pageId)) {
     ops.push(...cloneOps(doc, child.id, { x: 0, y: 0 }, id).ops)
   }
@@ -93,7 +91,7 @@ export function placeInOps(doc: Document, ids: string[], parent: string, target?
   if (target && at < (target.after ? 1 : 0)) return []
   const result = [...rest.slice(0, at), ...moving, ...rest.slice(at)]
   if (result.length === siblings.length && result.every((n, i) => n === siblings[i])) return []
-  const orders = generateNKeysBetween(rest[at - 1]?.order ?? null, rest[at]?.order ?? null, moving.length)
+  const orders = ordersAt(rest, at, moving.length, target && !target.after ? 'above' : 'below')
   return moving.map((n, i): Op => ({ op: 'update_node', id: n.id, patch: { ...(n.parent === parent ? {} : { parent }), order: orders[i] } }))
 }
 
@@ -112,6 +110,6 @@ export function reorderOps(doc: Document, ids: string[], target: string, after: 
   const at = rest.findIndex((n) => n.id === target) + (after ? 1 : 0)
   const result = [...rest.slice(0, at), ...moved, ...rest.slice(at)]
   if (moved.length === 0 || result.every((n, i) => n === siblings[i])) return []
-  const orders = generateNKeysBetween(rest[at - 1]?.order ?? null, rest[at]?.order ?? null, moved.length)
+  const orders = ordersAt(rest, at, moved.length, after ? 'below' : 'above')
   return moved.map((n, i): Op => ({ op: 'update_node', id: n.id, patch: { order: orders[i] } }))
 }

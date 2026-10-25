@@ -52,6 +52,8 @@ export interface Canvas {
   endedLine: { id: string; time: number } | null
   /** Id of the object following the cursor while the place tool is active. */
   placed: string
+  /** The points the pointer rested on lately with a tool, the latest first, which what it draws lines up with (`snap`), and the one it rests on now. */
+  tracked: { tool: string; points: Vec2[]; resting: { p: Vec2; since: number } | null }
 
   /** What the canvas shows, as worked out for the latest render. */
   scene: SceneItem[]
@@ -117,6 +119,7 @@ export function syncStep(c: Canvas): void {
 /** Abandons the gesture in progress. */
 export function reset(c: Canvas): void {
   cancel()
+  c.tracked = { tool: get().tool, points: [], resting: null }
   if (get().axisLock) useStore.setState({ axisLock: null })
   if (get().wallFace) useStore.setState({ wallFace: null })
   c.gesture = { kind: 'idle' }

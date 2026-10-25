@@ -71,8 +71,20 @@ export const PATTERN_DEFAULTS: Record<string, { spacing: number; angle: number }
   Dots: { spacing: 120, angle: 0 },
   Zigzag: { spacing: 100, angle: 0 },
 }
-/** A hatch never draws more strokes than this; a spacing too fine for the shape is widened to fit. */
-const HATCH_LIMIT = 600
+/**
+ * The finest each pattern is drawn, in mm between its strokes, whatever spacing it is given: finer
+ * would be a grey blur on any print, and so many strokes that drawing would crawl. It holds for
+ * every shape alike, so that walls of one material carry one pattern, whatever their size. A
+ * zigzag is laid across the thickness of thin insulation, and may be finer.
+ */
+export const PATTERN_FINEST: Record<string, number> = { Lines: 5, Cross: 10, Planks: 20, Tiles: 20, Dots: 40, Zigzag: 5 }
+
+/**
+ * A hatch never draws more strokes than this over one shape; one so large that its pattern would
+ * need more (a floor of hundreds of square metres) has its spacing widened to fit. Below it, the
+ * spacing is the same for every shape.
+ */
+const HATCH_LIMIT = 5000
 
 /** The strokes of a pattern covering a shape, as pairs of points, before they are clipped to it. */
 function hatchStrokes(shape: Vec2[], params: Record<string, any>, frame: Transform): [Vec2, Vec2][] {
@@ -84,7 +96,7 @@ function hatchStrokes(shape: Vec2[], params: Record<string, any>, frame: Transfo
   const us = local.map((p) => p.u)
   const vs = local.map((p) => p.v)
   const [minU, maxU, minV, maxV] = [Math.min(...us), Math.max(...us), Math.min(...vs), Math.max(...vs)]
-  let step = Math.max(1, params.spacing * (frame.scale ?? 1))
+  let step = Math.max(PATTERN_FINEST[params.pattern] ?? 5, params.spacing * (frame.scale ?? 1))
   const grid = params.pattern === 'Tiles' || params.pattern === 'Cross'
   const filled = params.pattern === 'Dots' || params.pattern === 'Zigzag'
   const count = (size: number) =>
@@ -130,12 +142,13 @@ function hatchStrokes(shape: Vec2[], params: Record<string, any>, frame: Transfo
 /**
  * The strokes of a fill pattern over one closed shape, before they are cut to it. The pattern is
  * laid from the origin of the drawing, so shapes side by side (the walls around a room) carry it
- * as one, without a break where they meet.
+ * as one, without a break where they meet; or from `frame`, turned with it, as the layers of a
+ * wall lay theirs along the wall.
  */
-export function patternStrokes(shape: Vec2[], pattern: { kind: string; spacing?: number; angle?: number }): [Vec2, Vec2][] {
+export function patternStrokes(shape: Vec2[], pattern: { kind: string; spacing?: number; angle?: number }, frame: Transform = ORIGIN): [Vec2, Vec2][] {
   const usual = PATTERN_DEFAULTS[pattern.kind]
   if (!usual || shape.length < 3) return []
-  return hatchStrokes(shape, { pattern: pattern.kind, spacing: pattern.spacing ?? usual.spacing, angle: pattern.angle ?? usual.angle }, ORIGIN)
+  return hatchStrokes(shape, { pattern: pattern.kind, spacing: pattern.spacing ?? usual.spacing, angle: pattern.angle ?? usual.angle }, frame)
 }
 
 /**

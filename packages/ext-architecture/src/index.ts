@@ -2,6 +2,7 @@ import type { Extension, Op } from '@opencalque/core'
 import { bathtub, washbasin } from './bathroom'
 import { compass } from './compass'
 import { cornerSofa } from './furniture'
+import { radiator } from './heating'
 import { fridge, hob, sink } from './kitchen'
 import { door, windowKind } from './openings'
 import { pt } from './shared'
@@ -11,7 +12,7 @@ import { translations } from './translations'
 /**
  * Bundled extension, and the reference for writing one: it depends only on @opencalque/core and
  * contributes doors, windows, stairs, washbasins, a bathtub, a hob, a sink and fridges for the
- * kitchen, a corner sofa, and one command.
+ * kitchen, a corner sofa, a radiator, and one command.
  *
  * Every object is drawn in local coordinates with the insertion point at the origin. Doors and
  * windows run along +X (the wall centerline) and are told the thickness of the wall they sit in.
@@ -31,6 +32,7 @@ export const architecture: Extension = {
     api.registerParametric(fridge('arch.fridge', 'Fridge', 600, 650, 1))
     api.registerParametric(fridge('arch.fridge.american', 'American fridge', 910, 730, 2))
     api.registerParametric(cornerSofa)
+    api.registerParametric(radiator)
     api.registerParametric(compass)
 
     api.registerCommand({

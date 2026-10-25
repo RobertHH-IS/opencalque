@@ -4,18 +4,33 @@ import type { Op } from '../ops'
 import type { Registry } from '../registry'
 import type { Document, WallEdge } from '../schema'
 import { courseOf, wallSides, type Wall } from './course'
-import { cap, cornerJoin, wallEndsAt } from './joints'
+import { cap, cornerJoin, wallEndsAt, wallEndsOf, type Stop } from './joints'
 import { openingIndex, openingSpan, overlap } from './openings'
 import { current, drawnWith } from './spatial'
 
 /* What a wall draws: its outline in solid stretches, the lines across its ends, and which of its lines are shown. */
 
-/**
- * The outline of a wall as one polygon per solid stretch: ends mitred into the walls they meet,
- * and gaps left for the doors and windows placed on it.
- */
-export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec2[][] {
-  if (dist(wall.a, wall.b) < 1e-6) return []
+/** One solid stretch of a wall, between its ends and the doors and windows set in it. */
+export interface WallPiece {
+  /** Across its start, from the left face to the right face as the wall runs from `a` to `b`. */
+  start: Vec2[]
+  /** Across its end, from the right face to the left face. */
+  end: Vec2[]
+  /** Where along the wall's line it starts and stops: 0 and the wall's length at the wall's own ends. */
+  from: number
+  to: number
+  /** Its outline: the start, the right face, the end, and back along the left face. */
+  outline: Vec2[]
+}
+
+/** A wall in solid stretches, and what each of its ends stops against, if anything (`Stop`). */
+export interface WallParts {
+  pieces: WallPiece[]
+  stops: { a?: Stop; b?: Stop }
+}
+
+/** The doors and windows of a wall, as the stretches of its line they take (distances from `a`), in order. */
+function openingCuts(wall: Wall, doc: Document, registry: Registry): [number, number][] {
   const cuts: [number, number][] = []
   if (current(doc, wall)) {
     for (const cut of openingIndex(doc, wall.parent, registry).cuts.get(wall.id) ?? []) if (cut.visible) cuts.push([cut.from, cut.to])
@@ -26,8 +41,33 @@ export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec
       if (cut) cuts.push(cut)
     }
   }
-  cuts.sort((x, y) => x[0] - y[0])
-  return wallPieces(wall, doc, cuts)
+  return cuts.sort((x, y) => x[0] - y[0])
+}
+
+/**
+ * The outline of a wall as one polygon per solid stretch: ends mitred into the walls they meet,
+ * and gaps left for the doors and windows placed on it.
+ */
+export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec2[][] {
+  // A wall of the drawing as it is is worked out once for each state of it: the lines between
+  // materials ask again for the outlines of the walls around each wall. Not to be changed in place.
+  if (!current(doc, wall)) return wallParts(wall, doc, registry).pieces.map((piece) => piece.outline)
+  let entry = outlines.get(doc.nodes)
+  if (!entry || entry.layers !== doc.layers || entry.version !== registry.version || entry.registry !== registry) {
+    outlines.set(doc.nodes, (entry = { layers: doc.layers, version: registry.version, registry, byWall: new Map() }))
+  }
+  let found = entry.byWall.get(wall.id)
+  if (!found) entry.byWall.set(wall.id, (found = wallParts(wall, doc, registry).pieces.map((piece) => piece.outline)))
+  return found
+}
+
+/** The outlines of the walls of a drawing, for each state of it (`wallPolygons`); the layers decide which doors and windows show. */
+const outlines = new WeakMap<Document['nodes'], { layers: Document['layers']; version: number; registry: Registry; byWall: Map<string, Vec2[][]> }>()
+
+/** A wall in solid stretches, with the ends of each, as `wallPolygons` draws it. */
+export function wallParts(wall: Wall, doc: Document, registry: Registry): WallParts {
+  if (dist(wall.a, wall.b) < 1e-6) return { pieces: [], stops: {} }
+  return wallPieces(wall, doc, openingCuts(wall, doc, registry))
 }
 
 /**
@@ -35,30 +75,65 @@ export function wallPolygons(wall: Wall, doc: Document, registry: Registry): Vec
  * gaps for its doors and windows: what bounds a room. Empty for a wall of no length.
  */
 export function wallOutline(wall: Wall, doc: Document): Vec2[] {
-  return dist(wall.a, wall.b) < 1e-6 ? [] : (wallPieces(wall, doc, [])[0] ?? [])
+  return dist(wall.a, wall.b) < 1e-6 ? [] : (wallPieces(wall, doc, []).pieces[0]?.outline ?? [])
+}
+
+/**
+ * A closed outline without the points where it goes back on itself, and without points repeated.
+ * Two walls making an L whose outer faces run on from one another (the line of one along the
+ * outer face of the other) are mitred with the whole corner in one of them: the other's face runs
+ * out to the outer corner and straight back to the joint. That stretch has no area and changes
+ * nothing that is filled, but it was drawn wherever the outline is (a selection, a hatch cut to
+ * it, the export), as a line running on under the other wall.
+ */
+function withoutSpikes(points: Vec2[]): Vec2[] {
+  let out = points
+  for (let changed = true; changed && out.length > 3; ) {
+    changed = false
+    const n = out.length
+    for (let i = 0; i < n; i++) {
+      const a = out[(i + n - 1) % n]
+      const b = out[i]
+      const c = out[(i + 1) % n]
+      const u = { x: b.x - a.x, y: b.y - a.y }
+      const v = { x: c.x - b.x, y: c.y - b.y }
+      const lu = Math.hypot(u.x, u.y)
+      const lv = Math.hypot(v.x, v.y)
+      // A point on top of the one before, or one where the outline turns right back.
+      const back = lu > 1e-6 && lv > 1e-6 && Math.abs(u.x * v.y - u.y * v.x) < 1e-6 * lu * lv && u.x * v.x + u.y * v.y < 0
+      if (lu <= 1e-6 || back) {
+        out = [...out.slice(0, i), ...out.slice(i + 1)]
+        changed = true
+        break
+      }
+    }
+  }
+  return out
 }
 
 /** The outline of a wall in solid stretches, between the given cuts (distances along it, in order). */
-function wallPieces(wall: Wall, doc: Document, cuts: [number, number][]): Vec2[][] {
+function wallPieces(wall: Wall, doc: Document, cuts: [number, number][]): WallParts {
   const course = courseOf(wall)
   const length = course.length
   const { left: l, right: r } = wallSides(wall)
-  const capA = cap(wall.a, wall, course.dir(0), doc)
-  const capB = cap(wall.b, wall, scale(course.dir(length), -1), doc)
+  const stopA: { stop?: Stop } = {}
+  const stopB: { stop?: Stop } = {}
+  const capA = cap(wall.a, wall, course.dir(0), doc, undefined, stopA)
+  const capB = cap(wall.b, wall, scale(course.dir(length), -1), doc, undefined, stopB)
 
-  const polygons: Vec2[][] = []
+  const pieces: WallPiece[] = []
   const piece = (from: number, to: number) => {
-    const left = from <= 0 ? capA : [course.offset(from, -l), course.offset(from, r)]
-    const right = to >= length ? capB : [course.offset(to, r), course.offset(to, -l)]
+    const start = from <= 0 ? capA : [course.offset(from, -l), course.offset(from, r)]
+    const end = to >= length ? capB : [course.offset(to, r), course.offset(to, -l)]
     // Between its two ends a curved wall follows its curve, along one face and back along the
     // other. Each face starts where the end before it left off, which at a mitred corner is some
     // way along the wall, or behind its end.
-    const face = (side: 1 | -1, start: Vec2, stop: Vec2): Vec2[] => {
-      const lo = from <= 0 ? course.project(start).along : from
+    const face = (side: 1 | -1, begin: Vec2, stop: Vec2): Vec2[] => {
+      const lo = from <= 0 ? course.project(begin).along : from
       const hi = to >= length ? course.project(stop).along : to
       return course.stops.filter((s) => s > lo + 1e-3 && s < hi - 1e-3).map((s) => course.offset(s, side > 0 ? r : -l))
     }
-    polygons.push([...left, ...face(1, left[left.length - 1], right[0]), ...right, ...face(-1, left[0], right[right.length - 1]).reverse()])
+    pieces.push({ start, end, from, to, outline: withoutSpikes([...start, ...face(1, start[start.length - 1], end[0]), ...end, ...face(-1, start[0], end[end.length - 1]).reverse()]) })
   }
   let start = 0
   for (const [from, to] of cuts) {
@@ -66,7 +141,7 @@ function wallPieces(wall: Wall, doc: Document, cuts: [number, number][]): Vec2[]
     start = Math.max(start, to)
   }
   if (start < length - 1e-6) piece(start, length)
-  return polygons
+  return { pieces, stops: { ...(stopA.stop ? { a: stopA.stop } : {}), ...(stopB.stop ? { b: stopB.stop } : {}) } }
 }
 
 /**
@@ -154,7 +229,7 @@ export function wallEdgeLines(wall: Wall, doc: Document, registry: Registry, edg
 
 /** Whether the line across an end of a wall is drawn, as things stand: at a free end, and at a joint with one other wall, by what the two ask and how they are joined. */
 export function endLineShown(doc: Document, wall: Wall, end: 'a' | 'b'): boolean {
-  const ends = wallEndsAt(doc, wall.parent, wall[end])
+  const ends = wallEndsOf(doc, wall, end)
   if (ends.length === 1) return wall.edges?.[end]?.show !== false
   if (ends.length !== 2) return false
   const asked = ends.map((other) => other.wall.edges?.[other.end]?.show)
@@ -163,7 +238,7 @@ export function endLineShown(doc: Document, wall: Wall, end: 'a' | 'b'): boolean
 
 /** Whether the line across an end of a wall is drawn when nobody has said: at a free end, and where the wall stops against another. */
 export function endLineUsual(doc: Document, wall: Wall, end: 'a' | 'b'): boolean {
-  const ends = wallEndsAt(doc, wall.parent, wall[end])
+  const ends = wallEndsOf(doc, wall, end)
   return ends.length === 1 ? true : ends.length === 2 && cornerJoin(ends) === 'butt'
 }
 
@@ -173,7 +248,7 @@ export function endLineUsual(doc: Document, wall: Wall, end: 'a' | 'b'): boolean
  * saying nothing.
  */
 export function endLineOps(doc: Document, wall: Wall, end: 'a' | 'b', shown: boolean): Op[] {
-  const ends = wallEndsAt(doc, wall.parent, wall[end])
+  const ends = wallEndsOf(doc, wall, end)
   const usual = endLineUsual(doc, wall, end)
   return (ends.length <= 2 ? ends : []).map((other): Op => {
     // The end keeps its look; only whether it is drawn changes.

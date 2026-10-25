@@ -101,16 +101,37 @@ describe('a wall drawn by one of its faces', () => {
     expect(at.y).toBeCloseTo(100)
   })
 
-  it('moves to the other side of its line, with its doors, when drawn by another face', () => {
+  it('stays where it is, with its doors, when drawn by another line: its line goes onto that face', () => {
     const start = applyOps(createDocument(), [wall('w', 0, 0, 4000, 0), add({ type: 'parametric', id: 'door', kind: 'arch.door', props: { width: 900 }, x: 1000, y: 0, rotation: 0 })])
     const doc = applyOps(start, wallJustifyOps(start, get(start, 'w'), 'left', registry))
-    expect(get(doc, 'w')).toMatchObject({ a: { x: 0, y: 0 }, b: { x: 4000, y: 0 }, justify: 'left' })
-    expect(doc.nodes.door).toMatchObject({ x: 1000, y: 100 })
-    expect(box(doc, 'w')).toMatchObject({ minY: 0, maxY: 200 })
+    // Running east, its left face is north of its middle line, 100 mm up.
+    expect(get(doc, 'w')).toMatchObject({ a: { x: 0, y: -100 }, b: { x: 4000, y: -100 }, justify: 'left' })
+    expect(doc.nodes.door).toMatchObject({ x: 1000, y: 0 })
+    expect(box(doc, 'w')).toMatchObject({ minY: -100, maxY: 100 })
+    // Made thicker then, it grows away from that face.
+    const thicker = applyOps(doc, [{ op: 'update_node', id: 'w', patch: { thickness: 300 } }])
+    expect(box(thicker, 'w')).toMatchObject({ minY: -100, maxY: 200 })
     // And back to its middle, with nothing left saying otherwise.
     const back = applyOps(doc, wallJustifyOps(doc, get(doc, 'w'), 'center', registry))
+    expect(get(back, 'w')).toMatchObject({ a: { x: 0, y: 0 }, b: { x: 4000, y: 0 } })
     expect(get(back, 'w').justify).toBeUndefined()
     expect(back.nodes.door).toMatchObject({ x: 1000, y: 0 })
+  })
+
+  it('takes the walls joined to it along, so that a room drawn by the middles of its walls, drawn by their inner faces after, is the same room', () => {
+    const middles = applyOps(createDocument(), [
+      wall('top', 0, 0, 4000, 0),
+      wall('right', 4000, 0, 4000, 3000),
+      wall('bottom', 4000, 3000, 0, 3000),
+      wall('left', 0, 3000, 0, 0),
+    ])
+    let doc = middles
+    for (const id of ['top', 'right', 'bottom', 'left']) doc = applyOps(doc, wallJustifyOps(doc, get(doc, id), 'right', registry))
+    // Every wall is where it was, its corners now its inner corners, still shared.
+    for (const id of ['top', 'right', 'bottom', 'left']) expect(box(doc, id)).toEqual(box(middles, id))
+    expect(get(doc, 'top')).toMatchObject({ a: { x: 100, y: 100 }, b: { x: 3900, y: 100 }, justify: 'right' })
+    expect(get(doc, 'left').b).toEqual(get(doc, 'top').a)
+    expect(roomAt(doc, 'page_1', { x: 2000, y: 1500 })!.area).toBeCloseTo(roomAt(middles, 'page_1', { x: 2000, y: 1500 })!.area)
   })
 
   it('is drawn by the same face, on the other hand, once mirrored', () => {

@@ -75,7 +75,7 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'read_document',
     description:
-      'Returns the current drawing as JSON: its layers, shared colours, wall types, dimension styles and nodes. Pass "ids" to get only those nodes, with everything inside the groups among them, or "container" (a page, component or group id) to get what it holds. Use it when the drawing was too large to include with the request, or to check the result of an edit.',
+      'Returns the current drawing as JSON: its layers, shared colours, materials, dimension styles and nodes. Pass "ids" to get only those nodes, with everything inside the groups among them, or "container" (a page, component or group id) to get what it holds. Use it when the drawing was too large to include with the request, or to check the result of an edit.',
     schema: schema({
       container: { type: 'string', description: 'Id of a page, component or group.' },
       ids: { type: 'array', items: { type: 'string' }, description: 'Ids of the nodes to read.' },
@@ -107,7 +107,7 @@ When the person has selected something, the block contains a <selection> with th
 
 # How a drawing is stored
 
-A drawing is a flat map of nodes, plus its layers, shared colours, wall types and dimension styles. Each node has an "id", a "type", a "parent" and an "order". Pages and components are the roots: their parent is null. Every other node sits in a page, in a component, or in a group, which may itself be in a group, to any depth. "order" sets the stacking among siblings; it is a fractional-indexing key such as "a0" or "a1V". Leave it out when adding a node, which puts the node on top; never invent one such as "top" or "1". Nodes may also carry "name", "layer" (a layer id), "visible", "locked", "style" (stroke, strokeWidth, fill, dash, pattern), "modifiers" and "meta".
+A drawing is a flat map of nodes, plus its layers, shared colours, materials and dimension styles. Each node has an "id", a "type", a "parent" and an "order". Pages and components are the roots: their parent is null. Every other node sits in a page, in a component, or in a group, which may itself be in a group, to any depth. "order" sets the stacking among siblings; it is a fractional-indexing key such as "a0" or "a1V". Leave it out when adding a node, which puts the node on top; never invent one such as "top" or "1". Nodes may also carry "name", "layer" (a layer id), "visible", "locked", "style" (stroke, strokeWidth, fill, dash, pattern), "modifiers" and "meta".
 
 All coordinates and lengths are millimetres. X grows to the right and Y grows downward, as on a screen, so a point further down the sheet has a larger Y. Rotations are in degrees, clockwise. A line weight (strokeWidth) is in screen pixels; one pixel prints as 0.25 mm.
 
@@ -117,9 +117,13 @@ ${JSON.stringify(nodeJsonSchema())}
 
 # Things that are not obvious from the schema
 
-Walls are defined by a line from "a" to "b" plus a thickness. The line is the wall's middle, or with "justify": "left" or "right" that face of it (as it runs from a to b), the whole thickness then lying on the other side: draw outside walls by their inner face so that rooms keep their size and walls of different thicknesses stay flush inside. Two walls join cleanly only when their ends are exactly the same point, so reuse the same coordinates for a shared corner. A typical interior wall is 100 mm thick and an exterior one 200 to 300 mm. "bulge" bends a wall into an arc. "joins" chooses how an end meets one other wall: "round" or "bevel" on both ends of the corner, or "through" on the wall that runs past and "butt" on the one that stops against it; without it the corner is mitred.
+Walls are defined by a line from "a" to "b" plus a thickness. The line is the wall's middle, or with "justify": "left" or "right" that face of it (as it runs from a to b), the whole thickness then lying on the other side: draw outside walls by their inner face so that rooms keep their size and walls of different thicknesses stay flush inside. Two walls join cleanly only when their ends are exactly the same point, so reuse the same coordinates for a shared corner. A typical interior wall is 100 mm thick and an exterior one 200 to 300 mm. "bulge" bends a wall into an arc. "joins" chooses how an end meets one other wall: "round" or "bevel" on both ends of the corner, or "through" on the wall that runs past and "butt" on the one that stops against it; without it the corner is mitred. "free" on an end joins it to no wall, even where other walls end at the same point.
 
-A wall type (the document's "wallTypes", managed with add_wall_type, update_wall_type and remove_wall_type) is a way of building walls: whichever of thickness, height, fill, pattern, stroke and layers it defines. A wall takes it with "wallType": "<id>", and its thickness then follows the type; to give one wall another thickness, list "thickness" in its "overrides". A dimension style (the document's "dimensionStyles", managed with add_dimension_style, update_dimension_style and remove_dimension_style) does the same for dimensions, which take it with "dimensionStyle": "<id>".
+A dimension style (the document's "dimensionStyles", managed with add_dimension_style, update_dimension_style and remove_dimension_style) defines whichever properties of a dimension it gives a value to; dimensions take it with "dimensionStyle": "<id>" and may still give a value of their own.
+
+A material (the document's "materials", managed with add_material, update_material and remove_material) is what something is built of: a name, and the "fill" and "pattern" it is drawn with. A wall is of one material, with "material": "<id>", and drawn in its colour and pattern; walls of one material that meet are drawn as one, and a line is drawn between walls of different materials that touch. A wall built of several materials (brick, an insulation lining, plaster) is several walls side by side, each of one material and its own thickness, laid face to face: draw them with "justify" on the face they share so that they stay flush. A door or window set in one of them goes through those laid against it. The material of id "default" is what walls are made of until given another: walls of no material take its fill and pattern; it cannot be removed. A room's floor may be of a material too, with "material": "<id>", for its colour and to be counted under it.
+
+A "table" node shows quantities measured on a page, kept up to date: put it at "x", "y" with a "schedule" ("objects", "floors", "rooms", "walls", "materials" or "openings") and a "title". It counts the page it is on unless "source" names another page.
 
 A "parametric" node is an object drawn from parameters. These kinds are available:
 
@@ -148,7 +152,7 @@ Call apply_operations with a list of operations:
 - add_node: {"op":"add_node","node":{...}}. Omit "id" and "order" unless you need to refer to the node later in the same list, in which case choose a short unique id. Pages and components take no parent.
 - update_node: {"op":"update_node","id":"...","patch":{...}}. The patch replaces the properties it names; a null value removes a property. Nested objects such as "a", "props" and "style" are replaced whole, so include every field of the one you change. Setting "parent" or "order" moves the node.
 - remove_node: {"op":"remove_node","id":"..."}. It takes along everything inside the node; removing a component also removes its instances.
-- add_layer, update_layer, remove_layer; add_color, update_color, remove_color; add_wall_type, update_wall_type, remove_wall_type; add_dimension_style, update_dimension_style, remove_dimension_style, as described above.
+- add_layer, update_layer, remove_layer; add_color, update_color, remove_color; add_dimension_style, update_dimension_style, remove_dimension_style, as described above.
 - set_document: renames the drawing, and with "info" sets its project, client, address and author, which every sheet's title block shows.
 - add_asset embeds a picture's file for an image node; it is for the app's own imports, and you will not need it.
 

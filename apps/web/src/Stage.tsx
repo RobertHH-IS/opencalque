@@ -1,3 +1,4 @@
+import { InstanceBar } from './InstanceBar'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { rootOf, type Document } from '@opencalque/core'
 import {
@@ -46,6 +47,7 @@ import {
 import { zoomToFit } from './actions'
 import { CanvasView } from './canvas/CanvasView'
 import { executeById, formatKey, useShortcutLabel } from './commands'
+import { GridLine } from './icons'
 import { msg, t } from './i18n'
 import { QuickBar } from './QuickBar'
 import type { ScopeStep } from './scopePath'
@@ -72,6 +74,7 @@ const ICONS: Partial<Record<Tool, [title: string, icon: LucideIcon]>> = {
   eyedropper: [msg('Eyedropper: copy the look of an object'), Pipette],
   text: [msg('Text'), Type],
   annotation: [msg('Annotation: a note with an arrow to what it is about'), MessageSquare],
+  gridline: [msg('Grid line: an axis of the building, with its letter or number in a bubble'), GridLine],
   paper: [msg('Paper: a sheet that frames what goes on one page'), StickyNote],
   room: [msg('Room: name the space inside closed walls'), SquareDashed],
   divider: [msg('Room divider: separates two rooms where there is no wall'), SeparatorVertical],
@@ -270,6 +273,8 @@ const COMPONENT_NOTE = msg('The red and green axes cross at the insertion point 
 const SHEET_NOTE = msg('Drawn on a sheet as it prints, in millimetres of paper')
 
 function Hints() {
+  // Going through the placements of a component, its bar takes their place.
+  const browsing = useWindows((s) => s.browsing !== null)
   const tool = useStore((s) => s.tool)
   const step = useStore((s) => s.drawStep)
   const typing = useStore((s) => s.editingText !== null)
@@ -312,11 +317,11 @@ function Hints() {
   else if (stretchy) hints = [['', t('Drag a side to make it longer or wider, a corner for both')], ['', t('the knob above turns it')]]
   else if (dragging && boxed) hints = [['Shift', t('keeps its proportions, from a corner')], ['Alt', t('ignores the grid and snapping')]]
   else if (boxed) hints = [['', t('Drag the middle of a side to change one size, a corner to change both')], ['', t('the knob above turns it')]]
-  else if (dragging) hints = walls ? [['', t('Joined walls stretch to stay joined')], ['↑ ←', t('holds it upright or level')], ['Alt', t('moves it alone, off the grid')]] : [['Shift', t('keeps an end on its own line')], ['↑ ←', t('holds it upright or level')], ['Alt', t('ignores the grid and snapping')]]
+  else if (dragging) hints = walls ? [['', t('Joined walls stretch to stay joined')], ['↑ ←', t('holds it upright or level')], ['Alt', t('moves it alone, off the grid')]] : [['Shift', t('keeps an end on its own line, or level, upright or at 45° with its other end')], ['↑ ←', t('holds it upright or level')], ['Alt', t('ignores the grid and snapping')]]
   else hints = hintsFor(tool, step, opening, selected)
   // With nothing else to say, inside a component: what its space is.
   if (hints.length === 0 && inside) hints = [['', t(inside)]]
-  if (hints.length === 0) return null
+  if (hints.length === 0 || browsing) return null
   return (
     <div className="hint-bar">
       {hints.map(([key, text], i) => (
@@ -355,7 +360,7 @@ function Toolbar() {
       <ToolGroup tools={['rotate']} current="rotate" more={t('Mirror')} actions={FLIPS} />
       <ArrangeMenu />
       <ToolGroup tools={MEASURE_TOOLS} current={measureTool} more={t('Measure an angle')} />
-      <ToolGroup tools={TEXT_TOOLS} current={textTool} more={t('Annotation, dimension')} />
+      <ToolGroup tools={TEXT_TOOLS} current={textTool} more={t('Annotation, dimension, grid line')} />
       <ToolButton id="paper" />
       <hr />
       <CommandButton command="edit.undo" title={t('Undo')} onClick={undo} disabled={!canUndo}>
@@ -516,6 +521,7 @@ export function Stage() {
       </div>
       {toast && <div className="toast">{toast}</div>}
       <Hints />
+      <InstanceBar />
       <TextEditor />
       <QuickBar />
       <Toolbar />

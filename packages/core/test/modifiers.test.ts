@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyOps,
+  patternStrokes,
+  PATTERN_FINEST,
   buildScene,
   clipSegment,
   cloneOps,
@@ -146,5 +148,27 @@ describe('modifiers', () => {
     // A weight of their own, and an opacity laid over their colour; without, the usual fine line.
     expect(lined[1]).toMatchObject({ strokeWidth: 0.6 })
     expect(prims(square({ pattern: { kind: 'Lines', stroke: '#b91c1c', strokeWidth: 1.4, opacity: 0.5 } }))[1]).toMatchObject({ stroke: '#b91c1c80', strokeWidth: 1.4 })
+  })
+})
+describe('a pattern laid over shapes of different sizes', () => {
+  /** The distance between the starts of two strokes side by side along a row, the first row's. */
+  const pitch = (length: number, pattern: { kind: string; spacing?: number }) => {
+    const strokes = patternStrokes([{ x: 0, y: 0 }, { x: length, y: 0 }, { x: length, y: 150 }, { x: 0, y: 150 }], pattern)
+    const row = strokes.filter(([a]) => Math.abs(a.y - strokes[0][0].y) < 1e-6).map(([a]) => a.x).sort((p, q) => p - q)
+    return row[1] - row[0]
+  }
+
+  it('is as fine on a long wall as on a short one, and no finer than it can be drawn', () => {
+    // Dots asked for 1 mm apart: drawn 40 mm apart on both, where they used to be widened shape by shape.
+    expect(pitch(3875, { kind: 'Dots', spacing: 1 })).toBeCloseTo(PATTERN_FINEST.Dots, 6)
+    expect(pitch(1500, { kind: 'Dots', spacing: 1 })).toBeCloseTo(PATTERN_FINEST.Dots, 6)
+    // At its usual spacing, the same on both.
+    expect(pitch(3875, { kind: 'Dots' })).toBeCloseTo(pitch(1500, { kind: 'Dots' }), 6)
+  })
+
+  it('is widened only over a shape too large to cover at that spacing', () => {
+    const floor = 200_000
+    const strokes = patternStrokes([{ x: 0, y: 0 }, { x: floor, y: 0 }, { x: floor, y: floor }, { x: 0, y: floor }], { kind: 'Dots' })
+    expect(strokes.length).toBeLessThanOrEqual(5000)
   })
 })

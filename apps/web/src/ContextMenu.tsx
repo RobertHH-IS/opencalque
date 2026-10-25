@@ -19,6 +19,7 @@ const ON_SELECTION = [
   'edit.group',
   'edit.ungroup',
   'component.create',
+  'component.browse',
   'component.vectorize',
   null,
   'edit.bringToFront',

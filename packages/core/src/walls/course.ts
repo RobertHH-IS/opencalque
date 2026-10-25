@@ -202,3 +202,24 @@ export function bulgeThrough(wall: { a: Vec2; b: Vec2 }, p: Vec2): number | unde
 export function wallSpot(wall: { a: Vec2; b: Vec2; bulge?: number }, p: Vec2): { along: number; across: number } {
   return courseOf(wall).project(p)
 }
+
+/** How near, in mm, two faces are to be one, where a wall is laid against another. */
+export const FACE_TOUCH = 0.5
+
+/**
+ * Whether two straight walls are laid against each other: running along the same line, a face of
+ * one on a face of the other, as a lining is against the wall it lines.
+ */
+export function laidAgainst(wall: Wall, other: Wall): boolean {
+  if (wall.id === other.id || wallArc(wall) || wallArc(other) || dist(wall.a, wall.b) < 1e-6 || dist(other.a, other.b) < 1e-6) return false
+  const course = courseOf(wall)
+  const d = course.dir(0)
+  const e = sub(other.b, other.a)
+  if (Math.abs(cross(d, e)) / dist(other.a, other.b) > 1e-3) return false
+  // The other's faces, across this wall's line.
+  const sides = wallSides(other)
+  const n = scale(perp(e), 1 / dist(other.a, other.b))
+  const faces = [add(other.a, scale(n, sides.right)), add(other.a, scale(n, -sides.left))].map((p) => course.project(p).across)
+  const { left, right } = wallSides(wall)
+  return faces.some((f) => Math.abs(f - right) < FACE_TOUCH || Math.abs(f + left) < FACE_TOUCH)
+}

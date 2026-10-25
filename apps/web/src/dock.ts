@@ -14,7 +14,7 @@ export const PANELS = {
   components: msg('Components'),
   objects: msg('Structure'),
   colors: msg('Colours'),
-  wallTypes: msg('Wall types'),
+  materials: msg('Materials'),
   dimensionStyles: msg('Dimension styles'),
   properties: msg('Properties'),
   assistant: msg('Assistant'),

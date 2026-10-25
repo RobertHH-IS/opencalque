@@ -1,4 +1,4 @@
-import { generateKeyBetween } from 'fractional-indexing'
+import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing'
 import { host } from './host'
 import { FORMAT, FORMAT_VERSION, type ContainerNode, type Document, type Layer, type Node } from './schema'
 
@@ -106,6 +106,24 @@ export function isOrderKey(key: string): boolean {
 /** An order key between two neighbours; null stands for "before the first" or "after the last". */
 export const orderBetween = (below: string | null, above: string | null): string => generateKeyBetween(below, above)
 
+/**
+ * `count` order keys for nodes put at index `at` among `siblings` (in their order, without those
+ * nodes), so that they sort after the one below and before the one above. Siblings may share a
+ * key (two people adding at once, a drawing of an older version), and nothing goes between two
+ * that do: then the keys keep to the side of the neighbour named by `beside` ('below' by default,
+ * just above it; 'above', just under it) and go past the others that share its key.
+ */
+export function ordersAt(siblings: readonly { order: string }[], at: number, count: number, beside: 'below' | 'above' = 'below'): string[] {
+  let below: string | null = siblings[at - 1]?.order ?? null
+  let above: string | null = siblings[at]?.order ?? null
+  if (below !== null && above !== null && above <= below) {
+    const tied = below
+    if (beside === 'below') above = siblings.slice(at).find((n) => n.order > tied)?.order ?? null
+    else below = siblings.slice(0, at).findLast((n) => n.order < tied)?.order ?? null
+  }
+  return generateNKeysBetween(below, above, count)
+}
+
 /** An order key that sorts after every key in `orders`. */
 export function orderAfter(orders: Iterable<string>): string {
   let last: string | null = null
@@ -146,7 +164,7 @@ export function checkIntegrity(doc: Document): string[] {
     if (layer.id !== key) problems.push(`Layer key "${key}" does not match its id "${layer.id}"`)
     if (!isOrderKey(layer.order)) problems.push(`Layer ${key}: "${layer.order}" is not an order key`)
   }
-  for (const map of ['colors', 'wallTypes', 'dimensionStyles', 'assets'] as const) {
+  for (const map of ['colors', 'dimensionStyles', 'materials', 'assets'] as const) {
     for (const [key, entry] of Object.entries(doc[map] ?? {})) if (entry.id !== key) problems.push(`${map} key "${key}" does not match its id "${entry.id}"`)
   }
   if (Object.keys(doc.layers).length === 0) problems.push('Document has no layer')
@@ -155,8 +173,9 @@ export function checkIntegrity(doc: Document): string[] {
     if (node.id !== key) problems.push(`Node key "${key}" does not match its id "${node.id}"`)
     if (!isOrderKey(node.order)) problems.push(`Node ${key}: "${node.order}" is not an order key`)
     if (node.layer !== undefined && !doc.layers[node.layer]) problems.push(`Node ${key}: unknown layer "${node.layer}"`)
-    if (node.type === 'wall' && node.wallType !== undefined && !doc.wallTypes?.[node.wallType]) problems.push(`Node ${key}: unknown wall type "${node.wallType}"`)
+    if (node.type === 'wall' && node.material !== undefined && !doc.materials?.[node.material]) problems.push(`Node ${key}: unknown material "${node.material}"`)
     if (node.type === 'dimension' && node.dimensionStyle !== undefined && !doc.dimensionStyles?.[node.dimensionStyle]) problems.push(`Node ${key}: unknown dimension style "${node.dimensionStyle}"`)
+    if (node.type === 'room' && node.material !== undefined && !doc.materials?.[node.material]) problems.push(`Node ${key}: unknown material "${node.material}"`)
     if (isContainer(node)) {
       if (node.parent !== null) problems.push(`Node ${key}: a ${node.type} cannot have a parent`)
       continue

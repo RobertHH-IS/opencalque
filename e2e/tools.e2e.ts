@@ -67,6 +67,34 @@ test('draws a line, and a closed shape by coming back to its first point, with t
   ])
 })
 
+test('lines a wall up with a point the pointer rested on, and not with every point drawn', async ({ page }) => {
+  const at = await blank(page)
+  const move = (p: { x: number; y: number }) => page.mouse.move(p.x, p.y, { steps: 4 })
+  await page.keyboard.press('w')
+  await click(page, at(0, 0))
+  await click(page, at(2000, 0))
+  await page.keyboard.press('Escape')
+  // Rested on the end of that wall, then away: a wall started a little below level with it starts level with it.
+  await move(at(2000, 0))
+  await page.waitForTimeout(400)
+  await move(at(2600, 600))
+  await move(at(4000, 60))
+  await click(page, at(4000, 60))
+  await click(page, at(4000, 2000))
+  await page.keyboard.press('Escape')
+  // Rested on nothing: as far below level with the first wall, it goes by the grid.
+  await move(at(-2000, 60))
+  await click(page, at(-2000, 60))
+  await click(page, at(-2000, 2000))
+  await page.keyboard.press('Escape')
+  const starts = (await saved(page)).filter((n) => n.type === 'wall').map((n) => n.a)
+  expect(starts).toEqual([
+    { x: 0, y: 0 },
+    { x: 4000, y: 0 },
+    { x: -2000, y: 100 },
+  ])
+})
+
 test('closes a run of walls back to where it started with a double-click on its last corner', async ({ page }) => {
   const at = await blank(page)
   await page.keyboard.press('w')
@@ -106,6 +134,32 @@ test('writes a text where it is clicked, and a note with a leader to what it is 
   const nodes = await saved(page)
   expect(nodes.find((n) => n.type === 'text')).toMatchObject({ x: 0, y: 0, text: 'Hello' })
   expect(nodes.find((n) => n.type === 'annotation')).toMatchObject({ a: { x: 2000, y: 0 }, b: { x: 3000, y: -1000 }, text: 'Note' })
+})
+
+test('draws grid lines by two clicks, each labelled after the one before', async ({ page }) => {
+  const at = await blank(page)
+  await page.keyboard.press('g')
+  await click(page, at(0, 0))
+  await click(page, at(0, 4000))
+  await click(page, at(3000, 0))
+  await click(page, at(3000, 4000))
+  const lines = (await saved(page)).filter((n) => n.type === 'gridline')
+  expect(lines).toHaveLength(2)
+  expect(lines.find((n) => n.label === 'A')).toMatchObject({ a: { x: 0, y: 0 }, b: { x: 0, y: 4000 }, style: { dash: [9, 3, 1.5, 3] } })
+  expect(lines.find((n) => n.label === 'B')).toMatchObject({ a: { x: 3000, y: 0 }, b: { x: 3000, y: 4000 } })
+})
+
+test('changes the label of a grid line by double-clicking its bubble', async ({ page }) => {
+  const at = await blank(page)
+  await page.keyboard.press('g')
+  await click(page, at(0, 0))
+  await click(page, at(0, 4000))
+  await page.keyboard.press('v')
+  // The bubble of 800 mm sits above the start of the line, its middle 400 mm up.
+  await page.mouse.dblclick(at(0, -400).x, at(0, -400).y)
+  await page.keyboard.type('X1')
+  await page.keyboard.press('Enter')
+  expect((await saved(page)).find((n) => n.type === 'gridline')).toMatchObject({ label: 'X1' })
 })
 
 test('lays a paper at a standard format by pulling towards its corner', async ({ page }) => {

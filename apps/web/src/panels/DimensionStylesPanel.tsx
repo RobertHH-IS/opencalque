@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react'
 import { newDimensionStyle, newId, type DimensionStyle, type Node } from '@opencalque/core'
 import { msg, t } from '../i18n'
@@ -7,13 +7,23 @@ import { EditableText, IconButton, Section } from '../ui'
 import { unit } from '../units'
 import { FieldRow, patchFor, read, type Update } from './properties/FieldRow'
 import { DIMENSION, type FieldSpec } from './properties/fields'
-import { Defines } from './WallTypesPanel'
 
 /** What the tick of a property of a dimension style says, on and off, and what stands for its value when it is off. */
 const TEXTS = {
   on: msg('Defined by the style: its dimensions take it. Untick to leave it to each dimension'),
   off: msg('Left to each dimension. Tick to have the style define it'),
   left: msg('each dimension its own'),
+}
+
+/** One property a style may define: a tick says whether it does, and its value is set beside it. */
+function Defines(props: { label: string; on: boolean; texts: typeof TEXTS; onToggle: (on: boolean) => void; children: ReactNode }) {
+  return (
+    <div className={`type-prop${props.on ? '' : ' off'}`}>
+      <input type="checkbox" checked={props.on} title={t(props.on ? props.texts.on : props.texts.off)} aria-label={props.label} onChange={(e) => props.onToggle(e.target.checked)} />
+      <span>{props.label}</span>
+      {props.on ? props.children : <em className="faint">{t(props.texts.left)}</em>}
+    </div>
+  )
 }
 
 /**
@@ -84,8 +94,8 @@ function StyleCard({ style, uses, open, onToggle }: { style: DimensionStyle; use
 }
 
 /**
- * The drawing's dimension styles: ways of drawing dimensions that dimensions are drawn in. As a
- * wall type does, a style defines the properties that are ticked, and only those; its dimensions
+ * The drawing's dimension styles: ways of drawing dimensions that dimensions are drawn in. A
+ * style defines the properties that are ticked, and only those; its dimensions
  * take what it defines, and changing it here changes them all. What it leaves out, and what a
  * dimension sets for itself, stays each dimension's own.
  */

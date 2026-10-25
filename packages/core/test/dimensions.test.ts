@@ -89,17 +89,17 @@ describe('dimension styles', () => {
     expect(newDimensionStyle({ unit: 'cm', textPosition: 'center', style: { stroke: 'blue', fill: 'white' } })).toMatchObject({ unit: 'cm', textPosition: 'center', style: { stroke: 'blue' } })
   })
 
-  it('brings the styles and wall types of what is copied into another drawing', () => {
+  it('brings the styles and materials of what is copied into another drawing', () => {
     const doc = applyOps(styled(), [
       { op: 'add_color', color: { id: 'ink', name: 'Ink', value: '#333333' } },
       { op: 'update_dimension_style', id: 'plan', patch: { textColor: 'var(--ink)' } },
-      { op: 'add_wall_type', wallType: { id: 'brick', name: 'Brick', thickness: 200 } },
-      { op: 'add_node', node: { type: 'wall', id: 'w', parent: 'page_1', a: { x: 0, y: 0 }, b: { x: 1000, y: 0 }, thickness: 200, wallType: 'brick' } },
+      { op: 'add_material', material: { id: 'brick', name: 'Brick', fill: '#efc7b4' } },
+      { op: 'add_node', node: { type: 'wall', id: 'w', parent: 'page_1', a: { x: 0, y: 0 }, b: { x: 1000, y: 0 }, thickness: 200, material: 'brick' } },
     ])
     const clip = parseDocument(JSON.parse(serializeDocument(copyNodes(doc, ['d', 'w']))))
     const pasted = pasteNodes(createDocument(), clip, 'page_1', { x: 0, y: 0 })
     expect(Object.keys(pasted.doc.dimensionStyles ?? {})).toEqual(['plan'])
-    expect(Object.keys(pasted.doc.wallTypes ?? {})).toEqual(['brick'])
+    expect(Object.keys(pasted.doc.materials ?? {})).toEqual(['brick'])
     expect(pasted.doc.colors?.ink).toBeDefined()
     // Pasting into its own drawing reuses them.
     const again = pasteNodes(doc, clip, 'page_1', { x: 0, y: 0 })

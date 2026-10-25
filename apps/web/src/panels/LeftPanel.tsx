@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent } from 'react'
-import { ChevronDown, ChevronRight, Eye, EyeOff, LayoutGrid, List, Lock, LockOpen, Pencil, Plus, Trash2, Copy } from 'lucide-react'
-import { childrenOf, componentPlacements, componentsOf, layersOf, pagesOf, toSVG, type Document, type Node, type Op, colorsOf, colorUses } from '@opencalque/core'
-import { deleteComponent, deleteUnusedComponents, moveInOrder, duplicatePage, openComponent, placeIn } from '../actions'
+import { ChevronDown, ChevronRight, Eye, EyeOff, LayoutGrid, List, Lock, LockOpen, Pencil, Plus, Replace, ScanEye, Trash2, Copy } from 'lucide-react'
+import { childrenOf, componentPlacements, componentsOf, layersOf, pagesOf, toSVG, type Document, type Node, type Op, type Variant, colorsOf, colorUses } from '@opencalque/core'
+import { browseInstances, deleteEntry, deleteUnusedComponents, editModel, moveInOrder, duplicatePage, openComponent, placeIn, replaceInstances, stopBrowsing } from '../actions'
+import { EntryChoice } from '../EntryChoice'
+import { entryName, entryOf, modelEntry, modelsOf } from '../entries'
+import { parametricPicture } from '../pictures'
 import { carry, svgUrl } from '../carry'
 import { ColorChoice } from '../ColorChoice'
 import { registry, useExtensions } from '../extensions'
@@ -11,6 +14,7 @@ import { editComponent, showPage } from '../navigation'
 import { setPrefs, usePrefs } from '../prefs'
 import { apply, select, setTool, useStore } from '../store'
 import { EditableText, IconButton, labelOf, Section, TypeIcon } from '../ui'
+import { useWindows } from '../windows'
 
 const rename = (id: string) => (name: string) => apply([{ op: 'update_node', id, patch: { name } }])
 /**
@@ -182,14 +186,22 @@ export function Layers() {
 /** Puts a component of the drawing on the pointer to be placed, or under it while it is dragged to the drawing (`carried`). */
 const placeComponent = (id: string) => (carried = false) => setTool('place', { type: 'instance', component: id, carried })
 
+/** Puts one more object of a model on the pointer, with the same parameters, or under it while it is dragged (`carried`). */
+const placeModel = (model: Variant) => (carried = false) => setTool('place', { type: 'parametric', kind: model.kind, props: model.props, carried })
+
 /**
- * The components of the drawing, as a list or as pictures side by side (`componentsView`), each with
- * how many times the drawing shows it placed (`componentPlacements`). A click puts one on the
- * pointer and a drag puts it down on the drawing, as from the object library; a double-click on its
- * name renames it; its buttons open it, filling the view (`openComponent`), and delete it with its
- * placements once the user has said yes. One placed nowhere is faint, and its "···" menu deletes all
- * of those at once. A selected placement highlights its component. What is on every sheet, a
- * component too, is left out: it is not placed, and is edited from the properties of a paper.
+ * What the drawing holds that is placed: its components and the models of its parametric objects
+ * (a kind with its parameters: a radiator of 80 cm, one of 1.20 m), one list, by name, whoever
+ * draws need not know the two apart (`entries.ts`). As a list or as pictures side by side
+ * (`componentsView`), each with how many times it is placed (`componentPlacements` for a
+ * component). A click puts one more on the pointer and a drag puts it down on the drawing, as from
+ * the object library. Its buttons go through its placements one by one, make them placements of
+ * another entry, open it to edit it (a component, filling the view; a model, its objects selected
+ * together for the Properties panel to change them at once), and delete it with its placements
+ * once the user has said yes. A component's name is renamed by a double-click; one placed nowhere
+ * is faint, and the "···" menu deletes all of those at once. A selected placement highlights its
+ * entry. What is on every sheet, a component too, is left out: it is not placed, and is edited from
+ * the properties of a paper.
  */
 export function Components() {
   const doc = useStore((s) => s.doc)
@@ -200,12 +212,29 @@ export function Components() {
   const view = usePrefs((p) => p.componentsView)
   const [search, setSearch] = useState('')
   const components = componentsOf(doc).filter((c) => !c.sheet)
+  const models = modelsOf(doc)
   const words = search.toLowerCase().split(/\s+/).filter(Boolean)
-  const listed = components.filter((c) => words.every((word) => (c.name ?? c.id).toLowerCase().includes(word)))
   const pictures = useMemo(() => new Map(componentsOf(drawn).map((c) => [c.id, svgUrl(toSVG(drawn, c.id, registry))])), [drawn, version])
+  const modelPictures = useMemo(
+    () =>
+      new Map(
+        modelsOf(drawn).map((m) => {
+          const kind = registry.parametric.get(m.kind)
+          return [m.key, kind ? parametricPicture(kind, m.props) : '']
+        }),
+      ),
+    [drawn, version],
+  )
   const placed = useMemo(() => componentPlacements(drawn), [drawn])
   const unused = components.filter((c) => !placed.get(c.id)).length
-  const chosen = new Set(selection.flatMap((id) => (doc.nodes[id]?.type === 'instance' ? [(doc.nodes[id] as { component: string }).component] : [])))
+  const chosen = new Set(selection.flatMap((id) => entryOf(doc.nodes[id]) ?? []))
+  const browsing = useWindows((s) => s.browsing?.entry)
+  const listed = [
+    ...components.map((component) => ({ entry: component.id, name: component.name ?? component.id, model: undefined as Variant | undefined })),
+    ...models.map((model) => ({ entry: modelEntry(model), name: entryName(doc, modelEntry(model)), model })),
+  ]
+    .filter((one) => words.every((word) => one.name.toLowerCase().includes(word)))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
   const action = (
     <span className="section-actions">
       <span className="view-switch">
@@ -221,43 +250,64 @@ export function Components() {
   )
   const place = t('Click, then click on the drawing to place it, or drag it onto the drawing')
   /** A row or a tile: what it is, the picture and the name first; how many times it is placed; what can be done to it. */
-  const entry = (component: (typeof components)[number]) => {
-    const id = component.id
-    const count = placed.get(id) ?? 0
-    const picture = pictures.get(id)
+  const row = ({ entry: id, name, model }: (typeof listed)[number]) => {
+    const count = model ? model.ids.length : (placed.get(id) ?? 0)
+    const picture = model ? modelPictures.get(model.key) : pictures.get(id)
+    const put = model ? placeModel(model) : placeComponent(id)
     return (
       <div
         key={id}
         className={`${view === 'list' ? 'row' : 'component-tile'}${chosen.has(id) ? ' selected' : ''}${count === 0 ? ' unused' : ''}`}
         title={count === 0 ? `${t('Placed nowhere in the drawing')}\n\n${place}` : place}
-        onClick={() => placeComponent(id)()}
+        onClick={() => put()}
         // The first click of the double-click that renames it has put it on the pointer: it is taken off.
         onDoubleClick={() => setTool('select')}
-        onPointerDown={(e) => carry(e, placeComponent(id))}
+        onPointerDown={(e) => carry(e, put)}
         onDragStart={(e) => e.preventDefault()}
       >
         {picture ? <img className="thumb" src={picture} alt="" draggable={false} /> : <i className="thumb" />}
         <span className="component-name">
-          <EditableText value={component.name ?? id} onChange={rename(id)} />
+          {/* A model is named by its kind and parameters, not by the user. */}
+          {model ? <span className="editable">{name}</span> : <EditableText value={name} onChange={rename(id)} />}
           <span className="faint uses" title={t('How many times it is placed')}>
             {count}
           </span>
         </span>
         <span className="component-actions">
-          <IconButton title={t('Edit component')} onClick={() => openComponent(id)}>
+          {/* An eye in a frame, not the eye that shows or hides: it goes through where the entry is placed. */}
+          {count > 0 && (
+            <IconButton title={t('Go through its instances one by one')} active={browsing === id} onClick={() => (browsing === id ? stopBrowsing() : browseInstances(id))}>
+              <ScanEye size={13} />
+            </IconButton>
+          )}
+          {/* Two drawn twice over: its instances made instances of the other, for the tables to count them together. */}
+          {count > 0 && (
+            <EntryChoice
+              label={t('Replace its instances with another component')}
+              exclude={(other) => other === id}
+              pick={(to) => replaceInstances(id, to)}
+              trigger={(open, shown) => (
+                <IconButton title={t('Replace its instances with another component')} active={shown} onClick={open}>
+                  <Replace size={13} />
+                </IconButton>
+              )}
+            />
+          )}
+          <IconButton title={model ? t('Select them all, to change them together') : t('Edit component')} onClick={() => (model ? editModel(id) : openComponent(id))}>
             <Pencil size={13} />
           </IconButton>
-          <IconButton title={t('Delete component and its instances')} onClick={() => deleteComponent(id)}>
+          <IconButton title={model ? t('Delete them all') : t('Delete component and its instances')} onClick={() => deleteEntry(id)}>
             <Trash2 size={13} />
           </IconButton>
         </span>
       </div>
     )
   }
+  const any = components.length + models.length > 0
   return (
     <Section title={t('Components')} action={action}>
-      {components.length === 0 && <p className="hint">{t('This drawing has no component yet. Select objects and choose Object › Make into a component.')}</p>}
-      {components.length > 0 && (
+      {!any && <p className="hint">{t('This drawing has no component yet. Select objects and choose Object › Make into a component.')}</p>}
+      {any && (
         <input
           className="panel-search"
           type="search"
@@ -268,8 +318,8 @@ export function Components() {
           onKeyDown={(e) => e.key === 'Escape' && search && (e.stopPropagation(), setSearch(''))}
         />
       )}
-      {components.length > 0 && listed.length === 0 && <p className="hint">{t('Nothing matches.')}</p>}
-      {view === 'list' ? listed.map(entry) : <div className="component-grid">{listed.map(entry)}</div>}
+      {any && listed.length === 0 && <p className="hint">{t('Nothing matches.')}</p>}
+      {view === 'list' ? listed.map(row) : <div className="component-grid">{listed.map(row)}</div>}
     </Section>
   )
 }

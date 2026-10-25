@@ -25,11 +25,13 @@ import {
   wallEdgeLines,
   wallEndFollowOps,
   wallEndsAt,
+  wallEndsOf,
   wallFollowOps,
   wallSpot,
   wallThicknessOps,
   type Modifier,
   type Node,
+  type Op,
 } from '@opencalque/core'
 import { registry } from '../../extensions'
 import { t } from '../../i18n'
@@ -37,9 +39,9 @@ import { usePrefs } from '../../prefs'
 import { commit, preview, select, selectCorner, useStore, cancel } from '../../store'
 import { gridStep } from '../../view'
 import { formatLength, formatNumber } from '../../units'
-import { alongLine, lineEnd, snap, type Target } from '../aim'
+import { heldNearest, lineEnd, snap, squareFrom, type Target } from '../aim'
 import { ALIGN_REACH, SNAP_REACH } from '../gesture'
-import { cornerAt, endAt, faceAt, frameCornerAt, frameCursor, frameGripAt, gripAt, gripBox, handleAt, lineUp, titleAt } from '../picking'
+import { cornerAt, endAt, faceAt, looseEndAt, frameCornerAt, frameCursor, frameGripAt, gripAt, gripBox, handleAt, lineUp, titleAt } from '../picking'
 import { get, type Canvas, type Move, type Press, type Release } from '../runtime'
 import { faceAcross, faceOf, paperLabel, resizeCursor, round, sizes, thicknessLabel, thicknessStep, wallNormal } from '../shapes'
 
@@ -78,11 +80,21 @@ export const selectDown: Press = (c, e, at, world) => {
         : { kind: 'scale', nodes, pivot: points[(corner + 2) % 4], corner: points[corner] }
     return
   }
-  // The line across a free end of the selected wall (not the point on it): the end goes along the wall.
+  // The line across an end of the selected wall (not the point on it): the end goes along the wall,
+  // and the ends of the walls it meets there with it.
   const ending = endAt(c, at)
   if (ending) {
-    c.gesture = { kind: 'end', wall: ending.wall, end: ending.end }
+    const joined = wallEndsOf(s.doc, ending.wall, ending.end).flatMap(({ wall, end }) => (wall.id === ending.wall.id ? [] : [{ id: wall.id, end }]))
+    c.gesture = { kind: 'end', wall: ending.wall, end: ending.end, joined }
     useStore.setState({ wallFace: 'end drag' })
+    return
+  }
+  // The end of the selected wall where other walls end without being joined to it (it was set
+  // loose, or it is a lining stopping against them) is that wall's own: the corner there is theirs,
+  // and dragging it moves the selected wall alone.
+  const loose = looseEndAt(c, at)
+  if (loose >= 0) {
+    c.gesture = { kind: 'handle', node: s.doc.nodes[s.selection[0]], index: loose }
     return
   }
   // A wall end is a corner of the plan, shared by the walls that meet there: pressing on one
@@ -179,21 +191,18 @@ export const handleMove: Move<'handle'> = (c, g, e, _at, world, out) => {
     out.previewed = preview([{ op: 'update_node', id: g.node.id, patch }])
     return
   }
-  // Shift locks a wall or a line to the line it already lies on: its end only slides along it,
-  // and that line is shown running across the view.
+  // Shift holds the end of a wall or a line to the line it already lies on, or to a level, upright
+  // or 45° line through its other end, whichever the pointer is nearer: that line is shown running across the view.
   const ends = 'a' in g.node && 'b' in g.node && g.index < 2 ? { moved: g.index === 0 ? g.node.a : g.node.b, fixed: g.index === 0 ? g.node.b : g.node.a } : null
-  const line = e.shiftKey && ends && dist(ends.moved, ends.fixed) > 1e-6 ? Math.atan2(ends.moved.y - ends.fixed.y, ends.moved.x - ends.fixed.x) : null
+  const own = ends && dist(ends.moved, ends.fixed) > 1e-6 ? [{ at: ends.fixed, angle: Math.atan2(ends.moved.y - ends.fixed.y, ends.moved.x - ends.fixed.x) }] : []
+  const held = e.shiftKey && ends ? heldNearest(c, world, [...own, ...squareFrom(ends.fixed)], [g.node.id]) : null
   // The end that stays put is where a perpendicular onto another line would be dropped from.
   // Held level or upright by an arrow key, the point stays on that line through where it was,
   // and may be brought level with something pointed at elsewhere.
   const was = s.axisLock ? kindOf(g.node).handles?.(g.node, registry)[g.index] : undefined
-  const target: Target = was
-    ? lineEnd(c, world, e, [g.node.id], was)
-    : line !== null && ends
-      ? alongLine(c, world, ends.fixed, line, [g.node.id], true)
-      : snap(c, world, { altKey: e.altKey, shiftKey: false }, [g.node.id], ends?.fixed)
+  const target: Target = was ? lineEnd(c, world, e, [g.node.id], was) : held ? held.target : snap(c, world, { altKey: e.altKey, shiftKey: false }, [g.node.id], ends?.fixed)
   if (was && s.axisLock) out.guide = { at: was, angle: s.axisLock === 'x' ? 0 : Math.PI / 2 }
-  else if (line !== null && ends) out.guide = { at: ends.fixed, angle: line }
+  else if (held) out.guide = held.line
   out.link = target.link
   out.marker = target.marker
   // The other walls that end at a wall's corner come along with it, unless Alt is held.
@@ -206,18 +215,14 @@ export const cornerMove: Move<'corner'> = (c, g, e, _at, world, out) => {
   // Nothing has moved until the pointer has: a press on a corner only selects it.
   const before = s.base ?? s.doc
   const ends = wallEndsAt(before, s.scope, g.from)
-  // Shift locks the corner to the line of one of the walls that meet there (of the wall itself,
-  // for a free end), whichever the pointer is nearest to. That line is shown across the view.
-  const lines = ends.map(({ wall }) => Math.atan2(wall.b.y - wall.a.y, wall.b.x - wall.a.x))
-  const off = (angle: number) => Math.abs((world.x - g.from.x) * Math.sin(angle) - (world.y - g.from.y) * Math.cos(angle))
-  const line = e.shiftKey ? lines.reduce((best, angle) => (off(angle) < off(best) - 1e-9 ? angle : best)) : null
-  const target: Target = s.axisLock
-    ? lineEnd(c, world, e, ends.map((end) => end.wall.id), g.from)
-    : line !== null
-      ? alongLine(c, world, g.from, line, ends.map((end) => end.wall.id))
-      : snap(c, world, e, ends.map((end) => end.wall.id))
+  // Shift holds the corner to the line of one of the walls that meet there (of the wall itself, for
+  // a free end), or to a level, upright or 45° line through the other end of one of them, so that
+  // the wall comes level or upright: whichever line the pointer is nearest to, shown across the view.
+  const lines = ends.flatMap(({ wall, end }) => [{ at: g.from, angle: Math.atan2(wall.b.y - wall.a.y, wall.b.x - wall.a.x) }, ...squareFrom(end === 'a' ? wall.b : wall.a)])
+  const held = e.shiftKey && !s.axisLock && lines.length > 0 ? heldNearest(c, world, lines, ends.map((end) => end.wall.id)) : null
+  const target: Target = s.axisLock ? lineEnd(c, world, e, ends.map((end) => end.wall.id), g.from) : held ? held.target : snap(c, world, e, ends.map((end) => end.wall.id))
   if (s.axisLock) out.guide = { at: g.from, angle: s.axisLock === 'x' ? 0 : Math.PI / 2 }
-  else if (line !== null) out.guide = { at: g.from, angle: line }
+  else if (held) out.guide = held.line
   out.link = target.link
   out.marker = target.marker
   if (dist(target.p, g.from) < 1e-6) {
@@ -258,17 +263,18 @@ export const endMove: Move<'end'> = (c, g, e, _at, world, out) => {
   const s = get()
   // The end goes along the wall, the other staying where it is: to a point or a line of
   // something else the pointer is near, or by lengths that suit the zoom. Alt, as everywhere,
-  // leaves out both. The wall keeps its direction, and so its doors and windows their places.
+  // leaves out both. The wall keeps its direction, and so its doors and windows their places; the
+  // walls it meets at that end follow it, to stay joined.
   const fixed = g.end === 'a' ? g.wall.b : g.wall.a
   const along = norm(sub(g.wall[g.end], fixed))
-  const hit = !e.altKey && usePrefs.getState().snapToObjects ? snapTo(c.scene, world, SNAP_REACH / s.view.zoom, { exclude: [g.wall.id] }) : null
+  const hit = !e.altKey && usePrefs.getState().snapToObjects ? snapTo(c.scene, world, SNAP_REACH / s.view.zoom, { exclude: [g.wall.id, ...g.joined.map((other) => other.id)] }) : null
   const target = hit ? hit.p : world
   const raw = (target.x - fixed.x) * along.x + (target.y - fixed.y) * along.y
   const step = gridStep(s.view.zoom)
   const length = Math.max(1, hit || e.altKey ? round(raw) : Math.round(raw / step) * step)
   const p = { x: fixed.x + along.x * length, y: fixed.y + along.y * length }
   if (hit) out.marker = { p: hit.p, kind: hit.kind }
-  out.previewed = preview([{ op: 'update_node', id: g.wall.id, patch: { [g.end]: p } }])
+  out.previewed = preview([g.wall.id, ...g.joined.map((other) => other.id)].map((id, i): Op => ({ op: 'update_node', id, patch: { [i === 0 ? g.end : g.joined[i - 1].end]: p } })))
   const now = get().doc.nodes[g.wall.id]
   if (now?.type === 'wall') out.face = wallEdgeLines(now, get().doc, registry, g.end)
   out.labels = sizes('wall', fixed, p).labels
@@ -370,6 +376,8 @@ export function dragUp(c: Canvas): void {
   c.setGripCursor(null)
   if (s.axisLock) useStore.setState({ axisLock: null })
   if (s.wallFace) useStore.setState({ wallFace: null })
+  // The points rested on were for this drag; the next starts afresh.
+  c.tracked = { tool: s.tool, points: [], resting: null }
   commit()
   c.gesture = { kind: 'idle' }
   c.setOverlay({})

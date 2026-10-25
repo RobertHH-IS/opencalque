@@ -10,12 +10,17 @@ import type { Document, Node } from './schema'
  * know nothing of node types beyond what each kind says of itself (`snapPoints`, `snapLines`).
  */
 
-/** What a point snapped to: a point of an object, the middle of a line, where two lines cross, the foot of a perpendicular, or simply the nearest place on a line. */
-export type SnapKind = 'point' | 'middle' | 'crossing' | 'perpendicular' | 'edge'
+/**
+ * What a point snapped to: a point of an object, the middle of a line, where two lines cross, the
+ * foot of a perpendicular, the nearest place on a line, or a place lined up with points around it.
+ */
+export type SnapKind = 'point' | 'middle' | 'crossing' | 'perpendicular' | 'edge' | 'aligned'
 
 export interface Snap {
   p: Vec2
   kind: SnapKind
+  /** For a place lined up with points around it: the lines from each of those points to it, to be shown. */
+  guides?: [Vec2, Vec2][]
 }
 
 export interface SnapOptions {
@@ -23,12 +28,17 @@ export interface SnapOptions {
   exclude?: string[]
   /** Where the line being drawn starts. With it, the foot of a perpendicular from there onto a line is offered. */
   from?: Vec2
+  /**
+   * Points to line up with, besides `from`: in the editor, those the pointer rested on lately.
+   * Lining up with every point of a drawing would find a line almost anywhere in a full plan.
+   */
+  aligners?: Vec2[]
   /** The pointer as the grid would have it. A line with nothing more precise nearby is then taken at the place nearest to this, so that going along a level or upright line still goes by grid steps. */
   gridded?: Vec2
 }
 
 /** Which is kept of two places equally near the pointer: the more specific. */
-const RANK: Record<SnapKind, number> = { point: 0, crossing: 1, middle: 2, perpendicular: 3, edge: 4 }
+const RANK: Record<SnapKind, number> = { point: 0, crossing: 1, middle: 2, perpendicular: 3, edge: 4, aligned: 5 }
 /** A line that turns by less than this (radians, 12°) at a point is a curve passing through it, not a corner. */
 const CORNER = Math.PI / 15
 /** No more than this many stretches of line near the pointer are tried against one another for crossings. */
@@ -68,11 +78,13 @@ function isCorner(line: Vec2[], i: number): boolean {
  *
  * Offered, nearest first and the more specific first when equally near: the points each object
  * gives to snap to and the corners of its lines, the places where two lines cross, the middle of
- * a straight line, and the foot of the perpendicular from `from`. With none of those in reach, a
- * line itself: the place on it nearest to the pointer.
+ * a straight line, and the foot of the perpendicular from `from`. With none of those in reach, the
+ * place upright from one point and level with another, of `aligners` and `from`, where both are in
+ * reach; then a line itself, the place on it nearest to the pointer; then a place upright or level
+ * with one of them, the grid saying where along.
  */
 export function snapTo(scene: SceneItem[], at: Vec2, reach: number, options: SnapOptions = {}): Snap | null {
-  const { exclude = [], from, gridded } = options
+  const { exclude = [], from, gridded, aligners = [] } = options
   let best: Snap | null = null
   let nearest = Infinity
   const offer = (p: Vec2, kind: SnapKind) => {
@@ -133,6 +145,23 @@ export function snapTo(scene: SceneItem[], at: Vec2, reach: number, options: Sna
   }
   if (best) return best
 
+  // Lined up with the points given: upright from the nearest across, level with the nearest up and down.
+  let upright: Vec2 | null = null
+  let level: Vec2 | null = null
+  const line = (q: Vec2) => {
+    const dx = Math.abs(q.x - at.x)
+    const dy = Math.abs(q.y - at.y)
+    if (dx <= reach && dist(q, at) > reach && (!upright || dx < Math.abs(upright.x - at.x) - 1e-9)) upright = q
+    if (dy <= reach && dist(q, at) > reach && (!level || dy < Math.abs(level.y - at.y) - 1e-9)) level = q
+  }
+  for (const q of aligners) line(q)
+  if (from) line(from)
+  const [x, y] = [upright as Vec2 | null, level as Vec2 | null]
+  if (x && y) {
+    const p = { x: x.x, y: y.y }
+    return { p, kind: 'aligned', guides: [[x, p], [y, p]] }
+  }
+
   let edge: Snap | null = null
   let off = Infinity
   for (const { a, b } of near) {
@@ -142,7 +171,10 @@ export function snapTo(scene: SceneItem[], at: Vec2, reach: number, options: Sna
     const stepped = gridded ? nearestOn(gridded, a, b).at : here
     edge = { p: dist(stepped, at) <= 3 * reach ? stepped : here, kind: 'edge' }
   }
-  return edge
+  if (edge || (!x && !y)) return edge
+  const along = gridded ?? at
+  const p = x ? { x: x.x, y: along.y } : { x: along.x, y: y!.y }
+  return { p, kind: 'aligned', guides: [[(x ?? y)!, p]] }
 }
 
 /** Something that can be lined up with: the box around it, and the points it gives to snap to. */

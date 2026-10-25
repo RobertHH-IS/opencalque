@@ -2,7 +2,7 @@ import { canSplit, hitTest, newId, roomAt, snapOpeningToWall, splitOps, splitPla
 import { libraryOps, pickStyle } from '../../actions'
 import { registry } from '../../extensions'
 import { t } from '../../i18n'
-import { apply, cancel, commit, layerHere, preview, useStore, type Placing } from '../../store'
+import { apply, cancel, commit, layerHere, preview, select, setTool, useStore, type Placing } from '../../store'
 import { formatLength } from '../../units'
 import { gridStep } from '../../view'
 import { snap } from '../aim'
@@ -24,11 +24,20 @@ export const eyedropperDown: Press = (c, _e, _at, world) => {
 
 /**
  * What follows the pointer is put down, and the next one follows it. A library's component comes
- * in with the first: the next ones are placements of that same one, not further copies.
+ * in with the first: the next ones are placements of that same one, not further copies. A table of
+ * quantities is put down once, and selected, to be set up.
  */
 export const placeDown: Press = (c) => {
   const { base, placing } = get()
   if (!base) return
+  if (placing?.type === 'table') {
+    const id = c.placed
+    commit()
+    setTool('select')
+    select([id])
+    c.placed = newId()
+    return
+  }
   const brought = placing?.type === 'library' ? fromLibrary(base, placing).id : null
   commit()
   if (brought) useStore.setState({ placing: { type: 'instance', component: brought, carried: placing?.carried } })
@@ -92,15 +101,19 @@ export const toolHover: Move<'idle'> = (c, _g, e, _at, world, out) => {
     // Doors and windows jump onto the wall under the cursor and turn to follow it.
     const onWall =
       s.placing.type === 'parametric' && !e.altKey
-        ? snapOpeningToWall(s.base ?? s.doc, s.scope, registry, { kind: s.placing.kind, props: {} }, world, 10 / s.view.zoom, gridStep(s.view.zoom))
+        ? snapOpeningToWall(s.base ?? s.doc, s.scope, registry, { kind: s.placing.kind, props: s.placing.props ?? {} }, world, 10 / s.view.zoom, gridStep(s.view.zoom))
         : null
     if (onWall) out.marker = null
     // A library's component comes in with its first placement, in the same step.
     const library = s.placing.type === 'library' ? fromLibrary(s.base ?? s.doc, s.placing) : null
+    // A table is not turned: it stays upright to be read.
+    const { rotation: _, ...upright } = common
     const node: NodeInput =
       s.placing.type === 'parametric'
-        ? { ...common, ...onWall, type: 'parametric', kind: s.placing.kind, props: {} }
-        : { ...common, type: 'instance', component: library ? library.id : s.placing.component }
+        ? { ...common, ...onWall, type: 'parametric', kind: s.placing.kind, props: s.placing.props ?? {} }
+        : s.placing.type === 'table'
+          ? { ...upright, ...s.placing.table }
+          : { ...common, type: 'instance', component: library ? library.id : s.placing.component }
     out.previewed = preview([...(library?.ops ?? []), { op: 'add_node', node }])
   } else if (TWO_POINT.includes(s.tool) || s.tool === 'measure' || s.tool === 'angle' || (s.tool === 'rotate' && s.selection.length > 0)) {
     out.marker = snap(c, world, e, []).marker
